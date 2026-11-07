@@ -64,7 +64,7 @@ public class User extends BaseTimeEntity {
     private OffsetDateTime lastLoginAt;
 
     /**
-     * 회원가입. 기업은 바로 ACTIVE, 기관 담당자는 관리자 승인 전까지 PENDING (api-spec §1 가입 흐름).
+     * 회원가입. 기업·기관 담당자 모두 관리자 승인 전까지 PENDING (api-spec §1 가입 흐름).
      * 관리자 계정은 가입으로 만들 수 없으므로 호출 전에 막아야 합니다.
      */
     public static User signUp(Long organizationId, String email, String passwordHash, String name, String phone,
@@ -79,12 +79,30 @@ public class User extends BaseTimeEntity {
         user.name = name;
         user.phone = phone;
         user.role = role;
-        user.status = role == UserRole.INSTITUTION_MANAGER ? UserStatus.PENDING : UserStatus.ACTIVE;
+        user.status = UserStatus.PENDING;
         return user;
     }
 
     public boolean isActive() {
         return status == UserStatus.ACTIVE;
+    }
+
+    public boolean isPending() {
+        return status == UserStatus.PENDING;
+    }
+
+    /** 관리자 가입 승인: PENDING → ACTIVE */
+    public void approve(Long adminId, OffsetDateTime now) {
+        this.status = UserStatus.ACTIVE;
+        this.approvedBy = adminId;
+        this.approvedAt = now;
+        this.rejectReason = null;
+    }
+
+    /** 관리자 가입 거절: PENDING → REJECTED */
+    public void reject(String reason) {
+        this.status = UserStatus.REJECTED;
+        this.rejectReason = reason;
     }
 
     public void recordLogin(OffsetDateTime now) {

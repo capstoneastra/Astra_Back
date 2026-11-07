@@ -1,19 +1,26 @@
 package kr.astra.user.service;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import kr.astra.global.exception.BusinessException;
 import kr.astra.global.exception.DbConstraints;
 import kr.astra.global.exception.ErrorCode;
 import kr.astra.organization.service.OrganizationService;
 import kr.astra.user.dto.UserAccount;
+import kr.astra.user.dto.UserAdminView;
 import kr.astra.user.dto.UserMeResponse;
 import kr.astra.user.dto.UserUpdateRequest;
 import kr.astra.user.entity.User;
 import kr.astra.user.entity.UserRole;
+import kr.astra.user.entity.UserStatus;
 import kr.astra.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +32,10 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class UserService {
+
+    /** 관리자 회원 목록에서 정렬할 수 있는 필드 (그 외는 400 VALIDATION_FAILED) */
+    private static final Set<String> ADMIN_SORTABLE = Set.of("createdAt", "email", "name", "role", "status",
+            "approvedAt", "lastLoginAt");
 
     private final UserRepository userRepository;
     private final OrganizationService organizationService;
@@ -62,7 +73,7 @@ public class UserService {
 
     /**
      * 로그인. 이메일·비밀번호가 틀리면 401 INVALID_CREDENTIALS (어느 쪽이 틀렸는지는 알려주지 않음),
-     * 맞더라도 ACTIVE 가 아니면 403 ACCOUNT_NOT_ACTIVE.
+     * 맞더라도 ACTIVE 가 아니면 403 ACCOUNT_NOT_ACTIVE (details.status, 거절이면 details.rejectReason 도).
      */
     @Transactional
     public UserAccount authenticate(String email, String rawPassword) {
@@ -70,7 +81,7 @@ public class UserService {
                 .filter(u -> passwordEncoder.matches(rawPassword, u.getPasswordHash()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS));
         if (!user.isActive()) {
-            throw new BusinessException(ErrorCode.ACCOUNT_NOT_ACTIVE);
+            throw new BusinessException(ErrorCode.ACCOUNT_NOT_ACTIVE, notActiveDetails(user));
         }
         user.recordLogin(OffsetDateTime.now());
         return UserAccount.from(user);
@@ -84,6 +95,59 @@ public class UserService {
             throw new BusinessException(ErrorCode.ACCOUNT_NOT_ACTIVE);
         }
         return UserAccount.from(user);
+    }
+
+    /** 가입 승인 요청 알림을 받을 관리자 id (ACTIVE 관리자 전원) */
+    public List<Long> findActiveAdminIds() {
+        return userRepository.findAllByRoleAndStatus(UserRole.ADMIN, UserStatus.ACTIVE).stream()
+                .map(User::getId)
+                .toList();
+    }
+
+    /** 관리자 회원 목록 (api-spec §12). role·status 는 null 이면 전체 */
+    public Page<UserAdminView> searchForAdmin(UserRole role, UserStatus status, Pageable pageable) {
+        pageable.getSort().forEach(order -> {
+            if (!ADMIN_SORTABLE.contains(order.getProperty())) {
+                String reason = "정렬할 수 없는 필드입니다. 가능: " + String.join(", ", ADMIN_SORTABLE.stream().sorted().toList());
+                throw new BusinessException(ErrorCode.VALIDATION_FAILED, reason,
+                        Map.of("fields", List.of(Map.of("field", "sort", "reason", reason))));
+            }
+        });
+        return userRepository.search(role, status, pageable).map(UserAdminView::from);
+    }
+
+    /** 가입 승인: PENDING 만 가능, 아니면 409 USER_INVALID_STATUS. 없는 회원이면 404 NOT_FOUND */
+    @Transactional
+    public UserAdminView approve(Long userId, Long adminId) {
+        User user = findPendingUser(userId);
+        user.approve(adminId, OffsetDateTime.now());
+        userRepository.flush();
+        return UserAdminView.from(user);
+    }
+
+    /** 가입 거절: PENDING 만 가능, 아니면 409 USER_INVALID_STATUS. 없는 회원이면 404 NOT_FOUND */
+    @Transactional
+    public UserAdminView reject(Long userId, String reason) {
+        User user = findPendingUser(userId);
+        user.reject(reason.trim());
+        userRepository.flush();
+        return UserAdminView.from(user);
+    }
+
+    private User findPendingUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "회원을 찾을 수 없습니다.", null));
+        if (!user.isPending()) {
+            throw new BusinessException(ErrorCode.USER_INVALID_STATUS,
+                    "승인 대기(PENDING) 중인 회원만 승인·거절할 수 있습니다.", Map.of("status", user.getStatus()));
+        }
+        return user;
+    }
+
+    private static Map<String, Object> notActiveDetails(User user) {
+        return user.getRejectReason() == null
+                ? Map.of("status", user.getStatus())
+                : Map.of("status", user.getStatus(), "rejectReason", user.getRejectReason());
     }
 
     public UserMeResponse getMe(Long userId) {

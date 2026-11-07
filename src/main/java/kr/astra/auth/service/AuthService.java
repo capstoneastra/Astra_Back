@@ -12,6 +12,8 @@ import kr.astra.auth.dto.TokenResponse;
 import kr.astra.global.exception.BusinessException;
 import kr.astra.global.exception.ErrorCode;
 import kr.astra.global.security.JwtProvider;
+import kr.astra.notification.entity.NotificationType;
+import kr.astra.notification.service.NotificationService;
 import kr.astra.organization.dto.InstitutionOptionResponse;
 import kr.astra.organization.service.OrganizationService;
 import kr.astra.user.dto.UserAccount;
@@ -19,6 +21,7 @@ import kr.astra.user.entity.UserRole;
 import kr.astra.user.service.RefreshTokenService;
 import kr.astra.user.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -33,6 +36,8 @@ public class AuthService {
     private final UserService userService;
     private final OrganizationService organizationService;
     private final RefreshTokenService refreshTokenService;
+    private final EmailVerificationService emailVerificationService;
+    private final ObjectProvider<NotificationService> notificationService;
     private final JwtProvider jwtProvider;
 
     @Transactional(readOnly = true)
@@ -40,9 +45,17 @@ public class AuthService {
         return organizationService.listVerifiedInstitutions();
     }
 
+    /**
+     * 회원가입. 이메일 인증 토큰을 한 번 사용하고, 기업·기관 담당자 모두 PENDING 으로 만든 뒤
+     * 관리자 전원에게 USER_APPROVAL_REQUESTED 알림 (알림 구현이 있을 때만).
+     */
     @Transactional
     public SignupResponse signup(SignupRequest request) {
         userService.checkEmailAvailable(request.email());
+        if (request.role() == UserRole.ADMIN) {
+            throw invalidField("role", "관리자 계정은 회원가입으로 만들 수 없습니다.");
+        }
+        emailVerificationService.consumeToken(request.email(), request.verificationToken());
         Long organizationId = switch (request.role()) {
             case COMPANY_USER -> createCompany(request);
             case INSTITUTION_MANAGER -> resolveInstitution(request);
@@ -50,6 +63,9 @@ public class AuthService {
         };
         UserAccount account = userService.register(organizationId, request.email(), request.password(),
                 request.name(), request.phone(), request.role());
+        notificationService.ifAvailable(notifier -> userService.findActiveAdminIds().forEach(adminId ->
+                notifier.notify(adminId, NotificationType.USER_APPROVAL_REQUESTED,
+                        "새 회원가입 승인 요청: " + account.name(), "/admin/users?status=PENDING", null)));
         return new SignupResponse(account.id(), account.status());
     }
 
@@ -62,9 +78,15 @@ public class AuthService {
             throw invalidField("organization", "회사명과 사업자번호를 입력해 주세요.");
         }
         if (!StringUtils.hasText(org.businessRegNo())) {
-            throw invalidField("organization.businessRegNo", "사업자번호를 입력해 주세요.");
+            throw invalidField("organization.businessRegNo", "사업자등록번호를 입력해 주세요.");
         }
-        return organizationService.createCompany(org.name(), org.businessRegNo().trim());
+        // 진위 확인(국세청 조회)은 하지 않고 형식만 확인. 실제 확인은 관리자 승인 단계에서 함
+        String digits = org.businessRegNo().replace("-", "").trim();
+        if (!digits.matches("\\d{10}")) {
+            throw invalidField("organization.businessRegNo", "사업자등록번호는 숫자 10자리입니다. (예: 123-45-67890)");
+        }
+        String businessRegNo = digits.substring(0, 3) + "-" + digits.substring(3, 5) + "-" + digits.substring(5);
+        return organizationService.createCompany(org.name(), businessRegNo);
     }
 
     private Long resolveInstitution(SignupRequest request) {

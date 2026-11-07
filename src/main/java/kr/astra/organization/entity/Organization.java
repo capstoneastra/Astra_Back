@@ -55,17 +55,17 @@ public class Organization extends BaseTimeEntity {
     @Column(name = "homepage_url", length = 500)
     private String homepageUrl;
 
-    /** 신규 기관 신청은 관리자가 승인해야 TRUE */
+    /** 가입으로 생긴 기업·신규 기관은 관리자가 회원 승인할 때 TRUE */
     @Column(name = "is_verified", nullable = false)
     private boolean verified;
 
-    /** 기업 회원가입: 기업 조직은 따로 승인 절차가 없어 바로 verified */
+    /** 기업 회원가입: 관리자가 가입을 승인할 때 verified */
     public static Organization newCompany(String name, String businessRegNo) {
         Organization org = new Organization();
         org.orgType = OrgType.COMPANY;
         org.name = name;
         org.businessRegNo = businessRegNo;
-        org.verified = true;
+        org.verified = false;
         return org;
     }
 
@@ -78,6 +78,11 @@ public class Organization extends BaseTimeEntity {
         org.phone = phone;
         org.verified = false;
         return org;
+    }
+
+    /** 관리자 승인 */
+    public void verify() {
+        this.verified = true;
     }
 
     public boolean isInstitution() {

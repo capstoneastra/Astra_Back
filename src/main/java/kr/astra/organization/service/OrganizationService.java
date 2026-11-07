@@ -1,14 +1,19 @@
 package kr.astra.organization.service;
 
 import java.text.Collator;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import kr.astra.global.exception.BusinessException;
 import kr.astra.global.exception.DbConstraints;
 import kr.astra.global.exception.ErrorCode;
 import kr.astra.organization.dto.InstitutionOptionResponse;
+import kr.astra.organization.dto.OrganizationAdminResponse;
 import kr.astra.organization.dto.OrganizationSummaryResponse;
 import kr.astra.organization.entity.OrgType;
 import kr.astra.organization.entity.Organization;
@@ -52,6 +57,21 @@ public class OrganizationService {
             return Optional.empty();
         }
         return organizationRepository.findById(organizationId).map(OrganizationSummaryResponse::from);
+    }
+
+    /** 관리자 화면용 조직 정보 (사업자번호·주소·연락처 포함). id → 정보 */
+    public Map<Long, OrganizationAdminResponse> findAdminViews(Collection<Long> organizationIds) {
+        return organizationRepository.findAllById(organizationIds).stream()
+                .map(OrganizationAdminResponse::from)
+                .collect(Collectors.toMap(OrganizationAdminResponse::id, Function.identity()));
+    }
+
+    /** 회원 가입을 승인할 때 그 회원이 가입하며 만든 조직(기업·신규 기관)도 승인. 이미 승인됐으면 그대로 */
+    @Transactional
+    public void verify(Long organizationId) {
+        if (organizationId != null) {
+            organizationRepository.findById(organizationId).ifPresent(Organization::verify);
+        }
     }
 
     /** 기업 회원가입: 기업 조직 생성. 같은 이름의 기업이 있으면 409 ORGANIZATION_ALREADY_EXISTS */
