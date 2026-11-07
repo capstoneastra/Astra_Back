@@ -19,6 +19,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     List<User> findAllByRoleAndStatus(UserRole role, UserStatus status);
 
+    boolean existsByOrganizationIdAndStatusIn(Long organizationId, List<UserStatus> statuses);
+
     /** 관리자 회원 목록: role·status 는 null 이면 조건 없음 */
     @Query("""
             SELECT u FROM User u

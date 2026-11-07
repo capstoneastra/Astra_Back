@@ -114,6 +114,33 @@ class AdminUserApprovalTest {
     }
 
     @Test
+    void 거절된_신청의_조직은_같은_이름으로_다시_가입하면_재사용한다() throws Exception {
+        String company = "테스트 기업 " + UUID.randomUUID();
+        long first = api.signupCompany(uniqueEmail(), company, "444-55-66666").data().path("userId").asLong();
+
+        // 첫 신청이 승인 대기 중이면 같은 이름은 409
+        assertThat(api.signupCompany(uniqueEmail(), company, "444-55-66666").code())
+                .isEqualTo("ORGANIZATION_ALREADY_EXISTS");
+
+        api.post("/api/v1/admin/users/" + first + "/reject", "{ \"reason\": \"서류 확인 불가\" }", adminToken());
+        Res again = api.signupCompany(uniqueEmail(), company, "555-66-77777");
+        assertThat(again.status()).isEqualTo(201);
+        long second = again.data().path("userId").asLong();
+
+        String sameOrg = "SELECT count(DISTINCT organization_id) FROM users WHERE id IN (?, ?)";
+        assertThat(jdbc.queryForObject(sameOrg, Long.class, first, second)).isEqualTo(1);
+        assertThat(jdbc.queryForMap("SELECT business_reg_no, is_verified FROM organizations "
+                + "WHERE org_type = 'COMPANY' AND name = ?", company))
+                .containsEntry("business_reg_no", "555-66-77777").containsEntry("is_verified", false);
+
+        // 승인된 조직은 재사용 대상이 아님
+        api.post("/api/v1/admin/users/" + second + "/approve", null, adminToken());
+        api.post("/api/v1/admin/users/" + first + "/approve", null, adminToken()); // REJECTED → 409, 상태 변화 없음
+        assertThat(api.signupCompany(uniqueEmail(), company, "444-55-66666").code())
+                .isEqualTo("ORGANIZATION_ALREADY_EXISTS");
+    }
+
+    @Test
     void 관리자가_아니면_403_없는_회원이면_404() throws Exception {
         long companyUserId = jdbc.queryForObject("SELECT id FROM users WHERE email = 'company@astra.demo'", Long.class);
         String companyToken = jwtProvider.createAccessToken(companyUserId, UserRole.COMPANY_USER, null);

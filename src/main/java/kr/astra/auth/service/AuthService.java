@@ -4,6 +4,7 @@ import io.jsonwebtoken.JwtException;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import kr.astra.auth.dto.LoginRequest;
 import kr.astra.auth.dto.SignupRequest;
 import kr.astra.auth.dto.SignupRequest.OrganizationInput;
@@ -15,6 +16,7 @@ import kr.astra.global.security.JwtProvider;
 import kr.astra.notification.entity.NotificationType;
 import kr.astra.notification.service.NotificationService;
 import kr.astra.organization.dto.InstitutionOptionResponse;
+import kr.astra.organization.entity.OrgType;
 import kr.astra.organization.service.OrganizationService;
 import kr.astra.user.dto.UserAccount;
 import kr.astra.user.entity.UserRole;
@@ -86,7 +88,9 @@ public class AuthService {
             throw invalidField("organization.businessRegNo", "사업자등록번호는 숫자 10자리입니다. (예: 123-45-67890)");
         }
         String businessRegNo = digits.substring(0, 3) + "-" + digits.substring(3, 5) + "-" + digits.substring(5);
-        return organizationService.createCompany(org.name(), businessRegNo);
+        return reusableApplication(OrgType.COMPANY, org.name())
+                .map(id -> organizationService.reapplyCompany(id, businessRegNo))
+                .orElseGet(() -> organizationService.createCompany(org.name(), businessRegNo));
     }
 
     private Long resolveInstitution(SignupRequest request) {
@@ -102,7 +106,18 @@ public class AuthService {
             return request.organizationId();
         }
         OrganizationInput org = request.organization();
-        return organizationService.createInstitutionApplication(org.name(), org.address(), org.phone());
+        return reusableApplication(OrgType.INSTITUTION, org.name())
+                .map(id -> organizationService.reapplyInstitution(id, org.address(), org.phone()))
+                .orElseGet(() -> organizationService.createInstitutionApplication(org.name(), org.address(), org.phone()));
+    }
+
+    /**
+     * 같은 이름의 조직이 있어도 "미승인 + 승인 대기·활성 회원 없음"(거절된 신청만 남은 조직)이면 다시 씁니다.
+     * 그 외에는 empty → create 에서 409 ORGANIZATION_ALREADY_EXISTS.
+     */
+    private Optional<Long> reusableApplication(OrgType orgType, String name) {
+        return organizationService.findUnverifiedId(orgType, name)
+                .filter(id -> !userService.hasPendingOrActiveMember(id));
     }
 
     @Transactional

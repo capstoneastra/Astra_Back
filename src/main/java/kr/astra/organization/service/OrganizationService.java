@@ -74,6 +74,29 @@ public class OrganizationService {
         }
     }
 
+    /** 같은 유형·이름의 미승인 조직 id (거절된 가입 신청이 남긴 조직 재사용 판단용) */
+    public Optional<Long> findUnverifiedId(OrgType orgType, String name) {
+        return organizationRepository.findByOrgTypeAndName(orgType, name.trim())
+                .filter(org -> !org.isVerified())
+                .map(Organization::getId);
+    }
+
+    /** 거절된 기업 가입 신청의 조직을 다시 신청에 사용: 사업자등록번호만 새 입력으로 */
+    @Transactional
+    public Long reapplyCompany(Long organizationId, String businessRegNo) {
+        Organization org = organizationRepository.findById(organizationId).orElseThrow();
+        org.reapplyCompany(businessRegNo);
+        return org.getId();
+    }
+
+    /** 거절된 기관 가입 신청의 조직을 다시 신청에 사용: 주소·연락처를 새 입력으로 */
+    @Transactional
+    public Long reapplyInstitution(Long organizationId, String address, String phone) {
+        Organization org = organizationRepository.findById(organizationId).orElseThrow();
+        org.reapplyInstitution(address, phone);
+        return org.getId();
+    }
+
     /** 기업 회원가입: 기업 조직 생성. 같은 이름의 기업이 있으면 409 ORGANIZATION_ALREADY_EXISTS */
     @Transactional
     public Long createCompany(String name, String businessRegNo) {

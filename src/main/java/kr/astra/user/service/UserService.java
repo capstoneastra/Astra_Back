@@ -97,6 +97,12 @@ public class UserService {
         return UserAccount.from(user);
     }
 
+    /** 그 조직에 승인 대기·활성 회원이 있으면 true (거절된 신청만 있으면 false) */
+    public boolean hasPendingOrActiveMember(Long organizationId) {
+        return userRepository.existsByOrganizationIdAndStatusIn(organizationId,
+                List.of(UserStatus.PENDING, UserStatus.ACTIVE));
+    }
+
     /** 가입 승인 요청 알림을 받을 관리자 id (ACTIVE 관리자 전원) */
     public List<Long> findActiveAdminIds() {
         return userRepository.findAllByRoleAndStatus(UserRole.ADMIN, UserStatus.ACTIVE).stream()

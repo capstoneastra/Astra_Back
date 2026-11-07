@@ -80,6 +80,17 @@ public class Organization extends BaseTimeEntity {
         return org;
     }
 
+    /** 거절된 기업 신청 조직을 다시 신청할 때 (미승인 상태 유지) */
+    public void reapplyCompany(String businessRegNo) {
+        this.businessRegNo = businessRegNo;
+    }
+
+    /** 거절된 기관 신청 조직을 다시 신청할 때 (미승인 상태 유지) */
+    public void reapplyInstitution(String address, String phone) {
+        this.address = address;
+        this.phone = phone;
+    }
+
     /** 관리자 승인 */
     public void verify() {
         this.verified = true;
