@@ -43,7 +43,7 @@
 | **기관 담당자** (`INSTITUTION_MANAGER`) | 소속 기관 장비 정보 등록·갱신, 들어온 의뢰 검토, 보완 요청, 예약 확정 |
 | **플랫폼 관리자** (`ADMIN`) | 전체 권한(마스터), 회원·기관 승인, 초기 데이터 관리 |
 
-로그인하지 않은 사용자는 회원가입·로그인 외에는 아무것도 볼 수 없게 설계했습니다. (JWT 로그인 적용 후 활성화, [현재 상태](#현재-상태) 참고)
+로그인하지 않은 사용자는 회원가입·로그인 외에는 아무것도 볼 수 없습니다. (JWT 로그인 적용, [시연 계정](#시연-계정) 참고)
 
 ### 데이터 현황
 - 공개자료로 수집한 **9개 기관, 장비 71대**를 초기 데이터로 넣습니다.
@@ -707,11 +707,26 @@ cp .env.example .env        # 필요한 값 채우기 (DB 는 기본값 그대�
 ./gradlew bootRun           # Windows: gradlew.bat bootRun
 ```
 
-- `bootRun`을 하면 `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고, Flyway가 `V1__init.sql`(테이블)과 `V2__seed.sql`(초기 데이터)을 적용합니다.
+- `bootRun`을 하면 `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고, Flyway가 `V1__init.sql`(테이블), `V2__seed.sql`(초기 데이터), `V3__demo_accounts.sql`(시연 계정)을 적용합니다.
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - 헬스체크: http://localhost:8080/actuator/health
 - IntelliJ: **Project SDK와 Gradle JVM을 모두 21**로 맞춘 뒤 `AstraApplication`을 실행합니다.
 - DB를 처음부터 다시 만들려면: `docker compose down -v` 후 다시 실행합니다.
+- `.env`의 `JWT_SECRET`이 비어 있으면 임시 키로 실행됩니다(재시작하면 로그인이 풀림). 32자 이상 아무 문자열을 넣어 두면 편합니다.
+
+### 시연 계정
+
+`/auth/**`(로그아웃 제외), Swagger, 헬스체크 외에는 모두 로그인이 필요합니다. 비밀번호는 저장소에 없고 팀 채팅으로 공유합니다.
+
+| 이메일 | 역할 | 소속 | 상태 |
+|---|---|---|---|
+| `admin@astra.demo` | ADMIN | ASTRA 플랫폼 운영 | ACTIVE |
+| `company@astra.demo` | COMPANY_USER | 가상 A기업 | ACTIVE |
+| `manager1@astra.demo` | INSTITUTION_MANAGER | 대전테크노파크 우주·양자산업센터 | ACTIVE |
+| `manager2@astra.demo` | INSTITUTION_MANAGER | 한국신뢰성기술센터 | ACTIVE |
+| `pending@astra.demo` | INSTITUTION_MANAGER | 한국재료연구원 | PENDING (로그인 시 403, 승인 시연용) |
+
+Swagger에서 호출하기: `POST /api/v1/auth/login`으로 로그인 → 응답의 `accessToken`을 복사 → 오른쪽 위 **Authorize**에 붙여넣기.
 
 ### 테스트
 
@@ -725,7 +740,9 @@ Testcontainers가 테스트 전용 PostgreSQL 16을 띄워 실제 DB로 검증�
 |---|---|
 | `DatabaseSchemaTest` | 마이그레이션 적용, 초기 데이터 개수, 조건 규칙의 사양 키 존재, 중복 예약 방지, 의뢰당 확정 예약 1개, 의뢰당 답변 대기 보완 요청 1개 |
 | `ApiConventionTest` | 공통 실패 응답 형식, Swagger·헬스체크 접근 |
-| `SecurityRequireLoginTest` | 로그인 필수 모드에서 비로그인 호출 시 `401 AUTH_REQUIRED` |
+| `SecurityRequireLoginTest` | 비로그인 `401 AUTH_REQUIRED`, 만료 토큰 `401 TOKEN_EXPIRED`, 위조·refresh 토큰 거부, 로그아웃은 로그인 필요 |
+| `AuthFlowTest` | 가입(기업 ACTIVE·기관 PENDING·관리자 불가) → 로그인 → 내 정보 → 재발급(쓴 토큰 폐기) → 로그아웃, 에러 코드, 시연 계정 seed |
+| `AccessGuardTest` | 권한 체크 유틸: ADMIN 마스터, 기관은 소속 기관만, 기업은 본인 데이터만 |
 
 ---
 
@@ -750,11 +767,26 @@ src/main/java/kr/astra/
 | `request.service.TestRequestService` | BE-B | BE-C (AI 초안·자동 추진) |
 | `notification.service.NotificationService` | BE-B | 전원 |
 | `global.security.CurrentUser` | BE-A (JWT 필터에서 생성) | 전원 |
+| `global.security.AccessGuard` | BE-A (권한 체크 유틸) | 전원 |
+
+권한 체크 예시 (ADMIN은 모두 통과, 실패하면 `403 FORBIDDEN`):
+
+```java
+@GetMapping("/test-requests/{id}")
+public ApiResponse<RequestDetail> detail(@AuthenticationPrincipal CurrentUser user, @PathVariable Long id) {
+    TestRequest r = ...;
+    AccessGuard.requireOwnerOrInstitution(user, r.getRequesterId(), r.getInstitutionId()); // 의뢰자 또는 해당 기관 담당자
+    ...
+}
+// AccessGuard.requireInstitution(user, equipment.getInstitutionId())  기관 담당자는 소속 기관만
+// AccessGuard.requireOwner(user, session.getUserId())                 기업 본인 데이터만
+// @PreAuthorize("hasRole('INSTITUTION_MANAGER')")                     역할만 확인 (ADMIN 자동 통과)
+```
 
 ### 현재 상태
 - ✅ 프로젝트 뼈대, 공통 모듈, DB 스키마·초기 데이터, 테스트, CI
 - ⏳ 각 도메인의 Entity·API 구현 (담당자별 진행, [`docs/team-guide.md`](docs/team-guide.md) 주차별 계획 참고)
-- ⏳ JWT 로그인 (BE-A 2주차). 그 전까지는 `astra.security.require-login=false`라 로그인 없이 모든 API를 호출할 수 있습니다.
+- ✅ 회원가입·로그인·JWT 인증·권한 체크(`AccessGuard`)·시연 계정 (BE-A). `/auth/**` 외 API는 로그인 필요
 
 ---
 

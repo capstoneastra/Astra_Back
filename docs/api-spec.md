@@ -112,7 +112,20 @@
 // 한 번 쓴 refresh 토큰은 폐기됨. 만료·폐기된 토큰이면 401 AUTH_REQUIRED → 다시 로그인
 
 // POST /auth/logout { "refreshToken": "eyJ..." } → 200 { "success": true }
+
+// GET /auth/institutions → 200 (승인된 기관만, 가나다순)
+[ { "id": 5, "name": "경상국립대학교 첨단소재분석지원센터", "region": "진주" }, ... ]
+
+// GET /users/me → 200 (organization 은 소속이 없으면 null)
+{ "id": 3, "email": "manager1@astra.demo", "name": "김담당", "phone": "042-000-0001",
+  "role": "INSTITUTION_MANAGER", "status": "ACTIVE",
+  "organization": { "id": 2, "orgType": "INSTITUTION", "name": "대전테크노파크 우주·양자산업센터", "region": "대전", "isVerified": true },
+  "lastLoginAt": "2026-11-07T17:03:04+09:00", "createdAt": "2026-11-07T17:02:51+09:00" }
+
+// PATCH /users/me { "name"?: "김담당", "phone"?: "042-000-0009" } → 200 (GET 과 같은 형식, 보낸 값만 수정)
 ```
+
+> 시연 계정(V3 seed): `admin@astra.demo`, `company@astra.demo`, `manager1@astra.demo`, `manager2@astra.demo`, `pending@astra.demo`(PENDING). 비밀번호는 팀 채팅으로 공유합니다.
 
 > 토큰: access 토큰은 `Authorization: Bearer` 헤더로 보냅니다(유효 1시간). refresh 토큰은 유효 14일이고, 서버는 원문 대신 해시만 `refresh_tokens.token_hash`에 저장합니다.
 

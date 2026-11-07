@@ -434,5 +434,5 @@ AI 상담부터 장비 추천, 의뢰서 초안까지 맡습니다. API 수는 �
 - [ ] 팀 채팅 방: `#일반`, `#api`, `#스탠드업`
 - [ ] Anthropic API 키 발급, 사용 한도 설정, 공유
 - [ ] 조건 규칙(`test_condition_rules`) 초안 검토·확정 (예: 진동시험 = `sample_mass` ≤ `max_payload`, `fixture_mass` ≤ `max_fixture_mass`, `frequency` 범위 포함) — 매칭의 기준
-- [ ] 시연 계정 정하기: 기업 1, 기관 담당자 1~2, 관리자 1
+- [x] 시연 계정 정하기: 기업 1, 기관 담당자 2, 관리자 1, 승인 대기 1 (V3 seed, `README` 시연 계정 표)
 - [ ] 시연 시나리오 1개 확정 (예: 위성 전장품 15kg, 20~2000Hz 진동시험)
