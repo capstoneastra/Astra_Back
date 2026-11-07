@@ -46,12 +46,13 @@ management:
 
 astra:
   security:
-    # false: 로그인 없이 모든 API 호출 가능 (JWT 필터 붙이기 전 개발용)
-    # JWT 인증 필터(BE-A 2주차)를 붙이는 PR 에서 true 로 변경 → /auth/** 외 전부 로그인 필요 (api-spec.md §0-4)
-    require-login: false
+    # true: /auth/** (로그아웃 제외), Swagger, 헬스체크 외에는 전부 로그인 필요 (api-spec.md §0-4)
+    # 로컬에서 잠깐 로그인 없이 호출해 보려면 false 로 실행 (커밋 금지)
+    require-login: true
   jwt:
     secret: ${JWT_SECRET:}
     access-token-validity-seconds: 3600
+    refresh-token-validity-seconds: 1209600   # 14일
   ai:
     anthropic-api-key: ${ANTHROPIC_API_KEY:}
     model: claude-opus-5-5

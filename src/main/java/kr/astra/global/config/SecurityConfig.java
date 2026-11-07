@@ -1,30 +1,44 @@
 package kr.astra.global.config;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import kr.astra.global.exception.ErrorCode;
+import kr.astra.global.security.JwtAuthenticationFilter;
+import kr.astra.global.security.JwtProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
  * 보안 설정 (api-spec.md §0-4).
  * <ul>
  *   <li>비로그인 허용: /api/v1/auth/**, Swagger, 헬스체크</li>
- *   <li>그 외 전부 로그인 필요 → astra.security.require-login=true 일 때 적용</li>
+ *   <li>로그아웃(POST /api/v1/auth/logout)은 /auth 아래지만 로그인 필요</li>
+ *   <li>그 외 전부 로그인 필요 (astra.security.require-login=true, 기본값)</li>
  * </ul>
- * JWT 인증 필터(BE-A 2주차)를 붙이기 전까지는 require-login=false 로 두어 모두가 Swagger 로 API 를 호출해 볼 수 있게 합니다.
- * 필터를 붙인 PR 에서 application.yml 의 값을 true 로 바꾸세요.
+ * JWT 인증 필터가 Authorization: Bearer 토큰을 검증해 {@code @AuthenticationPrincipal CurrentUser} 로 넣어 줍니다.
+ * 역할 계층: ADMIN 은 다른 모든 역할을 포함하므로 {@code @PreAuthorize("hasRole('INSTITUTION_MANAGER')")} 도 통과합니다.
+ * <p>
+ * 로컬에서 잠깐 로그인 없이 호출해 보려면 astra.security.require-login=false 로 실행할 수 있습니다 (커밋 금지).
  */
 @Configuration
+@EnableMethodSecurity
 public class SecurityConfig {
 
     private static final String[] PUBLIC_PATHS = {
@@ -33,17 +47,21 @@ public class SecurityConfig {
             "/actuator/health"
     };
 
-    @Value("${astra.security.require-login:false}")
+    private static final String LOGOUT_PATH = WebConfig.API_PREFIX + "/auth/logout";
+
+    @Value("${astra.security.require-login:true}")
     private boolean requireLogin;
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtProvider jwtProvider) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .addFilterBefore(new JwtAuthenticationFilter(jwtProvider), UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> {
+                    auth.requestMatchers(HttpMethod.POST, LOGOUT_PATH).authenticated();
                     auth.requestMatchers(PUBLIC_PATHS).permitAll();
                     if (requireLogin) {
                         auth.anyRequest().authenticated();
@@ -52,9 +70,23 @@ public class SecurityConfig {
                     }
                 })
                 .exceptionHandling(e -> e
-                        .authenticationEntryPoint((req, res, ex) -> writeError(res, ErrorCode.AUTH_REQUIRED))
+                        .authenticationEntryPoint((req, res, ex) -> writeError(res, authErrorOf(req)))
                         .accessDeniedHandler((req, res, ex) -> writeError(res, ErrorCode.FORBIDDEN)));
         return http.build();
+    }
+
+    /** ADMIN 은 마스터 권한: 다른 역할이 필요한 곳도 모두 통과 */
+    @Bean
+    public static RoleHierarchy roleHierarchy() {
+        return RoleHierarchyImpl.fromHierarchy("""
+                ROLE_ADMIN > ROLE_INSTITUTION_MANAGER
+                ROLE_ADMIN > ROLE_COMPANY_USER
+                """);
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 
     /**
@@ -66,6 +98,12 @@ public class SecurityConfig {
         return username -> {
             throw new UsernameNotFoundException(username);
         };
+    }
+
+    /** 토큰이 만료됐으면 TOKEN_EXPIRED, 그 외(없음·위조·형식 오류)는 AUTH_REQUIRED */
+    private static ErrorCode authErrorOf(HttpServletRequest req) {
+        return req.getAttribute(JwtAuthenticationFilter.AUTH_ERROR_ATTRIBUTE) instanceof ErrorCode code
+                ? code : ErrorCode.AUTH_REQUIRED;
     }
 
     /** 필터 단계 에러는 컨트롤러 밖이라 GlobalExceptionHandler 가 못 잡으므로 같은 형식으로 직접 씁니다. */
