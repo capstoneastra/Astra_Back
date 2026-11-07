@@ -13,6 +13,7 @@ public enum ErrorCode {
     // 401
     AUTH_REQUIRED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
     TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "로그인이 만료되었습니다. 다시 로그인해 주세요."),
+    INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다."),
 
     // 403
     FORBIDDEN(HttpStatus.FORBIDDEN, "접근 권한이 없습니다."),
@@ -30,6 +31,8 @@ public enum ErrorCode {
     RESERVATION_OVERLAP(HttpStatus.CONFLICT, "선택한 시간에 이미 확정된 예약이 있습니다."),
     RESERVATION_ALREADY_CONFIRMED(HttpStatus.CONFLICT, "이미 예약이 확정된 의뢰입니다."),
     SUPPLEMENT_ALREADY_OPEN(HttpStatus.CONFLICT, "답변을 기다리는 보완 요청이 이미 있습니다."),
+    EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 가입된 이메일입니다."),
+    ORGANIZATION_ALREADY_EXISTS(HttpStatus.CONFLICT, "같은 이름의 조직이 이미 등록되어 있습니다."),
 
     // 500 / 502
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다."),

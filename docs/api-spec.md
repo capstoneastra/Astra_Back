@@ -39,11 +39,12 @@
 | HTTP | code 예시 | 상황 |
 |---|---|---|
 | 400 | `VALIDATION_FAILED` | 입력값 검증 실패 (`details`에 필드별 사유) |
-| 401 | `AUTH_REQUIRED`, `TOKEN_EXPIRED` | 미인증 / 토큰 만료 → refresh 시도 |
+| 401 | `AUTH_REQUIRED`, `TOKEN_EXPIRED`, `INVALID_CREDENTIALS` | 미인증·잘못된 토큰 / access 토큰 만료 → refresh 시도 / 로그인 시 이메일 또는 비밀번호 불일치 |
 | 403 | `FORBIDDEN`, `ACCOUNT_NOT_ACTIVE` | 역할·소유권 불일치 (다른 기관 의뢰 조회 등) / 승인 대기·거절·정지 계정 로그인 |
 | 404 | `NOT_FOUND`, `EQUIPMENT_NOT_FOUND`, `REQUEST_NOT_FOUND` | 없는 주소 / 없는 장비 / 없는 의뢰 |
 | 405 | `METHOD_NOT_ALLOWED` | 지원하지 않는 HTTP 메서드 |
 | 409 | `REQUEST_INVALID_STATUS`, `VERSION_CONFLICT`, `RESERVATION_OVERLAP`, `RESERVATION_ALREADY_CONFIRMED`, `SUPPLEMENT_ALREADY_OPEN` | 상태 전이 불가 / 동시 수정 / 일정 중복 / 이미 확정된 의뢰 / 답변 대기 중인 보완 요청 존재 |
+| 409 | `EMAIL_ALREADY_EXISTS`, `ORGANIZATION_ALREADY_EXISTS` | 회원가입: 이미 가입된 이메일 / 같은 유형에 같은 이름의 조직이 이미 있음 (`organizations` UNIQUE(org_type, name)) |
 | 500 | `INTERNAL_ERROR` | 처리되지 않은 서버 오류 (서버 로그 확인) |
 | 502 | `AI_UPSTREAM_ERROR` | LLM 호출 실패 |
 
@@ -95,10 +96,25 @@
   "role": "INSTITUTION_MANAGER", "organizationId": 3 }
 // → 201 { "userId": 21, "status": "PENDING" }  관리자 승인 전에는 로그인 시 403 ACCOUNT_NOT_ACTIVE
 
-// POST /auth/login → 200
+// POST /auth/signup (기관 담당자 - 미등록 기관 신청: organizationId 대신 organization)
+{ "email": "lee@newlab.re.kr", "password": "****", "name": "이담당", "phone": "055-000-0000",
+  "role": "INSTITUTION_MANAGER",
+  "organization": { "name": "가상 신규 시험기관", "address": "경남 진주시 ...", "phone": "055-000-0000" } }
+// → 201 { "userId": 22, "status": "PENDING" }
+// 실패: 409 EMAIL_ALREADY_EXISTS / 409 ORGANIZATION_ALREADY_EXISTS / 400 VALIDATION_FAILED (role=ADMIN 포함)
+
+// POST /auth/login { "email": "a@company.com", "password": "****" } → 200
 { "accessToken": "eyJ...", "refreshToken": "eyJ...", "expiresIn": 3600,
   "user": { "id": 1, "name": "홍길동", "role": "COMPANY_USER", "organizationId": 10 } }
+// 실패: 401 INVALID_CREDENTIALS / 403 ACCOUNT_NOT_ACTIVE
+
+// POST /auth/refresh { "refreshToken": "eyJ..." } → 200 (로그인과 같은 형식, refresh 토큰도 새로 발급)
+// 한 번 쓴 refresh 토큰은 폐기됨. 만료·폐기된 토큰이면 401 AUTH_REQUIRED → 다시 로그인
+
+// POST /auth/logout { "refreshToken": "eyJ..." } → 200 { "success": true }
 ```
+
+> 토큰: access 토큰은 `Authorization: Bearer` 헤더로 보냅니다(유효 1시간). refresh 토큰은 유효 14일이고, 서버는 원문 대신 해시만 `refresh_tokens.token_hash`에 저장합니다.
 
 ---
 

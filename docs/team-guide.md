@@ -15,7 +15,7 @@
 | DB | **PostgreSQL 16** | 설계(`schema.sql`)가 PostgreSQL 기준 (JSONB, pg_trgm) |
 | ORM | Spring Data JPA (+ 검색만 native query) | JSONB 컬럼은 `@JdbcTypeCode(SqlTypes.JSON)` |
 | DB 변경 관리 | **Flyway** | `schema.sql` → `V1__init.sql`, `seed.sql` → `V2__seed.sql` |
-| 인증 | Spring Security 7 + JWT (jjwt 0.13.0), access 토큰만 | 시연용이라 refresh 토큰 생략 가능 |
+| 인증 | Spring Security 7 + JWT (jjwt 0.13.0), access 토큰(1시간) + refresh 토큰(14일) | refresh 토큰은 해시만 `refresh_tokens`에 저장하고, 재발급할 때마다 새 토큰으로 교체 |
 | API 문서 | **springdoc-openapi 3.2.0 (Swagger UI)**, Spring Boot 4 지원 계열 | 코드가 곧 명세. FE는 `/swagger-ui`에서 바로 확인·호출 |
 | AI | **Anthropic Java SDK** `com.anthropic:anthropic-java:3.6.0`, 모델 `claude-opus-5-5` | 공식 SDK. 조건 추출은 structured outputs(JSON 스키마)로 받음 |
 | 테스트 | JUnit 5 + **Testcontainers (PostgreSQL 16)** | 테스트마다 실제 DB를 띄워 마이그레이션·제약조건까지 검증 (Docker 필요) |
