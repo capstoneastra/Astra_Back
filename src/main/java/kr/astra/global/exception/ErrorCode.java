@@ -9,6 +9,9 @@ public enum ErrorCode {
 
     // 400
     VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),
+    EMAIL_NOT_VERIFIED(HttpStatus.BAD_REQUEST, "이메일 인증을 먼저 완료해 주세요."),
+    VERIFICATION_CODE_INVALID(HttpStatus.BAD_REQUEST, "인증 코드가 올바르지 않습니다."),
+    VERIFICATION_CODE_EXPIRED(HttpStatus.BAD_REQUEST, "인증 코드가 만료되었습니다. 코드를 다시 받아 주세요."),
 
     // 401
     AUTH_REQUIRED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
@@ -33,6 +36,10 @@ public enum ErrorCode {
     SUPPLEMENT_ALREADY_OPEN(HttpStatus.CONFLICT, "답변을 기다리는 보완 요청이 이미 있습니다."),
     EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 가입된 이메일입니다."),
     ORGANIZATION_ALREADY_EXISTS(HttpStatus.CONFLICT, "같은 이름의 조직이 이미 등록되어 있습니다."),
+    USER_INVALID_STATUS(HttpStatus.CONFLICT, "현재 회원 상태에서는 할 수 없는 작업입니다."),
+
+    // 429
+    TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요."),
 
     // 500 / 502
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다."),

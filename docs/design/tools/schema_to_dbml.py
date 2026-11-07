@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 schema = (ROOT / "schema.sql").read_text(encoding="utf-8")
 
 GROUPS = [
-    ("user_org", ["organizations", "users", "refresh_tokens", "notifications"]),
+    ("user_org", ["organizations", "users", "refresh_tokens", "email_verifications", "notifications"]),
     ("equipment_domain", ["equipment", "equipment_specs", "equipment_change_logs", "test_types",
                           "equipment_test_types", "test_condition_rules"]),
     ("ai_domain", ["chat_sessions", "chat_messages", "test_requirements", "requirement_conditions",

@@ -30,7 +30,7 @@ CREATE TABLE organizations (
     phone             VARCHAR(30),
     email             VARCHAR(200),
     homepage_url      VARCHAR(500),
-    is_verified       BOOLEAN      NOT NULL DEFAULT FALSE,   -- 신규 기관 신청은 관리자 승인 시 TRUE
+    is_verified       BOOLEAN      NOT NULL DEFAULT FALSE,   -- 가입으로 생긴 기업·신규 기관은 관리자가 회원 승인할 때 TRUE
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
     UNIQUE (org_type, name)
@@ -46,7 +46,7 @@ CREATE TABLE users (
     role              VARCHAR(30)  NOT NULL CHECK (role IN ('COMPANY_USER','INSTITUTION_MANAGER','ADMIN')),
                       -- ADMIN = 중개플랫폼 관리자(마스터, 전체 권한). 회원가입 불가, 초기 세팅으로만 생성
     status            VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','PENDING','REJECTED','SUSPENDED')),
-                      -- 기관 담당자는 PENDING 으로 시작 → 관리자 승인 후 ACTIVE
+                      -- 기업·기관 담당자 모두 PENDING 으로 시작 → 관리자 승인 후 ACTIVE (가입 전 이메일 인증 필수)
     approved_by       BIGINT       REFERENCES users(id),
     approved_at       TIMESTAMPTZ,
     reject_reason     VARCHAR(500),
@@ -64,6 +64,21 @@ CREATE TABLE refresh_tokens (
     revoked_at        TIMESTAMPTZ,
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
+
+-- 회원가입 이메일 인증 (V4). 6자리 코드 → 확인되면 가입용 토큰 발급. 코드·토큰은 SHA-256 해시만 저장
+CREATE TABLE email_verifications (
+    id                BIGSERIAL PRIMARY KEY,
+    email             VARCHAR(200) NOT NULL,             -- 소문자로 저장
+    code_hash         VARCHAR(200) NOT NULL,             -- 6자리 코드의 SHA-256
+    code_expires_at   TIMESTAMPTZ  NOT NULL,             -- 발송 후 10분
+    attempt_count     INT          NOT NULL DEFAULT 0,   -- 틀린 횟수 (5회 틀리면 코드 무효)
+    verified_at       TIMESTAMPTZ,                       -- 코드 확인 완료 시각
+    token_hash        VARCHAR(200) UNIQUE,               -- 확인 후 발급한 가입용 토큰의 SHA-256
+    token_expires_at  TIMESTAMPTZ,                       -- 확인 후 30분
+    used_at           TIMESTAMPTZ,                       -- 가입에 사용한 시각
+    created_at        TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_email_verifications_email ON email_verifications(email, created_at DESC);
 
 -- ---------------------------------------------------------------------
 -- 2. 장비 / 시험유형  (기능 1·2·3·4·12)
