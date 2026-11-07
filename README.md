@@ -3,6 +3,10 @@
 > 장비 이름을 몰라도, 시험 조건만으로 맞는 시험장비를 찾고 의뢰까지 끝내는 플랫폼
 >
 > AI 디자인 캡스톤 7조 · 백엔드 저장소
+>
+> 프로젝트 기간: 2026/11/7 ~
+>
+> 백엔드: 윤준수 (BE-A 플랫폼 기반) · 허영재 (BE-B 의뢰 워크플로우) · 주현욱 (BE-C AI)
 
 ## 목차
 1. [프로젝트 방향](#1-프로젝트-방향)
@@ -85,6 +89,16 @@ flowchart LR
 ---
 
 ## 4. 기능과 담당
+
+### 백엔드 담당자
+
+| 역할 | 담당자 | 맡는 것 |
+|---|---|---|
+| **BE-A** · 플랫폼 기반 | **윤준수** | 프로젝트 셋업, 공통 모듈(`global/`), 로그인·권한, 장비 데이터, 관리자, 대시보드 |
+| **BE-B** · 의뢰 워크플로우 | **허영재** | 시험 의뢰·상태 관리, 기관 검토·보완, 예약, 알림, 가상 시뮬레이션 |
+| **BE-C** · AI | **주현욱** | LLM 연동, AI 상담, 조건 분석, 매칭, 의뢰서 초안, 자동 추진 |
+
+### 기능별 담당
 
 | # | 기능 | 패키지 | 담당 |
 |---|---|---|---|
@@ -713,10 +727,10 @@ Testcontainers가 테스트 전용 PostgreSQL 16을 띄워 실제 DB로 검증�
 
 ```
 src/main/java/kr/astra/
-├── global/         공통: 응답 형식, 에러 코드, 예외 처리, 보안·Swagger 설정, BaseTimeEntity   ← BE-A (모두 사용)
-├── auth/ user/ organization/ admin/ equipment/ testtype/ dashboard/                   ← BE-A
-├── request/ review/ reservation/ notification/ simulation/                           ← BE-B
-└── chat/ requirement/ matching/ aipipeline/ llm/                                     ← BE-C
+├── global/         공통: 응답 형식, 에러 코드, 예외 처리, 보안·Swagger 설정, BaseTimeEntity   ← BE-A 윤준수 (모두 사용)
+├── auth/ user/ organization/ admin/ equipment/ testtype/ dashboard/                   ← BE-A 윤준수
+├── request/ review/ reservation/ notification/ simulation/                           ← BE-B 허영재
+└── chat/ requirement/ matching/ aipipeline/ llm/                                     ← BE-C 주현욱
 ```
 
 - 각 도메인은 `controller / service / repository / entity / dto`로 나뉩니다. 각 패키지의 `package-info.java`에 담당자와 역할이 적혀 있습니다.
