@@ -202,6 +202,7 @@ chore: Flyway 설정 추가
 |---|---|---|
 | BE-A | 전원 | `CurrentUser` (`@AuthenticationPrincipal`로 로그인 사용자 id·role·orgId) |
 | BE-A | BE-C | `EquipmentQueryService.findCandidates(testTypeCode, region)`, `getSpecs(equipmentId)` |
+| BE-A | BE-C | `TestTypeService.getConditionRules(testTypeCode)` (조건 규칙. `TestConditionRule` 엔티티는 BE-A가 `testtype` 패키지에 읽기 전용으로 만들어 둠, 따로 만들지 말 것) |
 | BE-C | BE-B | `RequirementService.getSnapshot(requirementId)` (의뢰서에 조건 반영) |
 | BE-B | BE-C | `TestRequestService.createDraft(userId, equipmentId, requirementId, content, aiGenerated)` (AI 초안·자동 추진) |
 | BE-B | 전원 | `NotificationService.notify(userId, type, title, linkPath)` |

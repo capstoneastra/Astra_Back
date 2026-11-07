@@ -720,7 +720,7 @@ cp .env.example .env        # 필요한 값 채우기 (DB 는 기본값 그대�
 ./gradlew bootRun           # Windows: gradlew.bat bootRun
 ```
 
-- `bootRun`을 하면 `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고, Flyway가 `V1__init.sql`(테이블), `V2__seed.sql`(초기 데이터), `V3__demo_accounts.sql`(시연 계정), `V4__email_verifications.sql`(가입 이메일 인증)을 적용합니다.
+- `bootRun`을 하면 `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고, Flyway가 `V1__init.sql`(테이블), `V2__seed.sql`(초기 데이터), `V3__demo_accounts.sql`(시연 계정), `V4__email_verifications.sql`(가입 이메일 인증), `V5__fill_institution_region.sql`(지역이 비어 있던 기관·장비 31대에 '진주' 채움)을 적용합니다.
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - 헬스체크: http://localhost:8080/actuator/health
 - IntelliJ: **Project SDK와 Gradle JVM을 모두 21**로 맞춘 뒤 `AstraApplication`을 실행합니다.
@@ -756,6 +756,7 @@ Testcontainers가 테스트 전용 PostgreSQL 16을 띄워 실제 DB로 검증�
 | `ApiConventionTest` | 공통 실패 응답 형식, Swagger·헬스체크 접근 |
 | `SecurityRequireLoginTest` | 비로그인 `401 AUTH_REQUIRED`, 만료 토큰 `401 TOKEN_EXPIRED`, 위조·refresh 토큰 거부, 로그아웃은 로그인 필요 |
 | `AuthFlowTest` | 이메일 인증(코드 틀림·만료·재발송 제한·토큰 1회 사용) → 가입(모두 PENDING·관리자 불가·사업자번호 형식) → 승인 → 로그인 → 내 정보 → 재발급(쓴 토큰 폐기) → 로그아웃, 시연 계정 seed |
+| `EquipmentApiTest` | 장비 목록·검색(q·지역·기관·유형·외부이용·MOCK 필터, 정렬)·상세(REAL 먼저), 시험유형 목록·시험 정보 안내, 기관 목록·상세, BE-C용 `EquipmentQueryService` (seed 실제 값으로 검증) |
 | `AdminUserApprovalTest` | 관리자 회원 목록(필터·정렬·페이지), 승인(조직도 승인)·거절(로그인 시 사유 표시), 상태 오류 409, 권한 403·404 |
 | `AccessGuardTest` | 권한 체크 유틸: ADMIN 마스터, 기관은 소속 기관만, 기업은 본인 데이터만 |
 
@@ -803,6 +804,8 @@ public ApiResponse<RequestDetail> detail(@AuthenticationPrincipal CurrentUser us
 - ⏳ 각 도메인의 Entity·API 구현 (담당자별 진행, [`docs/team-guide.md`](docs/team-guide.md) 주차별 계획 참고)
 - ✅ 회원가입·로그인·JWT 인증·권한 체크(`AccessGuard`)·시연 계정 (BE-A). `/auth/**` 외 API는 로그인 필요
 - ✅ 가입 이메일 인증(6자리 코드) + 기업·기관 모두 관리자 승인 후 이용, 관리자 회원 목록·승인·거절 (BE-A)
+- ✅ 장비 목록·검색·상세, 시험유형 목록·시험 정보 안내, 기관 목록·상세, 매칭용 `EquipmentQueryService` 구현 (BE-A)
+- ⏳ 장비 비교·유사 장비(P1), 기관 장비 관리, 대시보드, 자연어 검색 (BE-A)
 
 ---
 

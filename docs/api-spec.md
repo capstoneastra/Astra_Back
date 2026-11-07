@@ -164,16 +164,16 @@
 | GET | `/equipment/duplicates` | 로그인 | 지역 내 중복 장비 그룹 목록 `?region=대전&testType=VIBRATION` | 12 |
 | POST | `/equipment/compare` | 로그인 | 장비 N개 사양 비교표 `{ "equipmentIds": [1,5,9] }` | 12 |
 | GET | `/search` | 로그인 | 시험항목·자연어 통합 검색 `?q=15kg 시료 진동시험` | 3 |
-| GET | `/test-types` | 로그인 | 시험유형 목록 | 3 |
+| GET | `/test-types` | 로그인 | 시험유형 목록 (15개, 표시 순서, 장비 수 포함) | 3 |
 | GET | `/test-types/{code}` | 로그인 | 시험 정보 안내: 가능 기관·예상비용·기간·이용조건 + 입력할 조건 목록(`conditionRules`) | 4 |
-| GET | `/institutions` | 로그인 | 기관 목록 | |
-| GET | `/institutions/{id}` | 로그인 | 기관 상세 + 보유 장비 수 | |
+| GET | `/institutions` | 로그인 | 기관 목록 (승인된 기관, 가나다순, 장비 수 포함) | |
+| GET | `/institutions/{id}` | 로그인 | 기관 상세 + 보유 장비 수·유형별 수·가능 시험유형 | |
 
 **GET `/equipment` 쿼리**
 
 | 파라미터 | 예시 | 설명 |
 |---|---|---|
-| `q` | `진동` | 장비명·모델·제조사·시험유형 키워드 (pg_trgm) |
+| `q` | `진동` | 장비명·모델·제조사, 또는 시험유형(이름·코드·키워드) 부분 일치. 검색어가 있으면 이름이 비슷한 순서(pg_trgm)가 먼저 |
 | `region` | `대전` | 복수 가능 `region=대전&region=진주` |
 | `institutionId` | `3` | |
 | `equipmentType` | `TEST` | MEASUREMENT / MANUFACTURING / TEST / SOFTWARE / SUPPORT |
@@ -181,6 +181,10 @@
 | `availability` | `AVAILABLE` | |
 | `externalOnly` | `true` | 외부 이용 가능만 |
 | `includeMock` | `true` | 기본 true(시연), 운영 시 false |
+| `page`, `size`, `sort` | `sort=infoUpdatedAt,desc` | 기본 `size=20`, 정렬은 `externalId`(기본, 오름차순)·`infoUpdatedAt`만. 그 외 필드는 `400 VALIDATION_FAILED` |
+
+- 활성 장비(`is_active`)만 나옵니다. 없거나 비활성인 장비 상세는 `404 EQUIPMENT_NOT_FOUND`.
+- `region`: 원본에 지역이 없던 진주뿌리기술지원센터 장비 31대는 V5 마이그레이션으로 `진주`를 채웠습니다.
 
 ```json
 // GET /equipment?testType=VIBRATION → content[] 항목  (seed 실제 데이터 ASTRA-CAND-0048)
@@ -188,15 +192,18 @@
   "institution": { "id": 2, "name": "대전테크노파크 우주·양자산업센터" }, "region": "대전",
   "equipmentType": "TEST", "testTypes": ["VIBRATION"],
   "availability": "UNKNOWN", "utilizationRate": null, "feeText": null,
-  "verificationStatus": "LISTING_CONFIRMED", "isMock": true, "infoUpdatedAt": "2026-11-05T00:00:00+09:00" }
+  "verificationStatus": "LISTING_CONFIRMED", "isMock": true, "infoUpdatedAt": "2026-11-07T11:52:01.241657+09:00" }
+// infoUpdatedAt: 초기 적재 데이터는 DB 를 만든(마이그레이션) 시각. 기관이 수정·확인하면 그 시각으로 바뀜
 
 // GET /equipment/48 → 위 필드 + 아래
+// specs: REAL·MOCK 을 모두 주고, 같은 사양 키면 REAL 이 먼저 (예: 장비 37 의 frequency 는 REAL, MOCK 순)
+//        단일값 value / 범위 min·max / 숫자가 아니면 valueText. 값이 없는 필드는 생략
 { ...,
   "manufacturer": "(주)팜테크", "category": null, "description": null,
   "usage": { "accessScope": "UNKNOWN", "feeText": null, "feeAmount": null, "feeUnit": null,
              "durationText": null, "utilizationRate": null, "availability": "UNKNOWN" },
   "specs": [
-    { "key": "frequency", "label": "주파수 범위 시연값", "min": 10, "max": 3000, "unit": "Hz",
+    { "key": "frequency", "label": "주파수 범위", "min": 10, "max": 3000, "unit": "Hz",
       "sourceType": "MOCK", "usageScope": "DEMO_ONLY", "verificationStatus": "NOT_VERIFIED" },
     { "key": "max_payload", "label": "최대 시료 질량", "value": 40, "unit": "kg", "sourceType": "MOCK", ... },
     { "key": "max_fixture_mass", "label": "고정구 질량 허용 예시", "value": 15, "unit": "kg", "sourceType": "MOCK", ... },
@@ -222,8 +229,30 @@
   "institutions": [
     { "id": 6, "name": "한국신뢰성기술센터", "region": "대전", "equipmentCount": 2,
       "estCostMin": null, "estCostMax": null, "estDurationDays": null, "accessScope": "UNKNOWN" },
+    { "id": 8, "name": "기술지원센터", "region": "원주", "equipmentCount": 1,
+      "estCostMin": null, "estCostMax": null, "estDurationDays": null, "accessScope": "UNKNOWN" },
     { "id": 2, "name": "대전테크노파크 우주·양자산업센터", "region": "대전", "equipmentCount": 1,
       "estCostMin": null, "estCostMax": null, "estDurationDays": null, "accessScope": "UNKNOWN" } ] }
+// institutions: 장비 수 많은 순, 같으면 가나다순. 기관 장비가 여러 대면 estCostMin=최솟값, estCostMax=최댓값,
+//   estDurationDays=가장 짧은 값, accessScope=하나라도 외부 이용 가능이면 EXTERNAL_ALLOWED / 모두 내부 전용이면 INTERNAL_ONLY / 그 외 UNKNOWN
+// 없는 코드면 404 NOT_FOUND
+
+// GET /test-types → 15개, display_order 순. equipmentCount = 그 시험을 할 수 있는 활성 장비 수 (0 이어도 포함)
+[ { "code": "ACOUSTIC_NOISE", "nameKo": "음향·소음 시험", "description": null, "keywords": ["소음", "음향", "dB"], "equipmentCount": 1 },
+  { "code": "BATTERY_TEST", "nameKo": "배터리 시험", "description": null, "keywords": ["배터리", "충방전", "전지"], "equipmentCount": 2 }, ... ]
+
+// GET /institutions → 승인된 기관 전체, 이름 가나다순 (페이지 없음)
+[ { "id": 5, "name": "경상국립대학교 첨단소재분석지원센터", "parentName": null, "region": "진주", "equipmentCount": 5 },
+  { "id": 8, "name": "기술지원센터", "parentName": null, "region": "원주", "equipmentCount": 1 }, ... ]
+
+// GET /institutions/2 → 없거나 미승인 기관이면 404 NOT_FOUND
+{ "id": 2, "name": "대전테크노파크 우주·양자산업센터", "parentName": null, "region": "대전",
+  "address": null, "phone": null, "email": null, "homepageUrl": null,
+  "equipmentCount": 13, "equipmentByType": { "MEASUREMENT": 11, "TEST": 2 },
+  "testTypes": [ { "code": "ELECTRICAL_RF_ANALYSIS", "nameKo": "전기·RF 측정", "equipmentCount": 10 },
+                 { "code": "TEMPERATURE_HUMIDITY", "nameKo": "온습도시험", "equipmentCount": 1 },
+                 { "code": "VIBRATION", "nameKo": "진동시험", "equipmentCount": 1 },
+                 { "code": "X_RAY_INSPECTION", "nameKo": "X선 비파괴검사", "equipmentCount": 1 } ] }
 ```
 
 ---
