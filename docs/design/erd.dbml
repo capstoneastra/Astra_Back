@@ -1,0 +1,403 @@
+// ASTRA ERD — tools/schema_to_dbml.py 가 schema.sql 에서 자동 생성 (직접 수정 금지)
+// https://dbdiagram.io 에 붙여넣으면 다이어그램이 그려집니다.
+
+Project ASTRA { database_type: 'PostgreSQL' }
+
+TableGroup user_org { organizations users refresh_tokens notifications }
+TableGroup equipment_domain { equipment equipment_specs equipment_change_logs test_types equipment_test_types test_condition_rules }
+TableGroup ai_domain { chat_sessions chat_messages test_requirements requirement_conditions match_runs match_results match_condition_checks ai_pipeline_runs }
+TableGroup request_domain { test_requests test_request_revisions request_status_history supplement_requests attachments reservations }
+TableGroup simulation_domain { simulation_models simulation_presets simulation_runs }
+
+Table organizations {
+  id bigint [pk]
+  org_type varchar(20) [not null, note: 'COMPANY | INSTITUTION | ADMIN']
+  name varchar(200) [not null]
+  parent_name varchar(200) [note: '예: \'대전테크노파크\' (하위 센터의 상위기관)']
+  business_reg_no varchar(20) [note: '기업 사업자번호']
+  region varchar(50) [note: '대전, 진주, 경남 ...']
+  address varchar(300)
+  phone varchar(30)
+  email varchar(200)
+  homepage_url varchar(500)
+  is_verified boolean [not null, default: `FALSE`, note: '신규 기관 신청은 관리자 승인 시 TRUE']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  indexes {
+    (org_type, name) [unique]
+  }
+}
+
+Table users {
+  id bigint [pk]
+  organization_id bigint [ref: > organizations.id]
+  email varchar(200) [not null, unique]
+  password_hash varchar(200) [not null]
+  name varchar(50) [not null]
+  phone varchar(30)
+  role varchar(30) [not null, note: 'COMPANY_USER | INSTITUTION_MANAGER | ADMIN  — ADMIN = 중개플랫폼 관리자(마스터, 전체 권한). 회원가입 불가, 초기 세팅으로만 생성']
+  status varchar(20) [not null, default: `'ACTIVE'`, note: 'ACTIVE | PENDING | REJECTED | SUSPENDED  — 기관 담당자는 PENDING 으로 시작 → 관리자 승인 후 ACTIVE']
+  approved_by bigint [ref: > users.id]
+  approved_at timestamptz
+  reject_reason varchar(500)
+  last_login_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+Table refresh_tokens {
+  id bigint [pk]
+  user_id bigint [not null, ref: > users.id]
+  token_hash varchar(200) [not null, unique]
+  expires_at timestamptz [not null]
+  revoked_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table test_types {
+  code varchar(50) [pk, note: 'VIBRATION, TENSILE, ELECTRICAL_RF_ANALYSIS ...']
+  name_ko varchar(100) [not null, note: '진동시험']
+  description text
+  keywords text[] [not null, default: `'{}'`, note: '자연어 검색용 동의어: {\'진동\',\'가진\',\'sine\',\'random\'}']
+  display_order int [not null, default: `0`]
+}
+
+Table test_condition_rules {
+  test_type_code varchar(50) [not null, ref: > test_types.code]
+  condition_key varchar(80) [not null, note: 'sample_mass, frequency, sample_size_x ...']
+  label varchar(100) [not null, note: '시료 질량']
+  value_type varchar(10) [not null, note: 'NUMBER | RANGE | TEXT']
+  unit varchar(30) [note: '기준 단위 (비교 전 이 단위로 환산)']
+  is_required boolean [not null, default: `FALSE`, note: 'TRUE 인데 비어 있으면 AI 분석이 MISSING 처리']
+  spec_key varchar(80) [note: '비교할 equipment_specs.spec_key (NULL = 비교 안 함, 기관 확인)']
+  comparator varchar(20) [not null, default: `'NONE'`, note: 'RANGE_WITHIN | MAX_LIMIT | MIN_LIMIT | NONE']
+  display_order int [not null, default: `0`]
+  indexes {
+    (test_type_code, condition_key) [pk]
+  }
+}
+
+Table equipment {
+  id bigint [pk]
+  external_id varchar(30) [not null, unique, note: '초기 적재: ASTRA-CAND-0001 (원본 internalId 유지) / 기관 신규 등록: ASTRA-EQ-0072 (id 4자리)']
+  institution_id bigint [not null, ref: > organizations.id]
+  name varchar(200) [not null]
+  model varchar(200)
+  manufacturer varchar(200)
+  category varchar(100) [note: '\'검사/시험장비\' 등 원본 분류']
+  equipment_type varchar(30) [not null, note: 'MEASUREMENT | MANUFACTURING | TEST | SOFTWARE | SUPPORT']
+  region varchar(50)
+  description text
+  image_url varchar(500) [note: '이용 조건']
+  access_scope varchar(30) [note: 'EXTERNAL_ALLOWED | INTERNAL_ONLY | UNKNOWN']
+  fee_text varchar(200) [note: '원문 그대로 \'12000 KRW/hour VAT excluded\'']
+  fee_amount int [note: '파싱된 숫자(원)']
+  fee_unit varchar(20) [note: 'HOUR | DAY | CASE | SAMPLE | NEGOTIABLE']
+  duration_text varchar(200)
+  utilization_rate numeric(5,2) [note: '가동률 %']
+  availability varchar(20) [not null, default: `'UNKNOWN'`, note: 'AVAILABLE | BUSY | MAINTENANCE | UNAVAILABLE | UNKNOWN  — 출처 / 검증']
+  source_type varchar(20) [note: 'WEB | PDF | INSTITUTION | MANUAL']
+  source_url varchar(1000)
+  source_file varchar(200)
+  source_page int
+  verification_status varchar(30) [not null, default: `'NEEDS_MANUAL_REVIEW'`, note: 'NEEDS_MANUAL_REVIEW | LISTING_CONFIRMED | INSTITUTION_VERIFIED']
+  spec_verification_status varchar(30) [not null, default: `'NOT_VERIFIED'`, note: 'NOT_VERIFIED | UNVERIFIED | VERIFIED']
+  aerospace_relevance varchar(30) [not null, default: `'NOT_ASSESSED'`]
+  is_mock boolean [not null, default: `FALSE`, note: '시연용 가상 데이터 포함 여부 시뮬레이션 (기능 15)']
+  simulation_capability varchar(30) [note: 'CALCULATED_DEMO | RULE_BASED_DEMO | VISUALIZATION_DEMO | WORKFLOW_DEMO']
+  info_updated_at timestamptz [not null, default: `now()`, note: '화면의 \'정보 갱신일\' (기관 수정·확인 시 갱신)']
+  is_active boolean [not null, default: `TRUE`]
+  created_by bigint [ref: > users.id, note: 'NULL = 관리자 초기 적재(import)']
+  updated_by bigint [ref: > users.id]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+Table equipment_specs {
+  id bigint [pk]
+  equipment_id bigint [not null, ref: > equipment.id]
+  spec_key varchar(80) [not null, note: 'frequency, max_payload, max_fixture_mass, measurement_range_x ...']
+  label varchar(100) [not null]
+  value_num numeric [note: '단일값']
+  min_num numeric [note: '범위 최소']
+  max_num numeric [note: '범위 최대']
+  value_text varchar(300) [note: '숫자로 표현 불가한 값']
+  unit varchar(30)
+  source_type varchar(10) [not null, note: 'REAL | MOCK']
+  verification_status varchar(30) [not null, default: `'NOT_VERIFIED'`]
+  usage_scope varchar(20) [not null, default: `'GENERAL'`, note: 'GENERAL | DEMO_ONLY']
+  indexes {
+    (equipment_id, spec_key, source_type) [unique]
+  }
+}
+
+Table equipment_change_logs {
+  id bigint [pk]
+  equipment_id bigint [not null, ref: > equipment.id]
+  changed_by bigint [not null, ref: > users.id]
+  action varchar(20) [not null, note: 'CREATE | UPDATE | SPECS_UPDATE | TEST_TYPES_UPDATE | CONFIRM | DEACTIVATE | TRANSFER']
+  changes jsonb [note: '{"feeAmount": {"before": null, "after": 300000}, ...}']
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table equipment_test_types {
+  equipment_id bigint [not null, ref: > equipment.id]
+  test_type_code varchar(50) [not null, ref: > test_types.code]
+  est_cost_min int [note: '원']
+  est_cost_max int
+  est_duration_days int
+  note varchar(300)
+  indexes {
+    (equipment_id, test_type_code) [pk]
+  }
+}
+
+Table chat_sessions {
+  id bigint [pk]
+  user_id bigint [not null, ref: > users.id]
+  title varchar(200)
+  status varchar(20) [not null, default: `'ACTIVE'`, note: 'ACTIVE | CLOSED']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+Table chat_messages {
+  id bigint [pk]
+  session_id bigint [not null, ref: > chat_sessions.id]
+  role varchar(20) [not null, note: 'USER | ASSISTANT | SYSTEM']
+  content text [not null]
+  metadata jsonb [note: '추출된 조건, 추천 장비 id, 모델명, 토큰수 등']
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table test_requirements {
+  id bigint [pk]
+  user_id bigint [not null, ref: > users.id]
+  chat_session_id bigint [ref: > chat_sessions.id]
+  test_type_code varchar(50) [ref: > test_types.code]
+  title varchar(200)
+  purpose text [note: '시험 목적']
+  sample_name varchar(200) [note: '시료명']
+  sample_quantity int
+  status varchar(20) [not null, default: `'DRAFT'`, note: 'DRAFT | CONFIRMED | ARCHIVED']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+Table requirement_conditions {
+  id bigint [pk]
+  requirement_id bigint [not null, ref: > test_requirements.id]
+  condition_key varchar(80) [not null, note: 'test_condition_rules.condition_key (sample_mass, fixture_mass, frequency ...)']
+  label varchar(100) [not null]
+  value_num numeric
+  min_num numeric
+  max_num numeric
+  value_text varchar(300)
+  unit varchar(30)
+  status varchar(20) [not null, default: `'CONFIRMED'`, note: 'CONFIRMED | UNCONFIRMED | MISSING']
+  source varchar(20) [not null, default: `'USER'`, note: 'USER | AI_EXTRACTED | INSTITUTION']
+  confidence numeric(3,2) [note: 'AI 추출 신뢰도 0~1']
+  note varchar(300)
+  indexes {
+    (requirement_id, condition_key) [unique]
+  }
+}
+
+Table match_runs {
+  id bigint [pk]
+  requirement_id bigint [not null, ref: > test_requirements.id]
+  algorithm_version varchar(30) [not null, note: '\'rule-v1\', \'rule-v1+llm\' ...']
+  requirement_snapshot jsonb [not null, note: '실행 당시 조건 스냅샷']
+  created_by bigint [ref: > users.id]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table match_results {
+  id bigint [pk]
+  match_run_id bigint [not null, ref: > match_runs.id]
+  equipment_id bigint [not null, ref: > equipment.id]
+  rank int [not null]
+  score numeric(5,2) [note: '0~100']
+  verdict varchar(20) [not null, note: 'SUITABLE | PARTIAL | UNSUITABLE | UNKNOWN']
+  reason text [note: 'AI 추천 이유']
+  used_mock_data boolean [not null, default: `FALSE`]
+  indexes {
+    (match_run_id, equipment_id) [unique]
+    (match_run_id, rank) [unique]
+  }
+}
+
+Table match_condition_checks {
+  id bigint [pk]
+  match_result_id bigint [not null, ref: > match_results.id]
+  condition_key varchar(80) [not null]
+  required_text varchar(200) [note: '\'20~2000 Hz\'']
+  equipment_text varchar(200) [note: '\'10~3000 Hz\'']
+  result varchar(20) [not null, note: 'MET | NOT_MET | UNKNOWN']
+  note varchar(300)
+}
+
+Table test_requests {
+  id bigint [pk]
+  request_no varchar(30) [not null, unique, note: 'REQ-20261105-0001']
+  requester_id bigint [not null, ref: > users.id]
+  company_org_id bigint [ref: > organizations.id]
+  institution_id bigint [not null, ref: > organizations.id]
+  equipment_id bigint [not null, ref: > equipment.id]
+  requirement_id bigint [ref: > test_requirements.id]
+  match_result_id bigint [ref: > match_results.id, note: '어떤 추천에서 왔는지']
+  assignee_id bigint [ref: > users.id, note: '기관 담당자']
+  title varchar(200) [not null]
+  status varchar(30) [not null, default: `'DRAFT'`, note: 'DRAFT | SUBMITTED | UNDER_REVIEW | SUPPLEMENT_REQUESTED | RESUBMITTED | SCHEDULING | CONFIRMED | COMPLETED | REJECTED | CANCELED']
+  current_revision_no int [not null, default: `1`]
+  desired_start_date date
+  desired_end_date date
+  submitted_at timestamptz
+  closed_at timestamptz
+  version int [not null, default: `0`, note: '낙관적 락 (동시 상태변경 방지)']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+Table test_request_revisions {
+  id bigint [pk]
+  request_id bigint [not null, ref: > test_requests.id]
+  revision_no int [not null]
+  content jsonb [not null, note: '의뢰서 본문 전체 스냅샷 (스키마는 API 명세 참조)']
+  is_ai_generated boolean [not null, default: `FALSE`]
+  is_submitted boolean [not null, default: `FALSE`, note: 'FALSE면 편집 가능한 작업본']
+  change_summary varchar(500) [note: '\'고정구 질량 2kg, 준비완료일 추가\'']
+  author_id bigint [not null, ref: > users.id]
+  created_at timestamptz [not null, default: `now()`]
+  submitted_at timestamptz
+  indexes {
+    (request_id, revision_no) [unique]
+  }
+}
+
+Table request_status_history {
+  id bigint [pk]
+  request_id bigint [not null, ref: > test_requests.id]
+  from_status varchar(30)
+  to_status varchar(30) [not null]
+  changed_by bigint [not null, ref: > users.id]
+  reason varchar(500)
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table supplement_requests {
+  id bigint [pk]
+  request_id bigint [not null, ref: > test_requests.id]
+  based_revision_no int [not null, note: '어떤 제출본을 보고 요청했는지']
+  requested_by bigint [not null, ref: > users.id]
+  message text [not null]
+  items jsonb [not null, default: `'[]'`, note: '[{"fieldKey":"fixture_mass","label":"고정구 질량","required":true}, ...] fieldKey = 조건 키(fixture_mass) 또는 의뢰서 content 경로(sample.readyDate)']
+  due_date date
+  status varchar(20) [not null, default: `'OPEN'`, note: 'OPEN | RESPONDED | CLOSED']
+  response_revision_no int [note: '보완 제출된 revision 번호']
+  response_message text
+  created_at timestamptz [not null, default: `now()`]
+  responded_at timestamptz
+  indexes {
+    (request_id) [unique, name: 'uq_supp_one_open_per_request', note: 'WHERE status = \'OPEN\'']
+  }
+}
+
+Table attachments {
+  id bigint [pk]
+  request_id bigint [not null, ref: > test_requests.id]
+  revision_no int
+  file_name varchar(300) [not null]
+  storage_key varchar(500) [not null, note: 'S3/로컬 경로']
+  mime_type varchar(100)
+  size_bytes bigint
+  uploaded_by bigint [not null, ref: > users.id]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table reservations {
+  id bigint [pk]
+  request_id bigint [not null, ref: > test_requests.id]
+  equipment_id bigint [not null, ref: > equipment.id]
+  start_at timestamptz [not null]
+  end_at timestamptz [not null]
+  status varchar(20) [not null, default: `'PROPOSED'`, note: 'PROPOSED | COUNTER_PROPOSED | CONFIRMED | CANCELED']
+  proposed_by bigint [not null, ref: > users.id]
+  confirmed_by bigint [ref: > users.id]
+  confirmed_at timestamptz
+  external_system varchar(50) [note: '향후 기관 예약시스템 연동']
+  external_ref varchar(100)
+  note varchar(500)
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  indexes {
+    (request_id) [unique, name: 'uq_resv_one_confirmed_per_request', note: 'WHERE status = \'CONFIRMED\'']
+  }
+  Note: 'CHECK (end_at > start_at) / ex_resv_no_overlap: 같은 장비의 CONFIRMED 예약끼리 시간 겹침 금지 (EXCLUDE USING gist)'
+}
+
+Table ai_pipeline_runs {
+  id bigint [pk]
+  user_id bigint [not null, ref: > users.id]
+  chat_session_id bigint [ref: > chat_sessions.id]
+  input_text text [note: '세션 없이 문장으로 시작할 때']
+  requirement_id bigint [ref: > test_requirements.id]
+  match_run_id bigint [ref: > match_runs.id]
+  draft_request_id bigint [ref: > test_requests.id]
+  status varchar(20) [not null, default: `'PENDING'`, note: 'PENDING | RUNNING | WAITING_USER | SUCCEEDED | FAILED | CANCELED']
+  current_step varchar(20) [note: 'ANALYZE | SEARCH | MATCH | DRAFT | DONE']
+  steps_log jsonb [not null, default: `'[]'`, note: '[{step, status, startedAt, endedAt, message}]']
+  error_message text
+  started_at timestamptz
+  finished_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table simulation_models {
+  model_type varchar(50) [pk, note: 'SDOF_BASE_EXCITATION ...']
+  description text [not null]
+  required_input_fields text[] [not null]
+  limitation text [not null, note: '화면에 반드시 노출']
+  capability varchar(30) [not null, note: 'CALCULATED_DEMO | RULE_BASED_DEMO | VISUALIZATION_DEMO | WORKFLOW_DEMO']
+  model_version varchar(20) [not null, default: `'0.6'`]
+  is_implemented boolean [not null, default: `FALSE`]
+}
+
+Table simulation_presets {
+  preset_id varchar(20) [pk, note: 'SIM-0001']
+  equipment_id bigint [not null, ref: > equipment.id]
+  model_type varchar(50) [not null, ref: > simulation_models.model_type]
+  simulation_type varchar(50) [not null, note: 'MANUFACTURING, RF, VIBRATION ...']
+  input_parameters jsonb [not null]
+  specs_snapshot jsonb [note: 'equipmentDemoSpecsSnapshot']
+  assumptions jsonb
+  is_mock boolean [not null, default: `TRUE`]
+}
+
+Table simulation_runs {
+  id bigint [pk]
+  preset_id varchar(20) [ref: > simulation_presets.preset_id]
+  equipment_id bigint [not null, ref: > equipment.id]
+  user_id bigint [ref: > users.id]
+  requirement_id bigint [ref: > test_requirements.id]
+  model_type varchar(50) [not null, ref: > simulation_models.model_type]
+  model_version varchar(20) [not null]
+  input_parameters jsonb [not null]
+  output jsonb [note: '그래프 시계열, 판정 등']
+  status varchar(20) [not null, default: `'NOT_EXECUTED'`, note: 'NOT_EXECUTED | RUNNING | SUCCEEDED | FAILED']
+  is_mock boolean [not null, default: `TRUE`]
+  warning text
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table notifications {
+  id bigint [pk]
+  user_id bigint [not null, ref: > users.id]
+  type varchar(40) [not null, note: 'REQUEST_SUBMITTED, SUPPLEMENT_REQUESTED, RESERVATION_CONFIRMED ...']
+  title varchar(200) [not null]
+  body varchar(1000)
+  link_path varchar(300) [note: '프론트 라우트 \'/requests/12\'']
+  related_request_id bigint [ref: > test_requests.id]
+  read_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+}

@@ -1,0 +1,17 @@
+# 로컬 개발용 PostgreSQL 16
+# - ./gradlew bootRun (또는 IntelliJ 실행) 시 Spring Boot 가 자동으로 띄웁니다.
+# - 직접 띄우려면: docker compose up -d
+services:
+  postgres:
+    image: 'postgres:16'
+    environment:
+      - 'POSTGRES_DB=astra'
+      - 'POSTGRES_USER=astra'
+      - 'POSTGRES_PASSWORD=astra'
+    ports:
+      - '5432:5432'
+    volumes:
+      - astra-db-data:/var/lib/postgresql/data
+
+volumes:
+  astra-db-data:

@@ -1,0 +1,5 @@
+/**
+ * [BE-B] 예약·중복 예약 방지 (api-spec §7)
+ * <p>요청 ~Request / 응답 ~Response DTO (Entity 를 그대로 응답하지 않음)
+ */
+package kr.astra.reservation.dto;
