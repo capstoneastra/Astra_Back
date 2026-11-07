@@ -813,7 +813,7 @@ public ApiResponse<RequestDetail> detail(@AuthenticationPrincipal CurrentUser us
 
 자세한 내용은 [`docs/team-guide.md`](docs/team-guide.md)를 봅니다.
 
-- **브랜치**: `main` 하나만 씁니다. `main`에서 `feature/#이슈번호-작업내용`으로 따서 작업하고 `main`으로 PR을 올립니다. CI 통과 + 리뷰 1명 승인 후 Squash merge합니다. 발표·중간점검 버전은 태그(`v0.1-midterm` 등)로 표시합니다.
+- **브랜치**: `main` 하나만 씁니다. `main`에서 `feature/#이슈번호-작업내용`으로 따서 작업하고 `main`으로 PR을 올립니다. CI 통과 + 리뷰 1명 승인 후 **Create a merge commit**(일반 병합)으로 병합합니다. Squash merge는 쓰지 않습니다. 병합 후 같은 브랜치를 계속 쓰려면 `git fetch origin && git merge origin/main`. 발표·중간점검 버전은 태그(`v0.1-midterm` 등)로 표시합니다.
 - **커밋**: `타입: 내용` (예: `feat: 장비 목록 검색 API 추가`, `fix:`, `refactor:`, `docs:`, `chore:`)
 - **API 경로**: 컨트롤러에는 [`docs/api-spec.md`](docs/api-spec.md)의 경로를 그대로 씁니다. `/api/v1`은 자동으로 붙습니다.
 - **응답**: `ApiResponse.ok(data)`로 감싸서 반환하고, 실패는 `throw new BusinessException(ErrorCode.XXX)`로 던집니다. 에러 코드를 추가하면 api-spec.md §0-3도 같이 수정합니다.
