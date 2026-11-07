@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 import kr.astra.global.exception.BusinessException;
 import kr.astra.global.exception.DbConstraints;
 import kr.astra.global.exception.ErrorCode;
+import kr.astra.organization.dto.InstitutionInfo;
 import kr.astra.organization.dto.InstitutionOptionResponse;
 import kr.astra.organization.dto.OrganizationAdminResponse;
 import kr.astra.organization.dto.OrganizationSummaryResponse;
@@ -43,6 +44,28 @@ public class OrganizationService {
                 .sorted(BY_KOREAN_NAME)
                 .map(InstitutionOptionResponse::from)
                 .toList();
+    }
+
+    /** 승인된 기관 전체 기본 정보 (이름 가나다순) */
+    public List<InstitutionInfo> listVerifiedInstitutionInfos() {
+        return organizationRepository.findAllByOrgTypeAndVerifiedTrue(OrgType.INSTITUTION).stream()
+                .sorted(BY_KOREAN_NAME)
+                .map(InstitutionInfo::from)
+                .toList();
+    }
+
+    /** 승인된 기관 하나. 없거나 기관이 아니거나 미승인이면 empty */
+    public Optional<InstitutionInfo> findVerifiedInstitution(Long organizationId) {
+        return organizationRepository.findById(organizationId)
+                .filter(org -> org.isInstitution() && org.isVerified())
+                .map(InstitutionInfo::from);
+    }
+
+    /** id → 조직 요약 (이름·지역 등). 없는 id 는 빠짐 */
+    public Map<Long, OrganizationSummaryResponse> findSummaries(Collection<Long> organizationIds) {
+        return organizationRepository.findAllById(organizationIds).stream()
+                .map(OrganizationSummaryResponse::from)
+                .collect(Collectors.toMap(OrganizationSummaryResponse::id, Function.identity()));
     }
 
     /** 승인된 기관이면 true (기관 담당자가 기존 기관을 골라 가입할 때 확인) */
