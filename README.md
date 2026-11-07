@@ -45,6 +45,8 @@
 
 로그인하지 않은 사용자는 회원가입·로그인 외에는 아무것도 볼 수 없습니다. (JWT 로그인 적용, [시연 계정](#시연-계정) 참고)
 
+회원가입은 **이메일 인증(6자리 코드) → 가입 신청(승인 대기) → 플랫폼 관리자 승인** 순서입니다. 기업은 회사명·사업자등록번호, 기관 담당자는 소속 기관(목록 선택 또는 신규 입력)을 함께 입력합니다.
+
 ### 데이터 현황
 - 공개자료로 수집한 **9개 기관, 장비 71대**를 초기 데이터로 넣습니다.
 - 장비 상세 사양은 대부분 공개되어 있지 않아 **시연용 가상 사양(MOCK)** 을 쓰고, 화면에 "시연용 데이터"로 표시합니다. 실제 사양은 기관 담당자가 등록하면 그 값을 우선 사용합니다.
@@ -131,7 +133,7 @@ API 90개의 상세 명세와 우선순위(P0 시연 필수 / P1 / P2)는 [`docs
 
 ## 5. ERD
 
-테이블 27개. 아래 그림은 `docs/design/schema.sql`에서 자동 생성했습니다. 도메인별 상세는 펼쳐서 보세요 (`created_at`, `updated_at` 컬럼은 생략).
+테이블 28개. 아래 그림은 `docs/design/schema.sql`에서 자동 생성했습니다. 도메인별 상세는 펼쳐서 보세요 (`created_at`, `updated_at` 컬럼은 생략).
 
 <!-- ERD:START (python docs/design/tools/schema_to_mermaid.py 출력으로 교체) -->
 
@@ -193,7 +195,7 @@ erDiagram
 ```
 
 <details>
-<summary><b>사용자 · 조직</b> (4개 테이블)</summary>
+<summary><b>사용자 · 조직</b> (5개 테이블)</summary>
 
 ```mermaid
 erDiagram
@@ -230,6 +232,17 @@ erDiagram
         varchar token_hash UK
         timestamptz expires_at
         timestamptz revoked_at
+    }
+    email_verifications {
+        bigint id PK
+        varchar email
+        varchar code_hash
+        timestamptz code_expires_at
+        int attempt_count
+        timestamptz verified_at
+        varchar token_hash UK
+        timestamptz token_expires_at
+        timestamptz used_at
     }
     notifications {
         bigint id PK
@@ -707,12 +720,13 @@ cp .env.example .env        # 필요한 값 채우기 (DB 는 기본값 그대�
 ./gradlew bootRun           # Windows: gradlew.bat bootRun
 ```
 
-- `bootRun`을 하면 `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고, Flyway가 `V1__init.sql`(테이블), `V2__seed.sql`(초기 데이터), `V3__demo_accounts.sql`(시연 계정)을 적용합니다.
+- `bootRun`을 하면 `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고, Flyway가 `V1__init.sql`(테이블), `V2__seed.sql`(초기 데이터), `V3__demo_accounts.sql`(시연 계정), `V4__email_verifications.sql`(가입 이메일 인증)을 적용합니다.
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - 헬스체크: http://localhost:8080/actuator/health
 - IntelliJ: **Project SDK와 Gradle JVM을 모두 21**로 맞춘 뒤 `AstraApplication`을 실행합니다.
 - DB를 처음부터 다시 만들려면: `docker compose down -v` 후 다시 실행합니다.
 - `.env`의 `JWT_SECRET`이 비어 있으면 임시 키로 실행됩니다(재시작하면 로그인이 풀림). 32자 이상 아무 문자열을 넣어 두면 편합니다.
+- `.env`의 `MAIL_HOST`가 비어 있으면 가입 인증 메일을 보내지 않고 **서버 로그에 인증 코드**를 출력합니다 (`[메일 미발송: 로그 출력]`). 실제 발송은 `.env.example`의 SMTP 항목을 채웁니다.
 
 ### 시연 계정
 
@@ -741,7 +755,8 @@ Testcontainers가 테스트 전용 PostgreSQL 16을 띄워 실제 DB로 검증�
 | `DatabaseSchemaTest` | 마이그레이션 적용, 초기 데이터 개수, 조건 규칙의 사양 키 존재, 중복 예약 방지, 의뢰당 확정 예약 1개, 의뢰당 답변 대기 보완 요청 1개 |
 | `ApiConventionTest` | 공통 실패 응답 형식, Swagger·헬스체크 접근 |
 | `SecurityRequireLoginTest` | 비로그인 `401 AUTH_REQUIRED`, 만료 토큰 `401 TOKEN_EXPIRED`, 위조·refresh 토큰 거부, 로그아웃은 로그인 필요 |
-| `AuthFlowTest` | 가입(기업 ACTIVE·기관 PENDING·관리자 불가) → 로그인 → 내 정보 → 재발급(쓴 토큰 폐기) → 로그아웃, 에러 코드, 시연 계정 seed |
+| `AuthFlowTest` | 이메일 인증(코드 틀림·만료·재발송 제한·토큰 1회 사용) → 가입(모두 PENDING·관리자 불가·사업자번호 형식) → 승인 → 로그인 → 내 정보 → 재발급(쓴 토큰 폐기) → 로그아웃, 시연 계정 seed |
+| `AdminUserApprovalTest` | 관리자 회원 목록(필터·정렬·페이지), 승인(조직도 승인)·거절(로그인 시 사유 표시), 상태 오류 409, 권한 403·404 |
 | `AccessGuardTest` | 권한 체크 유틸: ADMIN 마스터, 기관은 소속 기관만, 기업은 본인 데이터만 |
 
 ---
@@ -750,7 +765,7 @@ Testcontainers가 테스트 전용 PostgreSQL 16을 띄워 실제 DB로 검증�
 
 ```
 src/main/java/kr/astra/
-├── global/         공통: 응답 형식, 에러 코드, 예외 처리, 보안·Swagger 설정, BaseTimeEntity   ← BE-A 윤준수 (모두 사용)
+├── global/         공통: 응답 형식, 에러 코드, 예외 처리, 보안·Swagger 설정, 메일 발송, BaseTimeEntity   ← BE-A 윤준수 (모두 사용)
 ├── auth/ user/ organization/ admin/ equipment/ testtype/ dashboard/                   ← BE-A 윤준수
 ├── request/ review/ reservation/ notification/ simulation/                           ← BE-B 허영재
 └── chat/ requirement/ matching/ aipipeline/ llm/                                     ← BE-C 주현욱
@@ -787,6 +802,7 @@ public ApiResponse<RequestDetail> detail(@AuthenticationPrincipal CurrentUser us
 - ✅ 프로젝트 뼈대, 공통 모듈, DB 스키마·초기 데이터, 테스트, CI
 - ⏳ 각 도메인의 Entity·API 구현 (담당자별 진행, [`docs/team-guide.md`](docs/team-guide.md) 주차별 계획 참고)
 - ✅ 회원가입·로그인·JWT 인증·권한 체크(`AccessGuard`)·시연 계정 (BE-A). `/auth/**` 외 API는 로그인 필요
+- ✅ 가입 이메일 인증(6자리 코드) + 기업·기관 모두 관리자 승인 후 이용, 관리자 회원 목록·승인·거절 (BE-A)
 
 ---
 
@@ -811,6 +827,6 @@ public ApiResponse<RequestDetail> detail(@AuthenticationPrincipal CurrentUser us
 |---|---|
 | [`docs/api-spec.md`](docs/api-spec.md) | API 명세 90개, 에러 코드, 매칭 규칙, 의뢰 상태 전이표 |
 | [`docs/team-guide.md`](docs/team-guide.md) | 기술 스택, 협업 규칙, 담당자별 API·주차별 계획 |
-| [`docs/design/schema.sql`](docs/design/schema.sql) | 전체 테이블 설계 (27개) |
+| [`docs/design/schema.sql`](docs/design/schema.sql) | 전체 테이블 설계 (28개) |
 | [`docs/design/erd.dbml`](docs/design/erd.dbml) | ERD (dbdiagram.io에 붙여넣기) |
 | [`docs/design/seed.sql`](docs/design/seed.sql) | 초기 데이터 (`docs/design/tools/json_to_seed.py`로 생성) |

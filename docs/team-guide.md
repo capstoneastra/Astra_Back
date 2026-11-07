@@ -88,7 +88,7 @@ Astra_Back/
     │   │   ├── db/migration/   V1__init.sql (schema.sql), V2__seed.sql (seed.sql)
     │   │   └── prompts/        LLM 프롬프트 텍스트 (BE-C)
     │   └── java/kr/astra/
-    │       ├── global/         config, security, response, exception, entity   ← BE-A (모두 사용)
+    │       ├── global/         config, security, response, exception, entity, mail   ← BE-A (모두 사용)
     │       ├── auth/ user/ organization/ admin/ equipment/ testtype/ dashboard/   ← BE-A
     │       ├── request/ review/ reservation/ notification/ simulation/           ← BE-B
     │       └── chat/ requirement/ matching/ aipipeline/ llm/                     ← BE-C
@@ -223,7 +223,7 @@ chore: Flyway 설정 추가
 
 | | BE-A · 플랫폼 기반 (윤준수) | BE-B · 의뢰 워크플로우 (허영재) | BE-C · AI (주현욱) |
 |---|---|---|---|
-| API 수 | 37개 (P0 7 · P1 14 · P2 16) | 33개 (P0 11 · P1 16 · P2 6) | 20개 (P0 11 · P1 3 · P2 6) |
+| API 수 | 39개 (P0 12 · P1 14 · P2 13) | 33개 (P0 11 · P1 16 · P2 6) | 20개 (P0 11 · P1 3 · P2 6) |
 | 성격 | 조회·CRUD 위주, 1주차 셋업 부담이 큼 | 상태 관리와 트랜잭션이 핵심 | API는 적지만 LLM·매칭 로직이 어려움 |
 
 > 우선순위: **P0** 시연 필수 · **P1** 있으면 좋음 · **P2** 일정이 남으면. 각 API 표는 우선순위 순서입니다.
@@ -257,11 +257,13 @@ chore: Flyway 설정 추가
 - 권한 체크(기관은 소속 장비만 수정)는 공통 유틸 하나로 만들어 BE-B도 같이 쓰게 하세요.
 - API 수는 가장 많지만 대부분 조회와 CRUD라 난이도는 낮은 편입니다.
 
-#### 담당 API (37개)
+#### 담당 API (39개)
 
 | 우선 | Method | URL | 권한 | 설명 |
 |---|---|---|---|---|
-| P0 | POST | `/auth/signup` | 🔓 | 회원가입 (기업 / 기관 담당자) |
+| P0 | POST | `/auth/email-verifications` | 🔓 | 이메일 인증 코드(6자리) 발송 |
+| P0 | POST | `/auth/email-verifications/confirm` | 🔓 | 인증 코드 확인 → 가입용 토큰 |
+| P0 | POST | `/auth/signup` | 🔓 | 회원가입 (기업 / 기관 담당자, 이메일 인증 필수, 모두 PENDING) |
 | P0 | POST | `/auth/login` | 🔓 | 로그인 → access/refresh 토큰 |
 | P0 | GET | `/auth/institutions` | 🔓 | 가입용 기관 목록 (id·이름·지역만) |
 | P0 | GET | `/users/me` | 로그인 | 내 정보 + 소속 조직 |
@@ -289,9 +291,9 @@ chore: Flyway 설정 추가
 | P2 | POST | `/equipment/{id}/confirm` | 🏛(소유기관) | "현재 정보가 맞음" 확인만 → `INSTITUTION_VERIFIED`, `infoUpdatedAt=now` |
 | P2 | GET | `/equipment/{id}/change-logs` | 🏛(소유기관) | 누가 언제 무엇을 바꿨는지 |
 | P2 | POST | `/admin/equipment/import` | 👑 | 초기 데이터(공개자료 수집 JSON) 적재 |
-| P2 | GET | `/admin/users` | 👑 | 회원 목록 |
-| P2 | POST | `/admin/users/{id}/approve` | 👑 | 가입 승인 (PENDING→ACTIVE) |
-| P2 | POST | `/admin/users/{id}/reject` | 👑 | 가입 거절 (→REJECTED) |
+| P0 | GET | `/admin/users` | 👑 | 회원 목록 (승인 대기 확인) |
+| P0 | POST | `/admin/users/{id}/approve` | 👑 | 가입 승인 (PENDING→ACTIVE, 가입하며 만든 조직도 승인) |
+| P0 | POST | `/admin/users/{id}/reject` | 👑 | 가입 거절 (→REJECTED, 사유) |
 | P2 | PATCH | `/admin/users/{id}/status` | 👑 | 정지·해제 |
 | P2 | GET | `/admin/organizations` | 👑 | 조직 목록 |
 | P2 | POST | `/admin/organizations` | 👑 | 기관 직접 등록 |
