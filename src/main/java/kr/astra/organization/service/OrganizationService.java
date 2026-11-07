@@ -1,6 +1,9 @@
 package kr.astra.organization.service;
 
+import java.text.Collator;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import kr.astra.global.exception.BusinessException;
 import kr.astra.global.exception.DbConstraints;
@@ -23,11 +26,16 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class OrganizationService {
 
+    /** DB 정렬(collation)에 따라 한글 순서가 달라지므로 이름순 정렬은 자바에서 한국어 기준으로 */
+    private static final Comparator<Organization> BY_KOREAN_NAME =
+            Comparator.comparing(Organization::getName, Collator.getInstance(Locale.KOREAN));
+
     private final OrganizationRepository organizationRepository;
 
     /** 가입 화면용: 승인된 기관만, 이름순 */
     public List<InstitutionOptionResponse> listVerifiedInstitutions() {
-        return organizationRepository.findAllByOrgTypeAndVerifiedTrueOrderByNameAsc(OrgType.INSTITUTION).stream()
+        return organizationRepository.findAllByOrgTypeAndVerifiedTrue(OrgType.INSTITUTION).stream()
+                .sorted(BY_KOREAN_NAME)
                 .map(InstitutionOptionResponse::from)
                 .toList();
     }

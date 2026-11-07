@@ -6,6 +6,10 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.text.Collator;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -176,6 +180,11 @@ class AuthFlowTest {
         JsonNode first = res.data().get(0);
         assertThat(first.propertyNames()).containsExactlyInAnyOrder("id", "name", "region");
         assertThat(res.data().size()).isGreaterThanOrEqualTo(9);
+        // 가나다순: 경상국립대학교 … 한국재료연구원
+        List<String> names = new ArrayList<>();
+        res.data().forEach(n -> names.add(n.path("name").asString()));
+        assertThat(names).isSortedAccordingTo(Collator.getInstance(Locale.KOREAN));
+        assertThat(names.getFirst()).isEqualTo("경상국립대학교 첨단소재분석지원센터");
     }
 
     // ------------------------------------------------------------ V3 시연 계정

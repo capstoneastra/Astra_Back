@@ -9,5 +9,5 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
 
     boolean existsByOrgTypeAndName(OrgType orgType, String name);
 
-    List<Organization> findAllByOrgTypeAndVerifiedTrueOrderByNameAsc(OrgType orgType);
+    List<Organization> findAllByOrgTypeAndVerifiedTrue(OrgType orgType);
 }
