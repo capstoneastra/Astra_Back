@@ -6,7 +6,10 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import kr.astra.global.security.JwtProvider;
+import kr.astra.user.entity.UserRole;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
@@ -21,11 +24,18 @@ class ApiConventionTest {
     @Value("${local.server.port}")
     int port;
 
+    @Autowired
+    JwtProvider jwtProvider;
+
     private final HttpClient http = HttpClient.newHttpClient();
 
     @Test
     void 없는_주소는_공통_실패_형식으로_404() throws Exception {
-        HttpResponse<String> res = get("/api/v1/no-such-path");
+        // 로그인 필수라 토큰 없이 부르면 401 이 먼저 나오므로, 로그인한 상태로 호출
+        String token = jwtProvider.createAccessToken(1L, UserRole.COMPANY_USER, null);
+        HttpRequest req = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/no-such-path"))
+                .header("Authorization", "Bearer " + token).GET().build();
+        HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
         assertThat(res.statusCode()).isEqualTo(404);
         assertThat(res.body())
                 .contains("\"success\":false")

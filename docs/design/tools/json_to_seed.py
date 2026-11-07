@@ -119,7 +119,9 @@ def main(src: Path, out: Path):
              "BEGIN;", ""]
 
     # 1) 기관
-    insts = {}
+    # 원본에 지역이 없는 기관 (기관명 기준으로 채움. 운영 DB 는 V5__fill_institution_region.sql 로 반영)
+    REGION_OVERRIDES = {"한국생산기술연구원 진주뿌리기술지원센터": "진주"}
+    insts = dict(REGION_OVERRIDES)
     for e in eq:
         insts.setdefault(e["institution"], e["region"])
         if e["region"] and not insts[e["institution"]]:

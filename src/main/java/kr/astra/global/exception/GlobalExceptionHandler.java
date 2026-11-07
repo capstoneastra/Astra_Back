@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import kr.astra.global.response.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -38,8 +39,9 @@ public class GlobalExceptionHandler {
         return respond(ErrorCode.VALIDATION_FAILED, ErrorCode.VALIDATION_FAILED.defaultMessage(), Map.of("fields", fields));
     }
 
+    /** 형식 오류, 필수 파라미터 누락, 타입 불일치, 없는 정렬 필드(?sort=foo) */
     @ExceptionHandler({HttpMessageNotReadableException.class, MissingServletRequestParameterException.class,
-            MethodArgumentTypeMismatchException.class})
+            MethodArgumentTypeMismatchException.class, PropertyReferenceException.class})
     public ResponseEntity<ApiResponse<Void>> handleBadRequest(Exception e) {
         return respond(ErrorCode.VALIDATION_FAILED, ErrorCode.VALIDATION_FAILED.defaultMessage(), null);
     }

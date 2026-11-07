@@ -39,18 +39,22 @@
 | HTTP | code 예시 | 상황 |
 |---|---|---|
 | 400 | `VALIDATION_FAILED` | 입력값 검증 실패 (`details`에 필드별 사유) |
-| 401 | `AUTH_REQUIRED`, `TOKEN_EXPIRED` | 미인증 / 토큰 만료 → refresh 시도 |
-| 403 | `FORBIDDEN`, `ACCOUNT_NOT_ACTIVE` | 역할·소유권 불일치 (다른 기관 의뢰 조회 등) / 승인 대기·거절·정지 계정 로그인 |
+| 400 | `EMAIL_NOT_VERIFIED`, `VERIFICATION_CODE_INVALID`, `VERIFICATION_CODE_EXPIRED` | 회원가입: 이메일 인증 토큰이 없거나 만료·사용됨 / 인증 코드 틀림(`details.remainingAttempts`) / 코드 만료·5회 틀림 → 다시 받기 |
+| 401 | `AUTH_REQUIRED`, `TOKEN_EXPIRED`, `INVALID_CREDENTIALS` | 미인증·잘못된 토큰 / access 토큰 만료 → refresh 시도 / 로그인 시 이메일 또는 비밀번호 불일치 |
+| 403 | `FORBIDDEN`, `ACCOUNT_NOT_ACTIVE` | 역할·소유권 불일치 (다른 기관 의뢰 조회 등) / 승인 대기·거절·정지 계정 로그인 (`details.status`, 거절이면 `details.rejectReason`) |
 | 404 | `NOT_FOUND`, `EQUIPMENT_NOT_FOUND`, `REQUEST_NOT_FOUND` | 없는 주소 / 없는 장비 / 없는 의뢰 |
 | 405 | `METHOD_NOT_ALLOWED` | 지원하지 않는 HTTP 메서드 |
 | 409 | `REQUEST_INVALID_STATUS`, `VERSION_CONFLICT`, `RESERVATION_OVERLAP`, `RESERVATION_ALREADY_CONFIRMED`, `SUPPLEMENT_ALREADY_OPEN` | 상태 전이 불가 / 동시 수정 / 일정 중복 / 이미 확정된 의뢰 / 답변 대기 중인 보완 요청 존재 |
+| 409 | `EMAIL_ALREADY_EXISTS`, `ORGANIZATION_ALREADY_EXISTS` | 회원가입: 이미 가입된 이메일 / 같은 유형에 같은 이름의 조직이 이미 있음 (`organizations` UNIQUE(org_type, name)) |
+| 409 | `USER_INVALID_STATUS` | 관리자: 승인 대기(PENDING)가 아닌 회원을 승인·거절 |
+| 429 | `TOO_MANY_REQUESTS` | 요청이 너무 잦음 (이메일 인증 코드는 60초에 한 번, `details.retryAfter` 초) |
 | 500 | `INTERNAL_ERROR` | 처리되지 않은 서버 오류 (서버 로그 확인) |
 | 502 | `AI_UPSTREAM_ERROR` | LLM 호출 실패 |
 
 ### 0-4. 권한 규칙
 | 역할 | 범위 |
 |---|---|
-| 비로그인 | `/auth/**` (가입·로그인·토큰 재발급·가입용 기관 목록)만 허용. 나머지는 전부 `401 AUTH_REQUIRED`. 프론트는 로그인 페이지 외 모든 라우트에서 로그인 페이지로 이동 |
+| 비로그인 | `/auth/**` (이메일 인증·가입·로그인·토큰 재발급·가입용 기관 목록)만 허용. 나머지는 전부 `401 AUTH_REQUIRED`. 프론트는 로그인 페이지 외 모든 라우트에서 로그인 페이지로 이동 |
 | 🏢 기업 | 장비·시험정보 조회, 본인 상담/시험조건/의뢰/시뮬레이션만 조회·수정 |
 | 🏛 기관 담당자 | 장비·시험정보 조회, **소속 기관 장비 등록·수정**, 소속 기관으로 들어온 의뢰 검토·보완요청·예약 확정 |
 | 👑 플랫폼 관리자 | **전체(마스터)**. 모든 조회·수정, 회원·기관 승인, 초기 데이터 적재. 관리자가 대신 처리한 상태 변경도 `request_status_history.changed_by`에 관리자 id로 남음 |
@@ -65,7 +69,9 @@
 
 | Method | URL | 권한 | 설명 |
 |---|---|---|---|
-| POST | `/auth/signup` | 🔓 | 회원가입 (기업 / 기관 담당자) |
+| POST | `/auth/email-verifications` | 🔓 | 이메일 인증 코드(6자리) 발송 |
+| POST | `/auth/email-verifications/confirm` | 🔓 | 인증 코드 확인 → 가입용 `verificationToken` |
+| POST | `/auth/signup` | 🔓 | 회원가입 (기업 / 기관 담당자, 이메일 인증 필수) |
 | POST | `/auth/login` | 🔓 | 로그인 → access/refresh 토큰 |
 | POST | `/auth/refresh` | 🔓 | 토큰 재발급 |
 | GET | `/auth/institutions` | 🔓 | 가입용 기관 목록 (id·이름·지역만) |
@@ -75,30 +81,76 @@
 
 **가입 흐름**
 
+모든 가입은 **① 이메일 인증 → ② 가입 신청(PENDING) → ③ 플랫폼 관리자 승인(ACTIVE)** 순서입니다. 아이디는 이메일입니다.
+
 | 가입 유형 | 입력 | 가입 직후 상태 | 활성화 |
 |---|---|---|---|
-| 기업 | 회사명, 사업자번호 → 기업 조직 새로 생성 | `ACTIVE` | 바로 이용 |
-| 기관 담당자 (등록된 기관) | 기관 목록에서 선택 `organizationId` | `PENDING` | 관리자가 승인 → `ACTIVE` |
-| 기관 담당자 (미등록 기관) | 기관명·주소·연락처 → 기관 조직 생성 (`is_verified=false`) | `PENDING` | 관리자가 기관 승인 + 회원 승인 |
+| 기업 | 이메일(인증), 비밀번호, 이름, 회사명, 사업자등록번호 → 기업 조직 새로 생성 (`is_verified=false`) | `PENDING` | 관리자가 승인 → 회원 `ACTIVE` + 기업 조직 승인 |
+| 기관 담당자 (등록된 기관) | 이메일(인증), 비밀번호, 이름, 기관 목록에서 선택 `organizationId` | `PENDING` | 관리자가 승인 → `ACTIVE` |
+| 기관 담당자 (미등록 기관) | 이메일(인증), 비밀번호, 이름, 기관명·주소·연락처 → 기관 조직 생성 (`is_verified=false`) | `PENDING` | 관리자가 승인 → 회원 `ACTIVE` + 기관 승인(가입용 기관 목록에 나타남) |
 | 플랫폼 관리자 | 가입 불가 | - | 서버 초기 세팅으로 생성 |
+
+- **이메일 인증**: 6자리 코드 10분 유효, 같은 이메일은 60초에 한 번 발송, 5번 틀리면 다시 받기. 확인되면 `verificationToken`(30분 유효, 가입에 한 번만 사용)을 받아 가입 요청에 같이 보냅니다.
+- **메일 발송**: 서버에 SMTP(`MAIL_HOST` 등)가 설정돼 있으면 실제 메일, 없으면(로컬·시연) 서버 로그에 코드를 출력합니다.
+- **사업자등록번호**: 숫자 10자리인지만 확인하고(하이픈 있어도 됨, `123-45-67890` 형식으로 저장) 진위 확인은 관리자가 승인할 때 합니다.
+- **같은 이름의 조직**: 이미 있으면 `409 ORGANIZATION_ALREADY_EXISTS`. 단, 미승인 조직이고 승인 대기·활성 회원이 없으면(거절된 신청만 남은 경우) 그 조직을 다시 쓰고 사업자번호·주소·연락처를 새 입력으로 바꿉니다.
 
 > 가입 화면에서 기관을 고르려면 로그인 전에 기관 목록이 필요합니다. 그래서 `GET /auth/institutions`를 `/auth` 아래에 두고 이름·지역만 반환합니다.
 
 ```json
-// POST /auth/signup (기업)
+// ① POST /auth/email-verifications { "email": "a@company.com" } → 200
+{ "expiresIn": 600, "resendAvailableIn": 60 }
+// 실패: 409 EMAIL_ALREADY_EXISTS / 429 TOO_MANY_REQUESTS { "retryAfter": 42 }
+
+// ② POST /auth/email-verifications/confirm { "email": "a@company.com", "code": "123456" } → 200
+{ "verificationToken": "oT1Jjp0d3VXWgK9it_iACWk2W9RuoSyVYvcmeCieBtI", "expiresIn": 1800 }
+// 실패: 400 VERIFICATION_CODE_INVALID { "remainingAttempts": 4 } / 400 VERIFICATION_CODE_EXPIRED (만료·5회 틀림 → ① 다시)
+
+// ③ POST /auth/signup (기업)
 { "email": "a@company.com", "password": "****", "name": "홍길동", "phone": "010-0000-0000",
-  "role": "COMPANY_USER",
-  "organization": { "name": "가상 A기업", "businessRegNo": "123-45-67890" } }
+  "role": "COMPANY_USER", "verificationToken": "oT1Jjp0d3...",
+  "organization": { "name": "가상 B기업", "businessRegNo": "123-45-67890" } }
+// → 201 { "userId": 20, "status": "PENDING" }  관리자 승인 전에는 로그인 시 403 ACCOUNT_NOT_ACTIVE
 
 // POST /auth/signup (기관 담당자 - 기존 기관 선택)
 { "email": "kim@ktp.or.kr", "password": "****", "name": "김담당", "phone": "042-000-0000",
-  "role": "INSTITUTION_MANAGER", "organizationId": 3 }
+  "role": "INSTITUTION_MANAGER", "verificationToken": "...", "organizationId": 3 }
 // → 201 { "userId": 21, "status": "PENDING" }  관리자 승인 전에는 로그인 시 403 ACCOUNT_NOT_ACTIVE
 
-// POST /auth/login → 200
+// POST /auth/signup (기관 담당자 - 미등록 기관 신청: organizationId 대신 organization)
+{ "email": "lee@newlab.re.kr", "password": "****", "name": "이담당", "phone": "055-000-0000",
+  "role": "INSTITUTION_MANAGER", "verificationToken": "...",
+  "organization": { "name": "가상 신규 시험기관", "address": "경남 진주시 ...", "phone": "055-000-0000" } }
+// → 201 { "userId": 22, "status": "PENDING" }
+// 실패: 400 EMAIL_NOT_VERIFIED (토큰 없음·만료·이미 사용·다른 이메일) / 409 EMAIL_ALREADY_EXISTS / 409 ORGANIZATION_ALREADY_EXISTS
+//       400 VALIDATION_FAILED (role=ADMIN, 사업자등록번호 형식 등)
+
+// POST /auth/login { "email": "a@company.com", "password": "****" } → 200
 { "accessToken": "eyJ...", "refreshToken": "eyJ...", "expiresIn": 3600,
   "user": { "id": 1, "name": "홍길동", "role": "COMPANY_USER", "organizationId": 10 } }
+// 실패: 401 INVALID_CREDENTIALS
+//       403 ACCOUNT_NOT_ACTIVE { "status": "PENDING" } 또는 { "status": "REJECTED", "rejectReason": "사업자등록번호를 확인할 수 없습니다." }
+
+// POST /auth/refresh { "refreshToken": "eyJ..." } → 200 (로그인과 같은 형식, refresh 토큰도 새로 발급)
+// 한 번 쓴 refresh 토큰은 폐기됨. 만료·폐기된 토큰이면 401 AUTH_REQUIRED → 다시 로그인
+
+// POST /auth/logout { "refreshToken": "eyJ..." } → 200 { "success": true }
+
+// GET /auth/institutions → 200 (승인된 기관만, 가나다순)
+[ { "id": 5, "name": "경상국립대학교 첨단소재분석지원센터", "region": "진주" }, ... ]
+
+// GET /users/me → 200 (organization 은 소속이 없으면 null)
+{ "id": 3, "email": "manager1@astra.demo", "name": "김담당", "phone": "042-000-0001",
+  "role": "INSTITUTION_MANAGER", "status": "ACTIVE",
+  "organization": { "id": 2, "orgType": "INSTITUTION", "name": "대전테크노파크 우주·양자산업센터", "region": "대전", "isVerified": true },
+  "lastLoginAt": "2026-11-07T17:03:04+09:00", "createdAt": "2026-11-07T17:02:51+09:00" }
+
+// PATCH /users/me { "name"?: "김담당", "phone"?: "042-000-0009" } → 200 (GET 과 같은 형식, 보낸 값만 수정)
 ```
+
+> 시연 계정(V3 seed): `admin@astra.demo`, `company@astra.demo`, `manager1@astra.demo`, `manager2@astra.demo`, `pending@astra.demo`(PENDING). 비밀번호는 팀 채팅으로 공유합니다.
+
+> 토큰: access 토큰은 `Authorization: Bearer` 헤더로 보냅니다(유효 1시간). refresh 토큰은 유효 14일이고, 서버는 원문 대신 해시만 `refresh_tokens.token_hash`에 저장합니다.
 
 ---
 
@@ -112,16 +164,16 @@
 | GET | `/equipment/duplicates` | 로그인 | 지역 내 중복 장비 그룹 목록 `?region=대전&testType=VIBRATION` | 12 |
 | POST | `/equipment/compare` | 로그인 | 장비 N개 사양 비교표 `{ "equipmentIds": [1,5,9] }` | 12 |
 | GET | `/search` | 로그인 | 시험항목·자연어 통합 검색 `?q=15kg 시료 진동시험` | 3 |
-| GET | `/test-types` | 로그인 | 시험유형 목록 | 3 |
+| GET | `/test-types` | 로그인 | 시험유형 목록 (15개, 표시 순서, 장비 수 포함) | 3 |
 | GET | `/test-types/{code}` | 로그인 | 시험 정보 안내: 가능 기관·예상비용·기간·이용조건 + 입력할 조건 목록(`conditionRules`) | 4 |
-| GET | `/institutions` | 로그인 | 기관 목록 | |
-| GET | `/institutions/{id}` | 로그인 | 기관 상세 + 보유 장비 수 | |
+| GET | `/institutions` | 로그인 | 기관 목록 (승인된 기관, 가나다순, 장비 수 포함) | |
+| GET | `/institutions/{id}` | 로그인 | 기관 상세 + 보유 장비 수·유형별 수·가능 시험유형 | |
 
 **GET `/equipment` 쿼리**
 
 | 파라미터 | 예시 | 설명 |
 |---|---|---|
-| `q` | `진동` | 장비명·모델·제조사·시험유형 키워드 (pg_trgm) |
+| `q` | `진동` | 장비명·모델·제조사, 또는 시험유형(이름·코드·키워드) 부분 일치. 검색어가 있으면 이름이 비슷한 순서(pg_trgm)가 먼저 |
 | `region` | `대전` | 복수 가능 `region=대전&region=진주` |
 | `institutionId` | `3` | |
 | `equipmentType` | `TEST` | MEASUREMENT / MANUFACTURING / TEST / SOFTWARE / SUPPORT |
@@ -129,6 +181,10 @@
 | `availability` | `AVAILABLE` | |
 | `externalOnly` | `true` | 외부 이용 가능만 |
 | `includeMock` | `true` | 기본 true(시연), 운영 시 false |
+| `page`, `size`, `sort` | `sort=infoUpdatedAt,desc` | 기본 `size=20`, 정렬은 `externalId`(기본, 오름차순)·`infoUpdatedAt`만. 그 외 필드는 `400 VALIDATION_FAILED` |
+
+- 활성 장비(`is_active`)만 나옵니다. 없거나 비활성인 장비 상세는 `404 EQUIPMENT_NOT_FOUND`.
+- `region`: 원본에 지역이 없던 진주뿌리기술지원센터 장비 31대는 V5 마이그레이션으로 `진주`를 채웠습니다.
 
 ```json
 // GET /equipment?testType=VIBRATION → content[] 항목  (seed 실제 데이터 ASTRA-CAND-0048)
@@ -136,15 +192,18 @@
   "institution": { "id": 2, "name": "대전테크노파크 우주·양자산업센터" }, "region": "대전",
   "equipmentType": "TEST", "testTypes": ["VIBRATION"],
   "availability": "UNKNOWN", "utilizationRate": null, "feeText": null,
-  "verificationStatus": "LISTING_CONFIRMED", "isMock": true, "infoUpdatedAt": "2026-11-05T00:00:00+09:00" }
+  "verificationStatus": "LISTING_CONFIRMED", "isMock": true, "infoUpdatedAt": "2026-11-07T11:52:01.241657+09:00" }
+// infoUpdatedAt: 초기 적재 데이터는 DB 를 만든(마이그레이션) 시각. 기관이 수정·확인하면 그 시각으로 바뀜
 
 // GET /equipment/48 → 위 필드 + 아래
+// specs: REAL·MOCK 을 모두 주고, 같은 사양 키면 REAL 이 먼저 (예: 장비 37 의 frequency 는 REAL, MOCK 순)
+//        단일값 value / 범위 min·max / 숫자가 아니면 valueText. 값이 없는 필드는 생략
 { ...,
   "manufacturer": "(주)팜테크", "category": null, "description": null,
   "usage": { "accessScope": "UNKNOWN", "feeText": null, "feeAmount": null, "feeUnit": null,
              "durationText": null, "utilizationRate": null, "availability": "UNKNOWN" },
   "specs": [
-    { "key": "frequency", "label": "주파수 범위 시연값", "min": 10, "max": 3000, "unit": "Hz",
+    { "key": "frequency", "label": "주파수 범위", "min": 10, "max": 3000, "unit": "Hz",
       "sourceType": "MOCK", "usageScope": "DEMO_ONLY", "verificationStatus": "NOT_VERIFIED" },
     { "key": "max_payload", "label": "최대 시료 질량", "value": 40, "unit": "kg", "sourceType": "MOCK", ... },
     { "key": "max_fixture_mass", "label": "고정구 질량 허용 예시", "value": 15, "unit": "kg", "sourceType": "MOCK", ... },
@@ -170,8 +229,30 @@
   "institutions": [
     { "id": 6, "name": "한국신뢰성기술센터", "region": "대전", "equipmentCount": 2,
       "estCostMin": null, "estCostMax": null, "estDurationDays": null, "accessScope": "UNKNOWN" },
+    { "id": 8, "name": "기술지원센터", "region": "원주", "equipmentCount": 1,
+      "estCostMin": null, "estCostMax": null, "estDurationDays": null, "accessScope": "UNKNOWN" },
     { "id": 2, "name": "대전테크노파크 우주·양자산업센터", "region": "대전", "equipmentCount": 1,
       "estCostMin": null, "estCostMax": null, "estDurationDays": null, "accessScope": "UNKNOWN" } ] }
+// institutions: 장비 수 많은 순, 같으면 가나다순. 기관 장비가 여러 대면 estCostMin=최솟값, estCostMax=최댓값,
+//   estDurationDays=가장 짧은 값, accessScope=하나라도 외부 이용 가능이면 EXTERNAL_ALLOWED / 모두 내부 전용이면 INTERNAL_ONLY / 그 외 UNKNOWN
+// 없는 코드면 404 NOT_FOUND
+
+// GET /test-types → 15개, display_order 순. equipmentCount = 그 시험을 할 수 있는 활성 장비 수 (0 이어도 포함)
+[ { "code": "ACOUSTIC_NOISE", "nameKo": "음향·소음 시험", "description": null, "keywords": ["소음", "음향", "dB"], "equipmentCount": 1 },
+  { "code": "BATTERY_TEST", "nameKo": "배터리 시험", "description": null, "keywords": ["배터리", "충방전", "전지"], "equipmentCount": 2 }, ... ]
+
+// GET /institutions → 승인된 기관 전체, 이름 가나다순 (페이지 없음)
+[ { "id": 5, "name": "경상국립대학교 첨단소재분석지원센터", "parentName": null, "region": "진주", "equipmentCount": 5 },
+  { "id": 8, "name": "기술지원센터", "parentName": null, "region": "원주", "equipmentCount": 1 }, ... ]
+
+// GET /institutions/2 → 없거나 미승인 기관이면 404 NOT_FOUND
+{ "id": 2, "name": "대전테크노파크 우주·양자산업센터", "parentName": null, "region": "대전",
+  "address": null, "phone": null, "email": null, "homepageUrl": null,
+  "equipmentCount": 13, "equipmentByType": { "MEASUREMENT": 11, "TEST": 2 },
+  "testTypes": [ { "code": "ELECTRICAL_RF_ANALYSIS", "nameKo": "전기·RF 측정", "equipmentCount": 10 },
+                 { "code": "TEMPERATURE_HUMIDITY", "nameKo": "온습도시험", "equipmentCount": 1 },
+                 { "code": "VIBRATION", "nameKo": "진동시험", "equipmentCount": 1 },
+                 { "code": "X_RAY_INSPECTION", "nameKo": "X선 비파괴검사", "equipmentCount": 1 } ] }
 ```
 
 ---
@@ -518,8 +599,8 @@ UNDER_REVIEW ──reject──▶ REJECTED        (DRAFT~SCHEDULING 에서 기�
 
 | Method | URL | 권한 | 설명 |
 |---|---|---|---|
-| GET | `/admin/users` | 👑 | 회원 목록 `?role=INSTITUTION_MANAGER&status=PENDING` |
-| POST | `/admin/users/{id}/approve` | 👑 | 가입 승인 (PENDING→ACTIVE) |
+| GET | `/admin/users` | 👑 | 회원 목록 `?role=COMPANY_USER&status=PENDING&page=0&size=20&sort=createdAt,desc` |
+| POST | `/admin/users/{id}/approve` | 👑 | 가입 승인 (PENDING→ACTIVE). 가입하며 만든 조직(기업·신규 기관)도 함께 승인 |
 | POST | `/admin/users/{id}/reject` | 👑 | 가입 거절 `{ reason }` (→REJECTED) |
 | PATCH | `/admin/users/{id}/status` | 👑 | 정지·해제 `{ status: "SUSPENDED" }` |
 | GET | `/admin/organizations` | 👑 | 조직 목록 `?orgType=INSTITUTION&verified=false` |
@@ -527,6 +608,21 @@ UNDER_REVIEW ──reject──▶ REJECTED        (DRAFT~SCHEDULING 에서 기�
 | POST | `/admin/organizations/{id}/verify` | 👑 | 신규 기관 신청 승인 |
 | PATCH | `/admin/organizations/{id}` | 👑 | 기관 정보 수정 |
 | POST | `/admin/equipment/{id}/transfer` | 👑 | 장비 소속 기관 변경 (잘못 수집된 경우) |
+
+```json
+// GET /admin/users?status=PENDING → 200 (페이지). 정렬 가능: createdAt(기본, 최신순)·email·name·role·status·approvedAt·lastLoginAt
+{ "content": [
+    { "id": 5, "email": "pending@astra.demo", "name": "이대기", "phone": "055-000-0003",
+      "role": "INSTITUTION_MANAGER", "status": "PENDING",
+      "organization": { "id": 4, "orgType": "INSTITUTION", "name": "한국재료연구원", "businessRegNo": null,
+                        "region": "경남", "address": null, "phone": null, "isVerified": true },
+      "rejectReason": null, "approvedAt": null, "lastLoginAt": null, "createdAt": "2026-11-07T17:02:51+09:00" } ],
+  "page": 0, "size": 20, "totalElements": 1, "totalPages": 1 }
+
+// POST /admin/users/5/approve → 200 (목록 항목과 같은 형식, status=ACTIVE, approvedAt 채워짐)
+// POST /admin/users/5/reject { "reason": "소속을 확인할 수 없습니다." } → 200 (status=REJECTED, rejectReason)
+// 실패: 404 NOT_FOUND (없는 회원) / 409 USER_INVALID_STATUS (PENDING 아님) / 400 VALIDATION_FAILED (사유 없음, 정렬 불가 필드)
+```
 
 ---
 
@@ -539,6 +635,6 @@ UNDER_REVIEW ──reject──▶ REJECTED        (DRAFT~SCHEDULING 에서 기�
 | 일정 제안 / 대안 제안 | 상대방 | `RESERVATION_PROPOSED` |
 | 예약 확정 | 의뢰자 | `RESERVATION_CONFIRMED` |
 | AI 자동추진 완료/대기 | 실행자 | `AI_RUN_DONE` / `AI_RUN_WAITING` |
-| 기관 담당자 가입 신청 | 관리자 전원 | `USER_APPROVAL_REQUESTED` |
+| 회원 가입 신청 (기업·기관 담당자) | 관리자 전원 | `USER_APPROVAL_REQUESTED` |
 | 가입 승인 / 거절 | 신청자 | `USER_APPROVED` / `USER_REJECTED` |
 | 장비 정보 90일 경과 | 소속 기관 담당자 | `EQUIPMENT_UPDATE_REQUIRED` |

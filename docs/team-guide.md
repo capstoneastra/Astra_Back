@@ -15,7 +15,7 @@
 | DB | **PostgreSQL 16** | 설계(`schema.sql`)가 PostgreSQL 기준 (JSONB, pg_trgm) |
 | ORM | Spring Data JPA (+ 검색만 native query) | JSONB 컬럼은 `@JdbcTypeCode(SqlTypes.JSON)` |
 | DB 변경 관리 | **Flyway** | `schema.sql` → `V1__init.sql`, `seed.sql` → `V2__seed.sql` |
-| 인증 | Spring Security 7 + JWT (jjwt 0.13.0), access 토큰만 | 시연용이라 refresh 토큰 생략 가능 |
+| 인증 | Spring Security 7 + JWT (jjwt 0.13.0), access 토큰(1시간) + refresh 토큰(14일) | refresh 토큰은 해시만 `refresh_tokens`에 저장하고, 재발급할 때마다 새 토큰으로 교체 |
 | API 문서 | **springdoc-openapi 3.2.0 (Swagger UI)**, Spring Boot 4 지원 계열 | 코드가 곧 명세. FE는 `/swagger-ui`에서 바로 확인·호출 |
 | AI | **Anthropic Java SDK** `com.anthropic:anthropic-java:3.6.0`, 모델 `claude-opus-5-5` | 공식 SDK. 조건 추출은 structured outputs(JSON 스키마)로 받음 |
 | 테스트 | JUnit 5 + **Testcontainers (PostgreSQL 16)** | 테스트마다 실제 DB를 띄워 마이그레이션·제약조건까지 검증 (Docker 필요) |
@@ -88,7 +88,7 @@ Astra_Back/
     │   │   ├── db/migration/   V1__init.sql (schema.sql), V2__seed.sql (seed.sql)
     │   │   └── prompts/        LLM 프롬프트 텍스트 (BE-C)
     │   └── java/kr/astra/
-    │       ├── global/         config, security, response, exception, entity   ← BE-A (모두 사용)
+    │       ├── global/         config, security, response, exception, entity, mail   ← BE-A (모두 사용)
     │       ├── auth/ user/ organization/ admin/ equipment/ testtype/ dashboard/   ← BE-A
     │       ├── request/ review/ reservation/ notification/ simulation/           ← BE-B
     │       └── chat/ requirement/ matching/ aipipeline/ llm/                     ← BE-C
@@ -202,6 +202,7 @@ chore: Flyway 설정 추가
 |---|---|---|
 | BE-A | 전원 | `CurrentUser` (`@AuthenticationPrincipal`로 로그인 사용자 id·role·orgId) |
 | BE-A | BE-C | `EquipmentQueryService.findCandidates(testTypeCode, region)`, `getSpecs(equipmentId)` |
+| BE-A | BE-C | `TestTypeService.getConditionRules(testTypeCode)` (조건 규칙. `TestConditionRule` 엔티티는 BE-A가 `testtype` 패키지에 읽기 전용으로 만들어 둠, 따로 만들지 말 것) |
 | BE-C | BE-B | `RequirementService.getSnapshot(requirementId)` (의뢰서에 조건 반영) |
 | BE-B | BE-C | `TestRequestService.createDraft(userId, equipmentId, requirementId, content, aiGenerated)` (AI 초안·자동 추진) |
 | BE-B | 전원 | `NotificationService.notify(userId, type, title, linkPath)` |
@@ -223,7 +224,7 @@ chore: Flyway 설정 추가
 
 | | BE-A · 플랫폼 기반 (윤준수) | BE-B · 의뢰 워크플로우 (허영재) | BE-C · AI (주현욱) |
 |---|---|---|---|
-| API 수 | 37개 (P0 7 · P1 14 · P2 16) | 33개 (P0 11 · P1 16 · P2 6) | 20개 (P0 11 · P1 3 · P2 6) |
+| API 수 | 39개 (P0 12 · P1 14 · P2 13) | 33개 (P0 11 · P1 16 · P2 6) | 20개 (P0 11 · P1 3 · P2 6) |
 | 성격 | 조회·CRUD 위주, 1주차 셋업 부담이 큼 | 상태 관리와 트랜잭션이 핵심 | API는 적지만 LLM·매칭 로직이 어려움 |
 
 > 우선순위: **P0** 시연 필수 · **P1** 있으면 좋음 · **P2** 일정이 남으면. 각 API 표는 우선순위 순서입니다.
@@ -257,11 +258,13 @@ chore: Flyway 설정 추가
 - 권한 체크(기관은 소속 장비만 수정)는 공통 유틸 하나로 만들어 BE-B도 같이 쓰게 하세요.
 - API 수는 가장 많지만 대부분 조회와 CRUD라 난이도는 낮은 편입니다.
 
-#### 담당 API (37개)
+#### 담당 API (39개)
 
 | 우선 | Method | URL | 권한 | 설명 |
 |---|---|---|---|---|
-| P0 | POST | `/auth/signup` | 🔓 | 회원가입 (기업 / 기관 담당자) |
+| P0 | POST | `/auth/email-verifications` | 🔓 | 이메일 인증 코드(6자리) 발송 |
+| P0 | POST | `/auth/email-verifications/confirm` | 🔓 | 인증 코드 확인 → 가입용 토큰 |
+| P0 | POST | `/auth/signup` | 🔓 | 회원가입 (기업 / 기관 담당자, 이메일 인증 필수, 모두 PENDING) |
 | P0 | POST | `/auth/login` | 🔓 | 로그인 → access/refresh 토큰 |
 | P0 | GET | `/auth/institutions` | 🔓 | 가입용 기관 목록 (id·이름·지역만) |
 | P0 | GET | `/users/me` | 로그인 | 내 정보 + 소속 조직 |
@@ -289,9 +292,9 @@ chore: Flyway 설정 추가
 | P2 | POST | `/equipment/{id}/confirm` | 🏛(소유기관) | "현재 정보가 맞음" 확인만 → `INSTITUTION_VERIFIED`, `infoUpdatedAt=now` |
 | P2 | GET | `/equipment/{id}/change-logs` | 🏛(소유기관) | 누가 언제 무엇을 바꿨는지 |
 | P2 | POST | `/admin/equipment/import` | 👑 | 초기 데이터(공개자료 수집 JSON) 적재 |
-| P2 | GET | `/admin/users` | 👑 | 회원 목록 |
-| P2 | POST | `/admin/users/{id}/approve` | 👑 | 가입 승인 (PENDING→ACTIVE) |
-| P2 | POST | `/admin/users/{id}/reject` | 👑 | 가입 거절 (→REJECTED) |
+| P0 | GET | `/admin/users` | 👑 | 회원 목록 (승인 대기 확인) |
+| P0 | POST | `/admin/users/{id}/approve` | 👑 | 가입 승인 (PENDING→ACTIVE, 가입하며 만든 조직도 승인) |
+| P0 | POST | `/admin/users/{id}/reject` | 👑 | 가입 거절 (→REJECTED, 사유) |
 | P2 | PATCH | `/admin/users/{id}/status` | 👑 | 정지·해제 |
 | P2 | GET | `/admin/organizations` | 👑 | 조직 목록 |
 | P2 | POST | `/admin/organizations` | 👑 | 기관 직접 등록 |
@@ -434,5 +437,5 @@ AI 상담부터 장비 추천, 의뢰서 초안까지 맡습니다. API 수는 �
 - [ ] 팀 채팅 방: `#일반`, `#api`, `#스탠드업`
 - [ ] Anthropic API 키 발급, 사용 한도 설정, 공유
 - [ ] 조건 규칙(`test_condition_rules`) 초안 검토·확정 (예: 진동시험 = `sample_mass` ≤ `max_payload`, `fixture_mass` ≤ `max_fixture_mass`, `frequency` 범위 포함) — 매칭의 기준
-- [ ] 시연 계정 정하기: 기업 1, 기관 담당자 1~2, 관리자 1
+- [x] 시연 계정 정하기: 기업 1, 기관 담당자 2, 관리자 1, 승인 대기 1 (V3 seed, `README` 시연 계정 표)
 - [ ] 시연 시나리오 1개 확정 (예: 위성 전장품 15kg, 20~2000Hz 진동시험)
