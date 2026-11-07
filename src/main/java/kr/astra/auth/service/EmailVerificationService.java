@@ -46,13 +46,15 @@ public class EmailVerificationService {
     private final Duration tokenValidity;
     private final Duration resendInterval;
     private final int maxAttempts;
+    private final boolean logCode;
 
     public EmailVerificationService(EmailVerificationRepository repository, UserService userService,
                                     EmailSender emailSender,
                                     @Value("${astra.email-verification.code-validity-seconds}") long codeValiditySeconds,
                                     @Value("${astra.email-verification.token-validity-seconds}") long tokenValiditySeconds,
                                     @Value("${astra.email-verification.resend-interval-seconds}") long resendIntervalSeconds,
-                                    @Value("${astra.email-verification.max-attempts}") int maxAttempts) {
+                                    @Value("${astra.email-verification.max-attempts}") int maxAttempts,
+                                    @Value("${astra.mail.log-code:false}") boolean logCode) {
         this.repository = repository;
         this.userService = userService;
         this.emailSender = emailSender;
@@ -60,6 +62,7 @@ public class EmailVerificationService {
         this.tokenValidity = Duration.ofSeconds(tokenValiditySeconds);
         this.resendInterval = Duration.ofSeconds(resendIntervalSeconds);
         this.maxAttempts = maxAttempts;
+        this.logCode = logCode;
     }
 
     /**
@@ -91,6 +94,10 @@ public class EmailVerificationService {
         } catch (MailException e) {
             log.error("인증 메일 발송 실패: {}", email, e);
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "인증 메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.", null);
+        }
+        if (logCode) {
+            // 시연 대비용 (MAIL_LOG_CODE=true 일 때만). 평소에는 끄기: 로그를 보는 사람이 남의 이메일로 인증할 수 있음
+            log.warn("[인증 코드] to={} code={}", email, code);
         }
         return new EmailVerificationSentResponse(codeValidity.toSeconds(), resendInterval.toSeconds());
     }

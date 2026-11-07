@@ -70,6 +70,8 @@ astra:
   mail:
     # 보내는 사람 주소. 실제 발송은 MAIL_HOST 등 SMTP 설정이 있을 때만 (.env.example 참고)
     from: ${MAIL_FROM:no-reply@astra.local}
+    # true 면 메일을 보낸 뒤 서버 로그에도 인증 코드를 남김 (일회용 메일이 늦을 때 대비, 시연 날에만 켜기)
+    log-code: ${MAIL_LOG_CODE:false}
   email-verification:
     code-validity-seconds: 600     # 인증 코드 10분
     token-validity-seconds: 1800   # 인증 후 가입까지 30분
