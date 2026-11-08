@@ -49,7 +49,8 @@ java {
 | 차트 | Recharts (시뮬레이션 그래프, 대시보드) |
 
 ### 실행 환경
-- 로컬: Docker Desktop을 켜고 `./gradlew bootRun` (또는 IntelliJ 실행) → `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고 Flyway가 V1·V2를 적용. Swagger: http://localhost:8080/swagger-ui.html
+- 로컬: Docker Desktop을 켜고 `./gradlew bootRun` (또는 IntelliJ 실행) → `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고 Flyway가 아직 적용 안 된 마이그레이션(V1~)을 순서대로 적용. Swagger: http://localhost:8080/swagger-ui.html
+- FE 연동: 브라우저에서 백엔드를 부르려면 서버 `.env`의 `CORS_ALLOWED_ORIGINS`에 FE 주소가 있어야 함 (기본 `http://localhost:5173`, 쉼표로 여러 개, `http://localhost:*` 패턴 가능). 콘솔에 "blocked by CORS policy"가 뜨면 이 값을 확인
 - 테스트: `./gradlew test` (Testcontainers가 테스트용 DB를 따로 띄움)
 - 시연: 클라우드 VM 1대에 PostgreSQL + `SPRING_PROFILES_ACTIVE=prod`로 jar 실행. 안 되면 노트북 로컬 시연
 - **API 키(`ANTHROPIC_API_KEY`), DB 비밀번호는 절대 커밋 금지.** `.env.example`만 올리고 실제 값은 팀 채팅으로 공유
@@ -208,6 +209,8 @@ chore: Flyway 설정 추가
 | BE-C | BE-B | `RequirementService.getSnapshot(requirementId)` (의뢰서에 조건 반영) |
 | BE-B | BE-C | `TestRequestService.createDraft(userId, equipmentId, requirementId, content, aiGenerated)` (AI 초안·자동 추진) |
 | BE-B | 전원 | `NotificationService.notify(userId, type, title, linkPath)` |
+| BE-B | BE-A | `RequestDashboardQuery` (대시보드 의뢰·예약 집계: 상태별 수, 처리할 의뢰, 검토 대기, 다가오는 예약). 인터페이스는 BE-A가 `request/service`에 만들어 둠, 구현하면 대시보드에 자동 반영 |
+| BE-C | BE-A | `ChatSessionQuery.findRecent(userId, limit)` (대시보드 최근 상담), `ConditionExtractor.extract(text)` (`/search` 문장 → 시험유형·조건). 인터페이스는 BE-A가 만들어 둠, 구현 전에는 빈 목록·키워드 해석으로 동작 |
 
 > 인터페이스와 DTO만 먼저 만들어 두고 구현은 각자 채웁니다. 그래야 서로 기다리지 않습니다.
 

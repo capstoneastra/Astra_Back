@@ -34,6 +34,7 @@
 | 조건·사양 키 | JSON 필드명(camelCase)과 별개로, 조건·사양을 가리키는 **키 값**은 단위 없는 snake_case. 단위는 `unit`에 따로 (`{ "key": "sample_mass", "value": 15, "unit": "kg" }`). 시험유형별 키 목록은 `GET /test-types/{code}`의 `conditionRules` |
 | MOCK 표시 | 시연용 데이터가 섞인 응답엔 `isMock`/`sourceType` 필드를 반드시 포함, 프론트는 "DEMO" 배지 표시 |
 | 동시성 | 상태 변경 요청은 `version` 필드를 보내고, 불일치 시 `409 CONFLICT` |
+| CORS | 브라우저에서 부를 수 있는 프론트 주소는 서버 환경변수 `CORS_ALLOWED_ORIGINS` (쉼표로 여러 개, `http://localhost:*` 패턴 가능, 기본 `http://localhost:5173`). 쿠키는 쓰지 않으므로 `withCredentials` 불필요. 401·403 응답에도 CORS 헤더가 붙음 |
 
 ### 0-3. HTTP 상태 / 에러 코드
 | HTTP | code 예시 | 상황 |
@@ -212,12 +213,18 @@
               "file": "astra_deps_additional_10.json", "page": null },
   "simulation": { "capability": "CALCULATED_DEMO", "presetIds": ["SIM-0048"] } }
 
-// GET /search?q=시료 15kg 20~2000Hz 진동 → 기능 3
-{ "interpreted": { "testTypes": ["VIBRATION"],
+// GET /search?q=위성 전장품 15kg, 20~2000Hz 진동시험 → 기능 3 (시연 문장, 실제 응답)
+{ "interpreted": { "interpreter": "KEYWORD", "testTypes": ["VIBRATION"],
                    "conditions": [ { "key": "sample_mass", "value": 15, "unit": "kg" },
-                                   { "key": "frequency", "min": 20, "max": 2000, "unit": "Hz" } ] },
+                                   { "key": "frequency", "min": 20, "max": 2000, "unit": "Hz" } ],
+                   "regions": [] },
   "testTypes": [ { "code": "VIBRATION", "nameKo": "진동시험" } ],
-  "equipment": [ /* 목록 항목 형식 */ ] }
+  "equipment": [ /* 목록 항목 형식: ASTRA-CAND-0044, 0045, 0047, 0048 */ ] }
+// 해석: BE-C 추출기(ConditionExtractor)가 있으면 그것(interpreter=AI), 없으면 키워드·숫자 해석(KEYWORD)
+//   KEYWORD: 시험유형 이름·키워드(test_types.keywords)로 시험유형, "20~2000Hz" → 단위 같은 RANGE 조건, "15kg" → 단위 같은 NUMBER 조건
+//   regions: 문장에 있던 지역(예: "대전 진동시험" → ["대전"]) → 장비 검색 지역 필터
+// equipment: 해석된 시험유형의 장비 (최대 20대). 시험유형을 못 찾으면 문장으로 장비명·모델 검색
+// 실패: 400 VALIDATION_FAILED (q 없음·빈 값)
 
 // GET /test-types/VIBRATION → 기능 4 (+ 조건 입력폼·AI 누락 분석·매칭이 쓰는 conditionRules)
 { "code": "VIBRATION", "nameKo": "진동시험", "description": null,
@@ -607,17 +614,48 @@
 | PATCH | `/notifications/{id}/read` | 로그인 | 읽음 |
 | POST | `/notifications/read-all` | 로그인 | 모두 읽음 |
 
+> 의뢰·예약 칸은 BE-B 의 `RequestDashboardQuery`, 최근 상담은 BE-C 의 `ChatSessionQuery` 구현이 있을 때만 채워집니다.
+> 구현 전에는 0·빈 목록이고 `dataAvailable` 이 `false` → 프론트는 그 칸을 "준비 중"으로 표시합니다. 목록 칸은 최대 5개.
+
 ```json
 // GET /dashboard/summary (COMPANY_USER)
 { "role": "COMPANY_USER",
-  "requestCounts": { "DRAFT": 1, "SUBMITTED": 0, "UNDER_REVIEW": 2, "SUPPLEMENT_REQUESTED": 1, "SCHEDULING": 0, "CONFIRMED": 3 },
-  "actionRequired": [ { "requestId": 15, "requestNo": "REQ-20261105-0001", "type": "SUPPLEMENT_REQUESTED", "dueDate": "2026-11-12" } ],
+  "requestCounts": { "DRAFT": 1, "SUBMITTED": 0, "UNDER_REVIEW": 2, "SUPPLEMENT_REQUESTED": 1, "RESUBMITTED": 0,
+                     "SCHEDULING": 0, "CONFIRMED": 3, "COMPLETED": 0, "REJECTED": 0, "CANCELED": 0 },  // 10개 상태 항상 포함
+  "actionRequired": [ { "requestId": 15, "requestNo": "REQ-20261105-0001", "title": "위성 전장품 진동시험",
+                        "status": "SUPPLEMENT_REQUESTED", "dueDate": "2026-11-12", "submittedAt": "..." } ],
   "recentChats": [ { "id": 5, "title": "위성 부품 진동시험", "updatedAt": "..." } ],
-  "equipmentStats": { "total": 71, "byRegion": { "대전": 32, "진주": 36 } } }
-// INSTITUTION_MANAGER: requestCounts(우리 기관 접수함), pendingReview[], upcomingReservations[],
-//                      equipmentNeedsUpdate (확인 필요·90일 경과 장비 수)
-// ADMIN: pendingUsers, pendingInstitutions, 전체 의뢰 현황, 기관별 장비 검증률
+  "equipmentStats": { "total": 71, "byRegion": { "경남": 1, "광주": 1, "대전": 32, "원주": 1, "진주": 36 } },
+  "dataAvailable": { "requests": true, "chats": true } }
+
+// GET /dashboard/summary (INSTITUTION_MANAGER, manager1 — seed 실제 값)
+{ "role": "INSTITUTION_MANAGER",
+  "institution": { "id": 2, "name": "대전테크노파크 우주·양자산업센터" },
+  "requestCounts": { ... 10개 상태 ... },                       // 우리 기관 접수함
+  "pendingReview": [ /* actionRequired 와 같은 형식 (SUBMITTED·RESUBMITTED) */ ],
+  "upcomingReservations": [ { "reservationId": 4, "requestId": 15, "requestNo": "REQ-20261105-0001", "equipmentId": 48,
+                              "equipmentName": "진동시험기", "startAt": "2026-11-20T09:00:00+09:00", "endAt": "..." } ],
+  "equipmentNeedsUpdate": { "total": 13, "notConfirmed": 13, "outdated": 0 },  // 기관 확인 전 / 마지막 갱신 90일 경과
+  "equipmentStats": { "total": 71, "byRegion": { ... } },
+  "dataAvailable": { "requests": false } }
+
+// GET /dashboard/summary (ADMIN)
+{ "role": "ADMIN", "pendingUsers": 1, "pendingInstitutions": 0,
+  "requestCounts": { ... 10개 상태 (전체) ... },
+  "institutionVerification": [ /* equipment-stats 의 institutions 와 같은 형식 */ ],
+  "equipmentStats": { "total": 71, "byRegion": { ... } },
+  "dataAvailable": { "requests": false } }
+
+// GET /dashboard/equipment-stats → 활성 장비 기준 (seed 실제 값)
+{ "total": 71,
+  "byRegion": { "경남": 1, "광주": 1, "대전": 32, "원주": 1, "진주": 36 },               // 가나다순
+  "byEquipmentType": { "MEASUREMENT": .., "MANUFACTURING": .., "TEST": .., "SOFTWARE": .., "SUPPORT": .. },
+  "byTestType": [ { "code": "ACOUSTIC_NOISE", "nameKo": "음향·소음 시험", "equipmentCount": 1 }, ... ],  // 15개, 표시 순서
+  "institutions": [ { "id": 1, "name": "한국생산기술연구원 진주뿌리기술지원센터", "region": "진주",
+                      "equipmentCount": 31, "verifiedCount": 0, "verificationRate": 0.0 }, ... ] }  // 장비 수 많은 순
 ```
+
+- 장비 정보 갱신 알림: 매일 오전 9시(한국 시간) 마지막 갱신이 막 90일을 넘긴 장비의 소속 기관 활성 담당자에게 `EQUIPMENT_UPDATE_REQUIRED` (장비마다 한 번, BE-B 알림 구현이 있을 때만). `astra.equipment.update-reminder.enabled=false` 로 끔
 
 ---
 

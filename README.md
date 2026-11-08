@@ -726,6 +726,7 @@ cp .env.example .env        # 필요한 값 채우기 (DB 는 기본값 그대�
 - IntelliJ: **Project SDK와 Gradle JVM을 모두 21**로 맞춘 뒤 `AstraApplication`을 실행합니다.
 - DB를 처음부터 다시 만들려면: `docker compose down -v` 후 다시 실행합니다.
 - `.env`의 `JWT_SECRET`이 비어 있으면 임시 키로 실행됩니다(재시작하면 로그인이 풀림). 32자 이상 아무 문자열을 넣어 두면 편합니다.
+- **FE 연동(CORS)**: 브라우저에서 이 서버를 부를 수 있는 프론트 주소는 `.env`의 `CORS_ALLOWED_ORIGINS`입니다. 비워 두면 `http://localhost:5173`(Vite 기본)이고, 다른 주소는 쉼표로 추가합니다(`http://localhost:*` 패턴 가능). 브라우저 콘솔에 "blocked by CORS policy"가 뜨면 이 값을 확인하세요.
 - `.env`의 `MAIL_HOST`가 비어 있으면 가입 인증 메일을 보내지 않고 **서버 로그에 인증 코드**를 출력합니다 (`[메일 미발송: 로그 출력]`). 실제 발송은 `.env.example`의 SMTP 항목을 채웁니다. 시연 날에는 `MAIL_LOG_CODE=true`로 실행하면 메일을 보낸 뒤 서버 로그에도 `[인증 코드]`가 남아, 일회용 메일이 늦을 때 쓸 수 있습니다 (평소에는 끄기).
 
 ### 시연 계정
@@ -759,6 +760,8 @@ Testcontainers가 테스트 전용 PostgreSQL 16을 띄워 실제 DB로 검증�
 | `EquipmentApiTest` | 장비 목록·검색(q·지역·기관·유형·외부이용·MOCK 필터, 정렬)·상세(REAL 먼저), 유사·중복·비교, 시험유형 목록·시험 정보 안내, 기관 목록·상세, BE-C용 `EquipmentQueryService` (seed 실제 값으로 검증) |
 | `AdminUserApprovalTest` | 관리자 회원 목록(필터·정렬·페이지), 승인(조직도 승인)·거절(로그인 시 사유 표시)·정지/해제(재발급 차단), 상태 오류 409, 권한 403·404 |
 | `EquipmentManageTest` | 기관 장비 등록(ASTRA-EQ 외부 id)·수정·REAL 사양 교체(MOCK 유지)·시험유형·확인·비활성화·변경 이력, 갱신 필요 표시, 소유 기관 403, 관리자 소속 변경 |
+| `CorsTest`, `CorsConfigTest` | 프론트 주소 사전 요청(preflight) 허용·다른 주소 거절, 401 응답에도 CORS 헤더, `CORS_ALLOWED_ORIGINS` 해석(쉼표·패턴·빈 값이면 기본 주소) |
+| `DashboardSearchApiTest` | 대시보드 장비 통계·역할별 요약(의뢰·상담 미연결 시 0·빈 목록), 시연 문장 자연어 검색 해석(진동시험·15kg·20~2000Hz)·지역 필터 |
 | `AdminOrganizationTest` | 관리자 조직 목록(필터·정렬)·기관 직접 등록·승인·수정, 이름 중복 409, 권한 403 |
 | `AccessGuardTest` | 권한 체크 유틸: ADMIN 마스터, 기관은 소속 기관만, 기업은 본인 데이터만 |
 
@@ -808,7 +811,9 @@ public ApiResponse<RequestDetail> detail(@AuthenticationPrincipal CurrentUser us
 - ✅ 가입 이메일 인증(6자리 코드) + 기업·기관 모두 관리자 승인 후 이용, 관리자 회원 목록·승인·거절 (BE-A)
 - ✅ 장비 목록·검색·상세, 시험유형 목록·시험 정보 안내, 기관 목록·상세, 매칭용 `EquipmentQueryService` 구현 (BE-A)
 - ✅ 기관 장비 관리(등록·수정·사양·시험유형·비활성화·확인·변경 이력), 유사·중복 장비·비교, 관리자 회원 정지·조직 관리·장비 이관 (BE-A)
-- ⏳ 대시보드, 자연어 검색 (BE-A)
+- ✅ 대시보드(장비 통계·역할별 요약), 자연어 검색(키워드 해석, BE-C 추출기 연결 준비), 90일 경과 장비 알림 (BE-A). 의뢰·상담 칸은 BE-B·BE-C 구현 후 자동 반영
+- ✅ CORS 설정 (프론트 주소는 `CORS_ALLOWED_ORIGINS`, 기본 `http://localhost:5173`) (BE-A)
+- ⏳ Dockerfile·운영용 compose, 시연 시나리오 점검, 배포(VM), 통합 테스트 (BE-A, 6주차)
 
 ---
 

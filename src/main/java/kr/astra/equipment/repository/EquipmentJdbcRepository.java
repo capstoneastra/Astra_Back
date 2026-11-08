@@ -239,6 +239,77 @@ public class EquipmentJdbcRepository {
         });
     }
 
+    // ------------------------------------------------------------ 대시보드 집계 (활성 장비만)
+
+    /** 지역 → 장비 수 (지역 없는 장비 제외) */
+    public Map<String, Long> countByRegion() {
+        Map<String, Long> result = new LinkedHashMap<>();
+        jdbc.query("SELECT region, count(*) n FROM equipment WHERE is_active AND region IS NOT NULL GROUP BY region",
+                rs -> {
+                    result.put(rs.getString("region"), rs.getLong("n"));
+                });
+        return result;
+    }
+
+    /** 장비 유형 → 장비 수 (enum 순서) */
+    public Map<EquipmentType, Long> countByEquipmentTypeAll() {
+        Map<EquipmentType, Long> result = new EnumMap<>(EquipmentType.class);
+        jdbc.query("SELECT equipment_type, count(*) n FROM equipment WHERE is_active GROUP BY equipment_type", rs -> {
+            result.put(EquipmentType.valueOf(rs.getString("equipment_type")), rs.getLong("n"));
+        });
+        return result;
+    }
+
+    /** 기관별 장비 수와 기관 확인(INSTITUTION_VERIFIED) 장비 수 */
+    public record InstitutionVerificationRow(Long institutionId, long equipmentCount, long verifiedCount) {
+    }
+
+    public List<InstitutionVerificationRow> countVerificationByInstitution() {
+        return jdbc.query("""
+                SELECT institution_id, count(*) n,
+                       count(*) FILTER (WHERE verification_status = 'INSTITUTION_VERIFIED') verified
+                FROM equipment WHERE is_active GROUP BY institution_id""", (rs, i) ->
+                new InstitutionVerificationRow(rs.getLong("institution_id"), rs.getLong("n"), rs.getLong("verified")));
+    }
+
+    /** 한 기관의 갱신 필요 장비 수: 기관 확인 전 / 마지막 갱신 90일 경과 / 둘 중 하나라도 (전체) */
+    public record NeedsUpdateRow(long total, long notConfirmed, long outdated) {
+    }
+
+    public NeedsUpdateRow countNeedsUpdate(Long institutionId, int days) {
+        return jdbc.queryForObject("""
+                SELECT count(*) FILTER (WHERE verification_status <> 'INSTITUTION_VERIFIED'
+                                           OR info_updated_at < now() - make_interval(days => :days)) total,
+                       count(*) FILTER (WHERE verification_status <> 'INSTITUTION_VERIFIED') not_confirmed,
+                       count(*) FILTER (WHERE info_updated_at < now() - make_interval(days => :days)) outdated
+                FROM equipment WHERE is_active AND institution_id = :id""", Map.of("id", institutionId, "days", days),
+                (rs, i) -> new NeedsUpdateRow(rs.getLong("total"), rs.getLong("not_confirmed"), rs.getLong("outdated")));
+    }
+
+    /** 장비에 쓰인 지역 이름 (자연어 검색에서 "대전" 같은 지역을 알아볼 때) */
+    public List<String> findRegions() {
+        return jdbc.queryForList("SELECT DISTINCT region FROM equipment WHERE is_active AND region IS NOT NULL "
+                + "ORDER BY region", Map.of(), String.class);
+    }
+
+    /** 갱신 알림 대상 장비 한 대 */
+    public record ReminderRow(Long equipmentId, Long institutionId, String name) {
+    }
+
+    /**
+     * 마지막 갱신이 정확히 days 일을 넘긴 지 하루가 안 된 활성 장비 (하루 한 번 돌면 장비마다 한 번만 걸림).
+     * 예: days=90 이면 info_updated_at 이 91일 전 ~ 90일 전 사이.
+     */
+    public List<ReminderRow> findJustOutdated(int days) {
+        return jdbc.query("""
+                SELECT id, institution_id, name FROM equipment
+                WHERE is_active
+                  AND info_updated_at <  now() - make_interval(days => :days)
+                  AND info_updated_at >= now() - make_interval(days => :days + 1)
+                ORDER BY external_id""", Map.of("days", days),
+                (rs, i) -> new ReminderRow(rs.getLong("id"), rs.getLong("institution_id"), rs.getString("name")));
+    }
+
     /**
      * 장비의 시뮬레이션 프리셋 id (GET /equipment/{id} 의 simulation.presetIds).
      * simulation_presets 는 BE-B 테이블이라 읽기만 합니다. BE-B 서비스가 생기면 그쪽 호출로 바꿀 것.

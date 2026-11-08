@@ -8,9 +8,74 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 | 1 | 인증·권한 (회원가입·로그인·JWT·AccessGuard·시연 계정) | ✅ | PR #5 (2026-11-07) |
 | 1-2 | 가입 이메일 인증 + 기업·기관 모두 관리자 승인 | ✅ | PR #5 |
 | 2 | 장비 목록·검색·상세, 시험유형, 기관, EquipmentQueryService | ✅ | PR #5 |
-| 3 | 기관 장비 관리, 유사·중복·비교, 관리자 정지·조직 관리·장비 이관 | ✅ | 아직 (`feature/be-a`) |
-| 4 | 대시보드, 자연어 검색 | ⏳ | |
+| 3 | 기관 장비 관리, 유사·중복·비교, 관리자 정지·조직 관리·장비 이관 | ✅ | PR #6 (2026-11-08) |
+| 4 | 대시보드, 자연어 검색, 90일 경과 장비 알림 | ✅ | push 완료 (PR 대기) |
+| 5 | 연동·배포 준비: CORS ✅ / Dockerfile·운영 compose·운영 설정·시연 점검표 ⏳ | 🚧 | CORS push 완료 (PR 대기) |
 | 6주차 | 배포, 통합 테스트, 시연 시나리오 확인 | ⏳ | |
+
+---
+
+## 2026-11-08 · 5번 덩어리 ①: CORS 설정
+
+**왜**: FE 는 별도 저장소(React + Vite, 기본 `http://localhost:5173`)라 브라우저에서 백엔드(`localhost:8080`)를 부르면 CORS 설정이 없을 때 모든 요청이 막힘. 지금은 FE 가 MSW 목업이라 드러나지 않았음
+
+**한 것**
+- `global/config/CorsConfig`: 허용 주소 = 환경변수 `CORS_ALLOWED_ORIGINS` (쉼표로 여러 개, `http://localhost:*` 패턴 가능, 끝의 `/` 무시)
+  - 기본 `http://localhost:5173`. `.env.example` 을 그대로 복사해 **빈 값**이 들어가도 기본 주소를 씀 (`${이름:기본값}` 은 빈 문자열일 때 기본값을 안 쓰기 때문)
+  - 메서드 GET·POST·PUT·PATCH·DELETE·OPTIONS, 헤더 전부 허용, `Content-Disposition` 노출, credentials 안 씀(쿠키 없음, Bearer 헤더), 사전 요청 캐시 1시간
+- `SecurityConfig`: `http.cors(...)` → Spring Security 앞단에서 처리되어 **401·403 응답에도 CORS 헤더** (FE 가 401 을 읽고 로그인 화면으로 보낼 수 있음)
+- `application.yml` `astra.cors.allowed-origins`, `.env.example` 에 `CORS_ALLOWED_ORIGINS` 설명
+
+**검토한 것 (계획서 대조)**
+- api-spec §0: 인증은 `Authorization: Bearer` 헤더 → 헤더 허용 필요, 쿠키 없음 → credentials 불필요
+- team-guide: BE-C 상담은 SSE(`POST` + `Accept: text/event-stream`) → 같은 CORS 규칙으로 사전 요청 통과 확인
+- BE-C 브랜치(`feature/be-c`)에 CORS 설정이 없음 → 중복·충돌 없음, `global/`·설정 파일도 안 건드림
+- team-guide 실행 환경의 오래된 문구("Flyway가 V1·V2를 적용")를 고침
+
+**확인**
+- 테스트 93개 통과 (새로 6개: `CorsTest` 4, `CorsConfigTest` 2)
+- 서버를 띄워 브라우저와 같은 요청으로 확인: 허용 주소 사전 요청 200(PATCH·Authorization 허용), 다른 주소 403(허용 헤더 없음), 토큰 없는 요청 401 + CORS 헤더, SSE 경로 사전 요청 200
+
+**문서**: api-spec §0-2 규칙 표에 CORS 줄, team-guide 실행 환경, README 실행하기·테스트 표·현재 상태
+
+**팀 공지**: FE — 실제 서버 연결 시 기본 허용 주소는 `http://localhost:5173`, 다른 주소면 알려 주거나 서버 `.env` 의 `CORS_ALLOWED_ORIGINS` 에 추가. 쿠키 없이 `Authorization` 헤더만 쓰면 됨
+
+**커밋**: `a6c92da` `7cb3c2e` (push 완료)
+
+**바뀐 파일**: `src/main/java/kr/astra/global/config/CorsConfig.java`(새), `src/main/java/kr/astra/global/config/SecurityConfig.java`, `src/main/resources/application.yml`, `.env.example`, `src/test/java/kr/astra/CorsTest.java`(새), `src/test/java/kr/astra/global/config/CorsConfigTest.java`(새), `README.md`, `docs/api-spec.md`, `docs/team-guide.md`, 이 파일
+
+---
+
+## 2026-11-08 · 4번 덩어리: 대시보드 · 자연어 검색 · 90일 알림
+
+**API**
+- `GET /dashboard/equipment-stats`: 전체 수, 지역별(가나다순)·장비 유형별·시험유형별(15개) 장비 수, 기관별 보유·기관 확인 비율
+- `GET /dashboard/summary` (역할별)
+  - 기업: 의뢰 상태별 수(10개 항상), 처리할 의뢰, 최근 상담, 장비 요약
+  - 기관 담당자: 소속 기관, 접수함 상태별 수, 검토 대기, 다가오는 예약, 갱신 필요 장비 수(기관 확인 전·90일 경과)
+  - 관리자: 승인 대기 회원·기관 수, 전체 의뢰 상태별 수, 기관별 장비 확인 비율
+  - 의뢰·예약(BE-B)·상담(BE-C) 칸은 구현 전까지 0·빈 목록 + `dataAvailable=false`
+- `GET /search?q=`: 문장 → 시험유형·조건·지역 해석 + 장비 (최대 20대). `interpreter` = KEYWORD(지금) / AI(BE-C 추출기 연결 시)
+
+**다른 담당자용 인터페이스 (계약 우선, 구현은 그쪽에서)**
+- BE-B: `request/service/RequestDashboardQuery` (+ `RequestActionItem`, `UpcomingReservationItem`)
+- BE-C: `chat/service/ChatSessionQuery` (+ `ChatSessionSummary`), `requirement/service/ConditionExtractor` (+ `ExtractedQuery`)
+- BE-A 는 `ObjectProvider` 로 받아서 구현이 없으면 빈 값·키워드 해석으로 동작. 구현 클래스에 `@Service` 만 붙이면 자동 연결
+
+**그 외**
+- `EquipmentUpdateReminder`: 매일 오전 9시(한국 시간) 마지막 갱신이 막 90일을 넘긴 장비의 담당자에게 `EQUIPMENT_UPDATE_REQUIRED` (장비마다 한 번, BE-B 알림 구현이 있을 때만). `astra.equipment.update-reminder.enabled` 로 끔
+- `global/config/SchedulingConfig` (`@EnableScheduling`) 추가
+- 키워드 해석: 시험유형 이름·키워드 → 시험유형, "20~2000Hz" → 단위 같은 RANGE 조건, "15kg" → 단위 같은 NUMBER 조건, 결과는 조건 규칙 표시 순서
+
+**확인**
+- 테스트 87개 통과 (새로 9개: `DashboardSearchApiTest` 7, `EquipmentUpdateReminderTest` 2), 두 번 실행
+- 서버를 띄워 HTTP 확인: 장비 통계(71대, 진주 36), 역할별 요약 3종, 시연 문장 검색이 api-spec 예시와 같음 (sample_mass 15kg, frequency 20~2000Hz, 진동시험 장비 4대)
+
+**남은 것·주의**
+- BE-B·BE-C 가 인터페이스를 구현해야 의뢰·상담 칸과 AI 해석이 채워짐 (구현 후 응답 형식은 api-spec §10 그대로)
+- 키워드 해석은 단위가 정확히 같을 때만 조건으로 잡음 (kHz→Hz 같은 환산 없음). AI 추출기로 바꾸면 해결
+
+**바뀐 파일 (커밋 전)**: `chat/`, `request/`, `requirement/` 인터페이스·DTO, `dashboard/`, `equipment/`(검색·알림·집계), `global/config/SchedulingConfig`, `user`·`organization` 서비스(집계 메서드), `application.yml`, 테스트 2개, `README.md`, `docs/api-spec.md`, `docs/team-guide.md`, 이 파일
 
 ---
 
