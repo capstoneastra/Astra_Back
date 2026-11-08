@@ -12,7 +12,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import jakarta.annotation.PreDestroy;
 
+// @Component // 기존: Claude 클라이언트를 항상 등록. 임시 Gemini 전환을 위해 아래 조건부 등록으로 대체.
 @Component
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "astra.ai.provider", havingValue = "anthropic", matchIfMissing = true)
 public class AnthropicLlmClient implements LlmClient {
     private final AnthropicClient client;
     private final String model;

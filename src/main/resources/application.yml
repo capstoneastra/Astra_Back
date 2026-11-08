@@ -86,3 +86,7 @@ astra:
   ai:
     anthropic-api-key: ${ANTHROPIC_API_KEY:}
     model: claude-opus-5-5
+    # 임시 Gemini 테스트. Claude 복귀: .env에서 AI_PROVIDER=anthropic (위 Claude 설정은 보존).
+    provider: ${AI_PROVIDER:gemini}
+    gemini-api-key: ${GEMINI_API_KEY:}
+    gemini-model: ${GEMINI_MODEL:gemini-3.8-flash}
