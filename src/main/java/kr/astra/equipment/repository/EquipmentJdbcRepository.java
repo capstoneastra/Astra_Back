@@ -177,6 +177,68 @@ public class EquipmentJdbcRepository {
         });
     }
 
+    /** 유사 장비 후보 한 줄: 같은 분류 여부와 이름 유사도(0~1) */
+    public record SimilarRow(Long id, boolean sameCategory, double nameSimilarity) {
+    }
+
+    /**
+     * 유사 장비 (GET /equipment/{id}/similar): 자기 자신 제외, 활성 장비 중
+     * 시험유형이 하나라도 같거나, 같은 유형·분류이거나, 이름 유사도 0.3 이상.
+     * 시험유형이 겹치는 장비 → 이름 유사도 높은 순 → 외부 id 순으로 최대 limit 개.
+     */
+    public List<SimilarRow> findSimilar(Long equipmentId, int limit) {
+        return jdbc.query("""
+                SELECT e.id,
+                       (e.category IS NOT NULL AND e.category = me.category
+                        AND e.equipment_type = me.equipment_type) AS same_category,
+                       similarity(e.name, me.name) AS sim,
+                       EXISTS (SELECT 1 FROM equipment_test_types a JOIN equipment_test_types b
+                                 ON a.test_type_code = b.test_type_code
+                               WHERE a.equipment_id = e.id AND b.equipment_id = me.id) AS shared_test_type
+                FROM equipment e, equipment me
+                WHERE me.id = :id AND e.is_active AND e.id <> me.id
+                  AND (EXISTS (SELECT 1 FROM equipment_test_types a JOIN equipment_test_types b
+                                 ON a.test_type_code = b.test_type_code
+                               WHERE a.equipment_id = e.id AND b.equipment_id = me.id)
+                       OR (e.category IS NOT NULL AND e.category = me.category
+                           AND e.equipment_type = me.equipment_type)
+                       OR similarity(e.name, me.name) >= 0.3)
+                ORDER BY shared_test_type DESC, sim DESC, e.external_id
+                LIMIT :limit""", Map.of("id", equipmentId, "limit", limit),
+                (rs, i) -> new SimilarRow(rs.getLong("id"), rs.getBoolean("same_category"), rs.getDouble("sim")));
+    }
+
+    /** 중복 장비 그룹 한 개: 같은 지역·같은 시험유형의 활성 장비 id (외부 id 순) */
+    public record DuplicateRow(String region, String testTypeCode, List<Long> equipmentIds) {
+    }
+
+    /**
+     * 중복 장비 그룹 (GET /equipment/duplicates): 같은 지역 + 같은 시험유형에 활성 장비가 2대 이상인 묶음.
+     * 지역이 없는 장비는 제외. region·testType 이 null 이면 전체.
+     */
+    public List<DuplicateRow> findDuplicateGroups(String region, String testTypeCode) {
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        StringBuilder filter = new StringBuilder();
+        if (StringUtils.hasText(region)) {
+            params.addValue("region", region.trim());
+            filter.append(" AND e.region = :region");
+        }
+        if (StringUtils.hasText(testTypeCode)) {
+            params.addValue("testType", testTypeCode.trim());
+            filter.append(" AND ett.test_type_code = :testType");
+        }
+        return jdbc.query("""
+                SELECT e.region, ett.test_type_code, array_agg(e.id ORDER BY e.external_id) AS ids
+                FROM equipment e JOIN equipment_test_types ett ON ett.equipment_id = e.id
+                WHERE e.is_active AND e.region IS NOT NULL""" + filter + """
+
+                GROUP BY e.region, ett.test_type_code
+                HAVING count(*) >= 2""", params, (rs, i) -> {
+            Long[] ids = (Long[]) rs.getArray("ids").getArray();
+            return new DuplicateRow(rs.getString("region"), rs.getString("test_type_code"), List.of(ids));
+        });
+    }
+
     /**
      * 장비의 시뮬레이션 프리셋 id (GET /equipment/{id} 의 simulation.presetIds).
      * simulation_presets 는 BE-B 테이블이라 읽기만 합니다. BE-B 서비스가 생기면 그쪽 호출로 바꿀 것.

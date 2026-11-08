@@ -105,6 +105,11 @@ public class User extends BaseTimeEntity {
         this.rejectReason = reason;
     }
 
+    /** 관리자 정지(SUSPENDED) 또는 해제(ACTIVE) */
+    public void changeStatus(UserStatus status) {
+        this.status = status;
+    }
+
     public void recordLogin(OffsetDateTime now) {
         this.lastLoginAt = now;
     }

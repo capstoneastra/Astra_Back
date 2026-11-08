@@ -121,10 +121,12 @@ equipment/
 | 브랜치 | 용도 |
 |---|---|
 | `main` | 유일한 기본 브랜치이자 **최종 결과물**. 항상 빌드·테스트가 통과하는 상태를 유지 |
-| `feature/#12-equipment-search` | 이슈 하나당 브랜치 하나, `main`에서 따서 `main`으로 PR (`fix/`, `refactor/` 도 같은 형식). 병합 후 삭제 |
+| `feature/#12-equipment-search` | 이슈(또는 담당 기능 묶음) 하나당 브랜치 하나, `main`에서 따서 `main`으로 PR (`fix/`, `refactor/` 도 같은 형식). 병합 후 같은 브랜치를 계속 써도 됨 (아래 "병합 후" 참고) |
 
 - `main`에 직접 push 금지. 모든 변경은 PR로만 병합
-- PR은 **GitHub Actions 빌드(테스트 포함) 통과 + 리뷰 1명 승인 후 Squash merge**. 빌드가 빨간색이면 병합하지 않습니다
+- PR은 **GitHub Actions 빌드(테스트 포함) 통과 + 리뷰 1명 승인 후 "Create a merge commit"(일반 병합)**. 빌드가 빨간색이면 병합하지 않습니다
+  - 병합 버튼 옆 화살표에서 **Create a merge commit**을 고릅니다. Squash merge·Rebase merge는 쓰지 않습니다 (Squash 를 쓰면 병합 후 내 브랜치 기록이 main 과 어긋나 다음 PR 에 이미 병합된 커밋이 다시 보임)
+  - **병합 후**: 같은 브랜치에서 계속 작업하려면 `git fetch origin && git merge origin/main` 한 번이면 됩니다. 다 끝난 브랜치는 삭제
 - PR은 작게: 하루 이상 쌓지 말고 API 1~2개 단위로 올리기. 매일 아침 `git pull`로 `main` 최신 내용을 받고, PR 전에 `main`을 내 브랜치에 merge해서 충돌을 내가 먼저 해결
 - **발표·중간점검 버전은 태그로 표시**: 시연 시나리오를 처음부터 끝까지 확인한 커밋에 `v0.1-midterm`, `v1.0-final`처럼 태그를 붙입니다. 시연은 태그 버전으로 합니다
 

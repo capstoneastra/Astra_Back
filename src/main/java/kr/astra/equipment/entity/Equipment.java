@@ -130,4 +130,81 @@ public class Equipment extends BaseTimeEntity {
 
     @Column(name = "updated_by")
     private Long updatedBy;
+
+    /** 기관 신규 등록에 붙이는 외부 id 형식 (id 4자리): ASTRA-EQ-0072 */
+    public static String institutionExternalId(Long id) {
+        return "ASTRA-EQ-%04d".formatted(id);
+    }
+
+    /**
+     * 기관 담당자의 신규 등록. 기관이 직접 입력한 정보라 바로 INSTITUTION_VERIFIED, 시연용 데이터 아님.
+     * 외부 id 는 저장 후 id 가 정해지면 {@link #assignExternalId()} 로 붙입니다 (그전에는 임시값).
+     */
+    public static Equipment registerByInstitution(Long institutionId, Long userId, String temporaryExternalId,
+                                                  EquipmentFields fields, OffsetDateTime now) {
+        Equipment e = new Equipment();
+        e.externalId = temporaryExternalId;
+        e.institutionId = institutionId;
+        e.availability = Availability.UNKNOWN;
+        e.sourceType = EquipmentSourceType.INSTITUTION;
+        e.verificationStatus = VerificationStatus.INSTITUTION_VERIFIED;
+        e.specVerificationStatus = SpecVerificationStatus.NOT_VERIFIED;
+        e.aerospaceRelevance = "NOT_ASSESSED";
+        e.mock = false;
+        e.active = true;
+        e.createdBy = userId;
+        e.updatedBy = userId;
+        e.infoUpdatedAt = now;
+        e.apply(fields);
+        return e;
+    }
+
+    public void assignExternalId() {
+        this.externalId = institutionExternalId(id);
+    }
+
+    /** 값이 null 이 아닌 필드만 바꿉니다 (PATCH) */
+    public void apply(EquipmentFields f) {
+        if (f.name() != null) name = f.name();
+        if (f.model() != null) model = f.model();
+        if (f.manufacturer() != null) manufacturer = f.manufacturer();
+        if (f.category() != null) category = f.category();
+        if (f.equipmentType() != null) equipmentType = f.equipmentType();
+        if (f.region() != null) region = f.region();
+        if (f.description() != null) description = f.description();
+        if (f.imageUrl() != null) imageUrl = f.imageUrl();
+        if (f.accessScope() != null) accessScope = f.accessScope();
+        if (f.feeText() != null) feeText = f.feeText();
+        if (f.feeAmount() != null) feeAmount = f.feeAmount();
+        if (f.feeUnit() != null) feeUnit = f.feeUnit();
+        if (f.durationText() != null) durationText = f.durationText();
+        if (f.utilizationRate() != null) utilizationRate = f.utilizationRate();
+        if (f.availability() != null) availability = f.availability();
+    }
+
+    /** 기관 담당자가 수정·확인함: INSTITUTION_VERIFIED + 정보 갱신일 */
+    public void markVerifiedByInstitution(Long userId, OffsetDateTime now) {
+        this.verificationStatus = VerificationStatus.INSTITUTION_VERIFIED;
+        this.infoUpdatedAt = now;
+        this.updatedBy = userId;
+    }
+
+    public void touch(Long userId) {
+        this.updatedBy = userId;
+    }
+
+    public void changeSpecVerificationStatus(SpecVerificationStatus status) {
+        this.specVerificationStatus = status;
+    }
+
+    public void deactivate(Long userId) {
+        this.active = false;
+        this.updatedBy = userId;
+    }
+
+    /** 관리자: 잘못 수집된 장비의 소속 기관 변경 */
+    public void transferTo(Long institutionId, Long adminId) {
+        this.institutionId = institutionId;
+        this.updatedBy = adminId;
+    }
 }

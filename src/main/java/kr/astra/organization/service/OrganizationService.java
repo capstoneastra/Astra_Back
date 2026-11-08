@@ -7,11 +7,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import kr.astra.global.exception.BusinessException;
 import kr.astra.global.exception.DbConstraints;
 import kr.astra.global.exception.ErrorCode;
+import kr.astra.organization.dto.AdminOrganizationResponse;
 import kr.astra.organization.dto.InstitutionInfo;
 import kr.astra.organization.dto.InstitutionOptionResponse;
 import kr.astra.organization.dto.OrganizationAdminResponse;
@@ -21,6 +23,8 @@ import kr.astra.organization.entity.Organization;
 import kr.astra.organization.repository.OrganizationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -118,6 +122,72 @@ public class OrganizationService {
         Organization org = organizationRepository.findById(organizationId).orElseThrow();
         org.reapplyInstitution(address, phone);
         return org.getId();
+    }
+
+    /** 관리자 조직 목록에서 정렬할 수 있는 필드 */
+    private static final Set<String> ADMIN_SORTABLE = Set.of("createdAt", "id");
+
+    /** 관리자 조직 목록 (api-spec §12). 정렬은 createdAt·id 만, 그 외 400 */
+    public Page<AdminOrganizationResponse> searchForAdmin(OrgType orgType, Boolean verified, Pageable pageable) {
+        pageable.getSort().forEach(order -> {
+            if (!ADMIN_SORTABLE.contains(order.getProperty())) {
+                String reason = "정렬할 수 없는 필드입니다. 가능: createdAt, id";
+                throw new BusinessException(ErrorCode.VALIDATION_FAILED, reason,
+                        Map.of("fields", List.of(Map.of("field", "sort", "reason", reason))));
+            }
+        });
+        return organizationRepository.search(orgType, verified, pageable).map(AdminOrganizationResponse::from);
+    }
+
+    public AdminOrganizationResponse getForAdmin(Long organizationId) {
+        return AdminOrganizationResponse.from(findOrganization(organizationId));
+    }
+
+    /** 관리자 기관 직접 등록 (바로 승인). 같은 이름의 기관이 있으면 409 ORGANIZATION_ALREADY_EXISTS */
+    @Transactional
+    public AdminOrganizationResponse createInstitutionByAdmin(String name, String parentName, String region,
+                                                              String address, String phone, String email,
+                                                              String homepageUrl) {
+        Long id = save(Organization.newInstitutionByAdmin(name.trim(), parentName, region, address, phone, email,
+                homepageUrl));
+        return getForAdmin(id);
+    }
+
+    /** 관리자 승인 (이미 승인됐으면 그대로). 없으면 404 NOT_FOUND */
+    @Transactional
+    public AdminOrganizationResponse verifyByAdmin(Long organizationId) {
+        Organization org = findOrganization(organizationId);
+        org.verify();
+        organizationRepository.flush();
+        return AdminOrganizationResponse.from(org);
+    }
+
+    /** 관리자 수정: 보낸 값만. 이름을 바꿔 같은 유형에 같은 이름이 생기면 409 ORGANIZATION_ALREADY_EXISTS */
+    @Transactional
+    public AdminOrganizationResponse updateByAdmin(Long organizationId, String name, String parentName,
+                                                   String businessRegNo, String region, String address, String phone,
+                                                   String email, String homepageUrl) {
+        Organization org = findOrganization(organizationId);
+        String newName = name == null ? null : name.trim();
+        if (newName != null && !newName.equals(org.getName())
+                && organizationRepository.existsByOrgTypeAndName(org.getOrgType(), newName)) {
+            throw new BusinessException(ErrorCode.ORGANIZATION_ALREADY_EXISTS);
+        }
+        org.update(newName, parentName, businessRegNo, region, address, phone, email, homepageUrl);
+        try {
+            organizationRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            if (DbConstraints.UNIQUE_VIOLATION.equals(DbConstraints.sqlState(e))) {
+                throw new BusinessException(ErrorCode.ORGANIZATION_ALREADY_EXISTS);
+            }
+            throw e;
+        }
+        return AdminOrganizationResponse.from(org);
+    }
+
+    private Organization findOrganization(Long organizationId) {
+        return organizationRepository.findById(organizationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "조직을 찾을 수 없습니다.", null));
     }
 
     /** 기업 회원가입: 기업 조직 생성. 같은 이름의 기업이 있으면 409 ORGANIZATION_ALREADY_EXISTS */

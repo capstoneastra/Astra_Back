@@ -91,6 +91,35 @@ public class Organization extends BaseTimeEntity {
         this.phone = phone;
     }
 
+    /** 관리자가 기관을 직접 등록 (바로 승인됨) */
+    public static Organization newInstitutionByAdmin(String name, String parentName, String region, String address,
+                                                     String phone, String email, String homepageUrl) {
+        Organization org = new Organization();
+        org.orgType = OrgType.INSTITUTION;
+        org.verified = true;
+        org.name = name;
+        org.parentName = parentName;
+        org.region = region;
+        org.address = address;
+        org.phone = phone;
+        org.email = email;
+        org.homepageUrl = homepageUrl;
+        return org;
+    }
+
+    /** 관리자 수정: null 이 아닌 값만 바꿈 */
+    public void update(String name, String parentName, String businessRegNo, String region, String address,
+                       String phone, String email, String homepageUrl) {
+        if (name != null) this.name = name;
+        if (parentName != null) this.parentName = parentName;
+        if (businessRegNo != null) this.businessRegNo = businessRegNo;
+        if (region != null) this.region = region;
+        if (address != null) this.address = address;
+        if (phone != null) this.phone = phone;
+        if (email != null) this.email = email;
+        if (homepageUrl != null) this.homepageUrl = homepageUrl;
+    }
+
     /** 관리자 승인 */
     public void verify() {
         this.verified = true;
