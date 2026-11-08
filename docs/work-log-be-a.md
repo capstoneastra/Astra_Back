@@ -10,8 +10,36 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 | 2 | 장비 목록·검색·상세, 시험유형, 기관, EquipmentQueryService | ✅ | PR #5 |
 | 3 | 기관 장비 관리, 유사·중복·비교, 관리자 정지·조직 관리·장비 이관 | ✅ | PR #6 (2026-11-08) |
 | 4 | 대시보드, 자연어 검색, 90일 경과 장비 알림 | ✅ | push 완료 (PR 대기) |
-| 5 | 연동·배포 준비: CORS ✅ / Dockerfile·운영 compose·운영 설정·시연 점검표 ⏳ | 🚧 | CORS push 완료 (PR 대기) |
+| 5 | 연동·배포 준비: CORS · Dockerfile · 운영 compose · 운영 설정 · 시연 점검표 (배포는 아직) | ✅ | CORS push 완료, 나머지 커밋 전 |
 | 6주차 | 배포, 통합 테스트, 시연 시나리오 확인 | ⏳ | |
+
+---
+
+## 2026-11-08 · 5번 덩어리 ②~⑤: Dockerfile · 운영용 compose · 운영 설정 · 시연 점검표
+
+**한 것**
+- `Dockerfile`: 1단계 JDK 21 로 `bootJar` (테스트는 CI 담당이라 `-x test`, Testcontainers 는 이미지 빌드 안에서 못 돌림) → 2단계 JRE 21, root 아닌 `astra` 사용자, `MaxRAMPercentage=75`, 한국 시간대. `.dockerignore` 로 `.env`·`.git`·`build` 등 제외
+- `compose.prod.yaml`: PostgreSQL 16(포트 외부 비공개, `pg_isready` 헬스체크) + 앱(`prod` 프로필, `curl /actuator/health` 헬스체크, `restart: unless-stopped`)
+  - `DB_PASSWORD`·`JWT_SECRET` 없으면 실행 거부 (`${…:?}`), `.env` 의 `DB_URL`(localhost)은 컨테이너에서 `db:5432` 로 덮어씀, 나머지(`MAIL_*`, `CORS_*`, `ANTHROPIC_API_KEY`)는 `env_file`
+- `application-prod.yml`: graceful 종료, 헬스체크 세부 숨김, Swagger `SWAGGER_ENABLED`(기본 true), 인증 코드 로그 끔
+- `docs/demo-scenario.md`: 시연 18단계 (담당·계정·API·기대 결과·확인), 준비물, 문제 대처표. BE-A 단계 ✅, BE-B·BE-C 단계 ⏳ (각자 채움)
+- `DemoScenarioTest`: 시연 BE-A 단계를 한 테스트에서 순서대로 (가입 → 승인 → 검색 → 상세·비교 → 기관 장비 확인 → 대시보드)
+
+**검토하며 고친 것**
+- `.env.example` 빈 값 함정: `SWAGGER_ENABLED=` 처럼 비우면 true/false 로 못 읽어 서버가 안 뜸 → 예시에 `APP_PORT=8080`, `SWAGGER_ENABLED=true` 를 직접 적음
+- `MAIL_FROM=` 빈 값 + `MAIL_HOST` 설정 시 보낸 사람이 빈 값이 되어 발송 실패 → `MailConfig` 가 `MAIL_USERNAME` 을 보낸 사람으로 사용
+- `DemoScenarioTest` 장비 수를 71 고정이 아니라 DB 활성 장비 수로 비교 (같은 DB 를 쓰는 `EquipmentManageTest` 가 장비를 등록하면 순서에 따라 깨질 수 있었음)
+- team-guide 실행 환경의 "VM 에서 jar 실행" → compose 방식으로 통일 (6주차 계획 "VM + docker compose" 와 맞춤), 저장소 구조에 `Dockerfile`·`compose.prod.yaml` 추가
+- README "API 명세 90개" → 92개 (이메일 인증 2개 추가분, 39 + 33 + 20 = 92 확인)
+
+**확인**
+- 테스트 94개 통과 (새로 `DemoScenarioTest` 1개), 처음부터 두 번 실행
+- 이미지 빌드 확인 (682MB, `astra` 사용자, curl 있음)
+- `compose.prod.yaml` 로컬 실행 (별도 프로젝트 `astra-prodcheck`, 확인 후 삭제): `JWT_SECRET` 없으면 실행 거부, prod 프로필, Flyway V1~V5, 헬스체크 UP(세부 숨김), 가입용 기관 9곳, 로그인 필요 API 401, Swagger 200, CORS, DB 포트 외부 비공개
+
+**남은 것**: 실제 VM 배포 (VM 정해지면), BE-B·BE-C 단계 점검표 채우기·통합 테스트
+
+**바뀐 파일 (커밋 전)**: `Dockerfile`(새), `.dockerignore`(새), `compose.prod.yaml`(새), `src/main/resources/application-prod.yml`, `src/main/java/kr/astra/global/mail/MailConfig.java`, `.env.example`, `src/test/java/kr/astra/DemoScenarioTest.java`(새), `docs/demo-scenario.md`(새), `README.md`, `docs/team-guide.md`, 이 파일
 
 ---
 

@@ -52,7 +52,7 @@ java {
 - 로컬: Docker Desktop을 켜고 `./gradlew bootRun` (또는 IntelliJ 실행) → `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고 Flyway가 아직 적용 안 된 마이그레이션(V1~)을 순서대로 적용. Swagger: http://localhost:8080/swagger-ui.html
 - FE 연동: 브라우저에서 백엔드를 부르려면 서버 `.env`의 `CORS_ALLOWED_ORIGINS`에 FE 주소가 있어야 함 (기본 `http://localhost:5173`, 쉼표로 여러 개, `http://localhost:*` 패턴 가능). 콘솔에 "blocked by CORS policy"가 뜨면 이 값을 확인
 - 테스트: `./gradlew test` (Testcontainers가 테스트용 DB를 따로 띄움)
-- 시연: 클라우드 VM 1대에 PostgreSQL + `SPRING_PROFILES_ACTIVE=prod`로 jar 실행. 안 되면 노트북 로컬 시연
+- 시연: 클라우드 VM 1대에서 `docker compose -f compose.prod.yaml up -d --build` (PostgreSQL + 앱, `SPRING_PROFILES_ACTIVE=prod`). 필수 `.env`: `DB_PASSWORD`, `JWT_SECRET`(32자 이상). 안 되면 노트북 로컬 시연. 시연 순서·점검은 `docs/demo-scenario.md`
 - **API 키(`ANTHROPIC_API_KEY`), DB 비밀번호는 절대 커밋 금지.** `.env.example`만 올리고 실제 값은 팀 채팅으로 공유
 
 ### AI 사용 기준 (BE-C 참고)
@@ -78,6 +78,8 @@ GitHub Organization `capstoneastra` 아래 **백엔드·프론트엔드 저장�
 Astra_Back/
 ├── build.gradle            의존성·버전 (ext { } 에서 버전 관리)
 ├── compose.yaml            로컬 PostgreSQL 16 (bootRun 시 자동 실행)
+├── compose.prod.yaml       시연 서버용 PostgreSQL + 앱 (Dockerfile 로 이미지 빌드)
+├── Dockerfile              앱 이미지 (JDK 21 로 빌드 → JRE 21 로 실행)
 ├── .env.example            환경변수 예시 (.env 는 커밋 금지)
 ├── docs/
 │   ├── api-spec.md, team-guide.md
