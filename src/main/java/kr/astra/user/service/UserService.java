@@ -1,10 +1,12 @@
 package kr.astra.user.service;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import kr.astra.global.exception.BusinessException;
 import kr.astra.global.exception.DbConstraints;
 import kr.astra.global.exception.ErrorCode;
@@ -97,10 +99,27 @@ public class UserService {
         return UserAccount.from(user);
     }
 
+    /** id → 이름 (변경 이력 등에 수정한 사람 이름을 붙일 때). 없는 id 는 빠짐 */
+    public Map<Long, String> findNames(Collection<Long> userIds) {
+        return userRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(User::getId, User::getName));
+    }
+
     /** 그 조직에 승인 대기·활성 회원이 있으면 true (거절된 신청만 있으면 false) */
     public boolean hasPendingOrActiveMember(Long organizationId) {
         return userRepository.existsByOrganizationIdAndStatusIn(organizationId,
                 List.of(UserStatus.PENDING, UserStatus.ACTIVE));
+    }
+
+    /** 상태별 회원 수 (관리자 대시보드: 승인 대기 회원 수) */
+    public long countByStatus(UserStatus status) {
+        return userRepository.countByStatus(status);
+    }
+
+    /** 기관의 활성 기관 담당자 id (장비 갱신 알림 받는 사람) */
+    public List<Long> findActiveManagerIds(Long institutionId) {
+        return userRepository.findAllByOrganizationIdAndRoleAndStatus(institutionId, UserRole.INSTITUTION_MANAGER,
+                UserStatus.ACTIVE).stream().map(User::getId).toList();
     }
 
     /** 가입 승인 요청 알림을 받을 관리자 id (ACTIVE 관리자 전원) */
@@ -136,6 +155,35 @@ public class UserService {
     public UserAdminView reject(Long userId, String reason) {
         User user = findPendingUser(userId);
         user.reject(reason.trim());
+        userRepository.flush();
+        return UserAdminView.from(user);
+    }
+
+    /**
+     * 관리자 정지·해제: ACTIVE → SUSPENDED, SUSPENDED → ACTIVE 만 가능.
+     * status 가 둘 중 하나가 아니면 400, 관리자 계정·자기 자신·그 외 상태면 409 USER_INVALID_STATUS.
+     */
+    @Transactional
+    public UserAdminView changeStatus(Long userId, Long adminId, UserStatus status) {
+        if (status != UserStatus.ACTIVE && status != UserStatus.SUSPENDED) {
+            String reason = "정지(SUSPENDED) 또는 해제(ACTIVE)만 할 수 있습니다.";
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED, reason,
+                    Map.of("fields", List.of(Map.of("field", "status", "reason", reason))));
+        }
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "회원을 찾을 수 없습니다.", null));
+        if (user.getRole() == UserRole.ADMIN || user.getId().equals(adminId)) {
+            throw new BusinessException(ErrorCode.USER_INVALID_STATUS, "관리자 계정은 정지·해제할 수 없습니다.",
+                    Map.of("status", user.getStatus()));
+        }
+        UserStatus from = status == UserStatus.SUSPENDED ? UserStatus.ACTIVE : UserStatus.SUSPENDED;
+        if (user.getStatus() != from) {
+            throw new BusinessException(ErrorCode.USER_INVALID_STATUS,
+                    status == UserStatus.SUSPENDED ? "이용 중(ACTIVE)인 회원만 정지할 수 있습니다."
+                            : "정지(SUSPENDED)된 회원만 해제할 수 있습니다.",
+                    Map.of("status", user.getStatus()));
+        }
+        user.changeStatus(status);
         userRepository.flush();
         return UserAdminView.from(user);
     }

@@ -106,6 +106,31 @@ public class EquipmentService {
         return jdbcRepository.countByTestTypeForInstitution(institutionId);
     }
 
+    /** 지역 → 활성 장비 수 (지역 없는 장비 제외) */
+    public Map<String, Long> countByRegion() {
+        return jdbcRepository.countByRegion();
+    }
+
+    /** 장비 유형 → 활성 장비 수 */
+    public Map<EquipmentType, Long> countByEquipmentTypeAll() {
+        return jdbcRepository.countByEquipmentTypeAll();
+    }
+
+    /** 기관별 활성 장비 수와 기관 확인 장비 수 */
+    public List<EquipmentJdbcRepository.InstitutionVerificationRow> countVerificationByInstitution() {
+        return jdbcRepository.countVerificationByInstitution();
+    }
+
+    /** 한 기관의 갱신 필요 장비 수 (기관 확인 전 / 마지막 갱신 days 일 경과) */
+    public EquipmentJdbcRepository.NeedsUpdateRow countNeedsUpdate(Long institutionId, int days) {
+        return jdbcRepository.countNeedsUpdate(institutionId, days);
+    }
+
+    /** 장비에 쓰인 지역 이름 목록 */
+    public List<String> findRegions() {
+        return jdbcRepository.findRegions();
+    }
+
     /** 한 시험유형을 할 수 있는 기관별 집계 (GET /test-types/{code}) */
     public List<InstitutionTestTypeStat> statsByInstitution(String testTypeCode) {
         return jdbcRepository.statsByInstitution(testTypeCode);

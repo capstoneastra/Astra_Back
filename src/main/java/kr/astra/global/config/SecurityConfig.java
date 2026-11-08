@@ -14,6 +14,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -28,6 +29,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 /**
  * 보안 설정 (api-spec.md §0-4).
  * <ul>
+ *   <li>CORS: CorsConfig (프론트 주소는 CORS_ALLOWED_ORIGINS)</li>
  *   <li>비로그인 허용: /api/v1/auth/**, Swagger, 헬스체크</li>
  *   <li>로그아웃(POST /api/v1/auth/logout)은 /auth 아래지만 로그인 필요</li>
  *   <li>그 외 전부 로그인 필요 (astra.security.require-login=true, 기본값)</li>
@@ -56,6 +58,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtProvider jwtProvider) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
+                .cors(Customizer.withDefaults()) // CorsConfig 의 corsConfigurationSource 사용 (401·403 에도 CORS 헤더)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

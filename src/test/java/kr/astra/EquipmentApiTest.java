@@ -255,6 +255,68 @@ class EquipmentApiTest {
         assertThat(api.get("/api/v1/institutions/999999", token).code()).isEqualTo("NOT_FOUND");
     }
 
+    // ------------------------------------------------------------ 유사·중복·비교 (기능 12)
+
+    @Test
+    void 유사_장비는_같은_시험유형_장비를_먼저_이유와_함께_준다() throws Exception {
+        Res res = api.get("/api/v1/equipment/48/similar", token);
+        assertThat(res.status()).isEqualTo(200);
+        JsonNode list = res.data();
+        assertThat(list.size()).isLessThanOrEqualTo(10);
+        List<String> ids = new ArrayList<>();
+        list.forEach(n -> ids.add(n.path("equipment").path("externalId").asString()));
+        assertThat(ids).doesNotContain("ASTRA-CAND-0048");
+        assertThat(ids.subList(0, 3)).containsExactlyInAnyOrder("ASTRA-CAND-0044", "ASTRA-CAND-0045", "ASTRA-CAND-0047");
+        assertThat(list.get(0).path("reasons").toString()).contains("같은 시험유형: 진동시험");
+        assertThat(api.get("/api/v1/equipment/999999/similar", token).code()).isEqualTo("EQUIPMENT_NOT_FOUND");
+    }
+
+    @Test
+    void 중복_장비는_같은_지역_같은_시험유형_2대_이상을_묶는다() throws Exception {
+        JsonNode groups = api.get("/api/v1/equipment/duplicates?region=" + enc("대전") + "&testType=VIBRATION", token)
+                .data();
+        assertThat(groups.size()).isEqualTo(1);
+        JsonNode g = groups.get(0);
+        assertThat(g.path("region").asString()).isEqualTo("대전");
+        assertThat(g.path("testType").path("nameKo").asString()).isEqualTo("진동시험");
+        assertThat(g.path("equipmentCount").asInt()).isEqualTo(3);
+        assertThat(g.path("institutionCount").asInt()).isEqualTo(2);
+        List<String> ids = new ArrayList<>();
+        g.path("equipment").forEach(n -> ids.add(n.path("externalId").asString()));
+        assertThat(ids).containsExactly("ASTRA-CAND-0044", "ASTRA-CAND-0045", "ASTRA-CAND-0048");
+
+        JsonNode all = api.get("/api/v1/equipment/duplicates", token).data();
+        assertThat(all.size()).isGreaterThan(1);
+        all.forEach(n -> assertThat(n.path("equipmentCount").asInt()).isGreaterThanOrEqualTo(2));
+    }
+
+    @Test
+    void 비교표는_사양_키별로_장비마다_REAL_우선_값을_준다() throws Exception {
+        Res res = api.post("/api/v1/equipment/compare", "{ \"equipmentIds\": [48, 44] }", token);
+        assertThat(res.status()).isEqualTo(200);
+        JsonNode d = res.data();
+        assertThat(d.path("equipment").get(0).path("id").asLong()).isEqualTo(48);
+        assertThat(d.path("usedMockData").asBoolean()).isTrue();
+        JsonNode frequency = d.path("rows").get(0);
+        assertThat(frequency.path("key").asString()).isEqualTo("frequency");
+        assertThat(frequency.path("values").get(0).path("equipmentId").asLong()).isEqualTo(48);
+        assertThat(frequency.path("values").get(0).path("max").asInt()).isEqualTo(3000);
+        assertThat(frequency.path("values").get(0).path("sourceType").asString()).isEqualTo("MOCK");
+        assertThat(frequency.path("values").size()).isEqualTo(2);
+
+        // 장비 37 은 frequency 가 REAL·MOCK 둘 다 있음 → REAL 사용
+        JsonNode with37 = api.post("/api/v1/equipment/compare", "{ \"equipmentIds\": [37, 48] }", token).data();
+        assertThat(with37.path("rows").get(0).path("values").get(0).path("sourceType").asString()).isEqualTo("REAL");
+
+        assertThat(api.post("/api/v1/equipment/compare", "{ \"equipmentIds\": [48] }", token).code())
+                .isEqualTo("VALIDATION_FAILED");
+        assertThat(api.post("/api/v1/equipment/compare", "{ \"equipmentIds\": [48, 48] }", token).code())
+                .isEqualTo("VALIDATION_FAILED");
+        Res missing = api.post("/api/v1/equipment/compare", "{ \"equipmentIds\": [48, 999999] }", token);
+        assertThat(missing.code()).isEqualTo("EQUIPMENT_NOT_FOUND");
+        assertThat(missing.details().path("equipmentIds").toString()).isEqualTo("[999999]");
+    }
+
     // ------------------------------------------------------------ BE-C 용 내부 인터페이스
 
     @Test

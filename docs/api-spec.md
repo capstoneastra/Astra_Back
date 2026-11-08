@@ -34,6 +34,7 @@
 | 조건·사양 키 | JSON 필드명(camelCase)과 별개로, 조건·사양을 가리키는 **키 값**은 단위 없는 snake_case. 단위는 `unit`에 따로 (`{ "key": "sample_mass", "value": 15, "unit": "kg" }`). 시험유형별 키 목록은 `GET /test-types/{code}`의 `conditionRules` |
 | MOCK 표시 | 시연용 데이터가 섞인 응답엔 `isMock`/`sourceType` 필드를 반드시 포함, 프론트는 "DEMO" 배지 표시 |
 | 동시성 | 상태 변경 요청은 `version` 필드를 보내고, 불일치 시 `409 CONFLICT` |
+| CORS | 브라우저에서 부를 수 있는 프론트 주소는 서버 환경변수 `CORS_ALLOWED_ORIGINS` (쉼표로 여러 개, `http://localhost:*` 패턴 가능, 기본 `http://localhost:5173`). 쿠키는 쓰지 않으므로 `withCredentials` 불필요. 401·403 응답에도 CORS 헤더가 붙음 |
 
 ### 0-3. HTTP 상태 / 에러 코드
 | HTTP | code 예시 | 상황 |
@@ -212,12 +213,18 @@
               "file": "astra_deps_additional_10.json", "page": null },
   "simulation": { "capability": "CALCULATED_DEMO", "presetIds": ["SIM-0048"] } }
 
-// GET /search?q=시료 15kg 20~2000Hz 진동 → 기능 3
-{ "interpreted": { "testTypes": ["VIBRATION"],
+// GET /search?q=위성 전장품 15kg, 20~2000Hz 진동시험 → 기능 3 (시연 문장, 실제 응답)
+{ "interpreted": { "interpreter": "KEYWORD", "testTypes": ["VIBRATION"],
                    "conditions": [ { "key": "sample_mass", "value": 15, "unit": "kg" },
-                                   { "key": "frequency", "min": 20, "max": 2000, "unit": "Hz" } ] },
+                                   { "key": "frequency", "min": 20, "max": 2000, "unit": "Hz" } ],
+                   "regions": [] },
   "testTypes": [ { "code": "VIBRATION", "nameKo": "진동시험" } ],
-  "equipment": [ /* 목록 항목 형식 */ ] }
+  "equipment": [ /* 목록 항목 형식: ASTRA-CAND-0044, 0045, 0047, 0048 */ ] }
+// 해석: BE-C 추출기(ConditionExtractor)가 있으면 그것(interpreter=AI), 없으면 키워드·숫자 해석(KEYWORD)
+//   KEYWORD: 시험유형 이름·키워드(test_types.keywords)로 시험유형, "20~2000Hz" → 단위 같은 RANGE 조건, "15kg" → 단위 같은 NUMBER 조건
+//   regions: 문장에 있던 지역(예: "대전 진동시험" → ["대전"]) → 장비 검색 지역 필터
+// equipment: 해석된 시험유형의 장비 (최대 20대). 시험유형을 못 찾으면 문장으로 장비명·모델 검색
+// 실패: 400 VALIDATION_FAILED (q 없음·빈 값)
 
 // GET /test-types/VIBRATION → 기능 4 (+ 조건 입력폼·AI 누락 분석·매칭이 쓰는 conditionRules)
 { "code": "VIBRATION", "nameKo": "진동시험", "description": null,
@@ -236,6 +243,30 @@
 // institutions: 장비 수 많은 순, 같으면 가나다순. 기관 장비가 여러 대면 estCostMin=최솟값, estCostMax=최댓값,
 //   estDurationDays=가장 짧은 값, accessScope=하나라도 외부 이용 가능이면 EXTERNAL_ALLOWED / 모두 내부 전용이면 INTERNAL_ONLY / 그 외 UNKNOWN
 // 없는 코드면 404 NOT_FOUND
+
+// GET /equipment/48/similar → 유사 장비 최대 10개 (자기 자신 제외)
+//   후보: 시험유형이 하나라도 같거나, 같은 유형·분류이거나, 이름 유사도(pg_trgm) 0.3 이상
+//   순서: 시험유형이 겹치는 장비 → 이름 유사도 높은 순
+[ { "equipment": { /* 목록 항목 형식 */ "id": 44, "externalId": "ASTRA-CAND-0044", "name": "진동시험기1", ... },
+    "reasons": ["같은 시험유형: 진동시험", "이름 유사"], "nameSimilarity": 0.62 },
+  { "equipment": { "id": 47, "externalId": "ASTRA-CAND-0047", ... }, "reasons": ["같은 시험유형: 진동시험", "이름 유사"], ... },
+  { "equipment": { "id": 45, "externalId": "ASTRA-CAND-0045", ... }, "reasons": ["같은 시험유형: 진동시험"], ... }, ... ]
+
+// GET /equipment/duplicates?region=대전&testType=VIBRATION → 같은 지역 + 같은 시험유형에 장비 2대 이상인 그룹
+//   region·testType 생략 시 전체. 장비 수 많은 순 → 지역 가나다순 → 시험유형 표시 순서
+[ { "region": "대전", "testType": { "code": "VIBRATION", "nameKo": "진동시험" },
+    "equipmentCount": 3, "institutionCount": 2,
+    "equipment": [ /* 목록 항목 형식: ASTRA-CAND-0044, ASTRA-CAND-0045, ASTRA-CAND-0048 */ ] } ]
+
+// POST /equipment/compare { "equipmentIds": [48, 44] } → 장비 2~5대 비교표
+//   rows: 사양 키별 한 줄 (요청 순서대로 처음 나온 키 순). values 는 equipment 순서와 같고 사양이 없으면 null
+//   칸마다 같은 키에 REAL 이 있으면 REAL, 없으면 MOCK. MOCK 이 하나라도 쓰였으면 usedMockData=true (DEMO 표시)
+{ "equipment": [ /* 목록 항목 48 */, /* 목록 항목 44 */ ],
+  "rows": [ { "key": "frequency", "label": "주파수 범위",
+              "values": [ { "equipmentId": 48, "min": 10, "max": 3000, "unit": "Hz", "sourceType": "MOCK" },
+                          { "equipmentId": 44, "min": 5, "max": 1800, "unit": "Hz", "sourceType": "MOCK" } ] }, ... ],
+  "usedMockData": true }
+// 실패: 400 VALIDATION_FAILED (1대 또는 6대 이상, 같은 장비 중복) / 404 EQUIPMENT_NOT_FOUND { "equipmentIds": [999999] }
 
 // GET /test-types → 15개, display_order 순. equipmentCount = 그 시험을 할 수 있는 활성 장비 수 (0 이어도 포함)
 [ { "code": "ACOUSTIC_NOISE", "nameKo": "음향·소음 시험", "description": null, "keywords": ["소음", "음향", "dB"], "equipmentCount": 1 },
@@ -264,14 +295,19 @@
 | Method | URL | 권한 | 설명 |
 |---|---|---|---|
 | GET | `/institutions/me/equipment` | 🏛 | 우리 기관 장비 목록 (검증 상태, 마지막 갱신일, 갱신 필요 여부) |
-| POST | `/equipment` | 🏛 | 장비 등록. `institutionId`는 로그인 사용자 소속으로 서버가 채움 |
-| PATCH | `/equipment/{id}` | 🏛(소유기관) | 기본정보·이용조건·요금·가동률·가용상태 수정 → `infoUpdatedAt` 갱신 |
-| PUT | `/equipment/{id}/specs` | 🏛(소유기관) | 실제 사양(REAL) 일괄 저장. MOCK 사양은 수정 불가 |
+| POST | `/equipment` | 🏛 | 장비 등록. `institutionId`는 로그인 사용자 소속으로 서버가 채움 (관리자는 `institutionId` 필수) |
+| PATCH | `/equipment/{id}` | 🏛(소유기관) | 기본정보·이용조건·요금·가동률·가용상태 수정 (보낸 값만) → `INSTITUTION_VERIFIED`, `infoUpdatedAt` 갱신 |
+| PUT | `/equipment/{id}/specs` | 🏛(소유기관) | 실제 사양(REAL) 전체를 보낸 목록으로 교체 (빈 목록이면 REAL 삭제). MOCK 사양은 수정 불가 |
 | PUT | `/equipment/{id}/test-types` | 🏛(소유기관) | 가능 시험유형 + 예상 비용·소요기간 (기능 4 데이터) |
 | POST | `/equipment/{id}/confirm` | 🏛(소유기관) | "현재 정보가 맞음" 확인만 → `INSTITUTION_VERIFIED`, `infoUpdatedAt=now` |
 | DELETE | `/equipment/{id}` | 🏛(소유기관) | 비활성화 (`is_active=false`, 기존 의뢰 이력 보존) |
 | GET | `/equipment/{id}/change-logs` | 🏛(소유기관) | 누가 언제 무엇을 바꿨는지 |
-| POST | `/admin/equipment/import` | 👑 | 초기 데이터(공개자료 수집 JSON) 적재 |
+| POST | `/admin/equipment/import` | 👑 | 초기 데이터(공개자료 수집 JSON) 적재 (미구현, 현재는 V2 seed 로 적재) |
+
+- 권한: 기관 담당자는 소속 기관 장비만 (`AccessGuard.requireInstitution`), 아니면 `403 FORBIDDEN`. 관리자는 전부. 기업 회원은 `403`
+- 없거나 비활성인 장비는 `404 EQUIPMENT_NOT_FOUND` (변경 이력 조회는 비활성 장비도 가능)
+- 모든 변경은 `equipment_change_logs`에 `action`(CREATE / UPDATE / SPECS_UPDATE / TEST_TYPES_UPDATE / CONFIRM / DEACTIVATE / TRANSFER)과 `changes` `{"필드": {"before", "after"}}`로 기록
+- 입력 오류는 `400 VALIDATION_FAILED` + 필드 경로 (`specs[0].value`: 값 없음, `specs[0].min`: min > max, `specs[1].key`: 키 중복, `testTypes[0].code`: 없는 코드·중복)
 
 **초기 데이터 → 기관 인수인계 흐름**
 1. 관리자가 공개자료로 모은 71대를 `import`로 적재 (`verification_status=NEEDS_MANUAL_REVIEW`, 화면에 "기관 미확인" 표시)
@@ -292,6 +328,32 @@
              { "key": "max_fixture_mass", "label": "고정구 질량 허용", "value": 20, "unit": "kg" } ],
   "testTypes": [ { "code": "VIBRATION", "estCostMin": 300000, "estCostMax": 600000, "estDurationDays": 2 } ] }
 // → 201 { "id": 72, "externalId": "ASTRA-EQ-0072", "verificationStatus": "INSTITUTION_VERIFIED" }
+// 사양은 REAL(verificationStatus=VERIFIED)로 저장, isMock=false, region 을 안 보내면 기관 지역
+
+// PATCH /equipment/72 { "model": "V-900", "usage": { "feeAmount": 450000 } } → 200 장비 상세 (보낸 값만 수정)
+// PUT /equipment/48/specs { "specs": [ { "key": "frequency", "label": "주파수 범위", "min": 5, "max": 3000, "unit": "Hz" } ] }
+//   → 200 장비 상세. specs: frequency(REAL), frequency(MOCK), max_payload(MOCK) ... (MOCK 은 그대로)
+// PUT /equipment/72/test-types { "testTypes": [ { "code": "VIBRATION", "estCostMin": 300000, "estCostMax": 600000, "estDurationDays": 2 } ] } → 200 장비 상세
+// POST /equipment/48/confirm → 200 장비 상세 (verificationStatus=INSTITUTION_VERIFIED, infoUpdatedAt=지금)
+// DELETE /equipment/72 → 200 { "success": true, "data": null }
+
+// GET /institutions/me/equipment → 페이지 (기관 담당자: 소속 기관 / 관리자: ?institutionId= 필수). 기본 정렬 externalId
+//   needsUpdate = updateReasons 가 있으면 true. NOT_CONFIRMED: 기관 확인 전, OUTDATED: 마지막 갱신 90일 경과
+{ "content": [ { "id": 48, "externalId": "ASTRA-CAND-0048", "name": "진동시험기", "model": "EDS5000LS4-445",
+                 "equipmentType": "TEST", "testTypes": ["VIBRATION"], "availability": "UNKNOWN",
+                 "verificationStatus": "LISTING_CONFIRMED", "specVerificationStatus": "NOT_VERIFIED", "isMock": true,
+                 "infoUpdatedAt": "2026-11-07T11:52:01.241657+09:00", "daysSinceUpdate": 1,
+                 "needsUpdate": true, "updateReasons": ["NOT_CONFIRMED"] }, ... ],
+  "page": 0, "size": 20, "totalElements": 13, "totalPages": 1 }
+
+// GET /equipment/72/change-logs → 페이지, 최신순
+{ "content": [ { "id": 3, "action": "UPDATE", "changedBy": { "id": 3, "name": "김담당" },
+                 "changes": { "model": { "before": "V-850", "after": "V-900" },
+                              "feeAmount": { "before": 300000, "after": 450000 } },
+                 "createdAt": "2026-11-08T12:40:00+09:00" },
+               { "id": 1, "action": "CREATE", "changedBy": { "id": 3, "name": "김담당" },
+                 "changes": { "name": { "before": null, "after": "진동시험기" }, ..., "specs": { "before": null, "after": [ ... ] } },
+                 "createdAt": "..." } ], ... }
 ```
 
 ---
@@ -552,17 +614,48 @@
 | PATCH | `/notifications/{id}/read` | 로그인 | 읽음 |
 | POST | `/notifications/read-all` | 로그인 | 모두 읽음 |
 
+> 의뢰·예약 칸은 BE-B 의 `RequestDashboardQuery`, 최근 상담은 BE-C 의 `ChatSessionQuery` 구현이 있을 때만 채워집니다.
+> 구현 전에는 0·빈 목록이고 `dataAvailable` 이 `false` → 프론트는 그 칸을 "준비 중"으로 표시합니다. 목록 칸은 최대 5개.
+
 ```json
 // GET /dashboard/summary (COMPANY_USER)
 { "role": "COMPANY_USER",
-  "requestCounts": { "DRAFT": 1, "SUBMITTED": 0, "UNDER_REVIEW": 2, "SUPPLEMENT_REQUESTED": 1, "SCHEDULING": 0, "CONFIRMED": 3 },
-  "actionRequired": [ { "requestId": 15, "requestNo": "REQ-20261105-0001", "type": "SUPPLEMENT_REQUESTED", "dueDate": "2026-11-12" } ],
+  "requestCounts": { "DRAFT": 1, "SUBMITTED": 0, "UNDER_REVIEW": 2, "SUPPLEMENT_REQUESTED": 1, "RESUBMITTED": 0,
+                     "SCHEDULING": 0, "CONFIRMED": 3, "COMPLETED": 0, "REJECTED": 0, "CANCELED": 0 },  // 10개 상태 항상 포함
+  "actionRequired": [ { "requestId": 15, "requestNo": "REQ-20261105-0001", "title": "위성 전장품 진동시험",
+                        "status": "SUPPLEMENT_REQUESTED", "dueDate": "2026-11-12", "submittedAt": "..." } ],
   "recentChats": [ { "id": 5, "title": "위성 부품 진동시험", "updatedAt": "..." } ],
-  "equipmentStats": { "total": 71, "byRegion": { "대전": 32, "진주": 36 } } }
-// INSTITUTION_MANAGER: requestCounts(우리 기관 접수함), pendingReview[], upcomingReservations[],
-//                      equipmentNeedsUpdate (확인 필요·90일 경과 장비 수)
-// ADMIN: pendingUsers, pendingInstitutions, 전체 의뢰 현황, 기관별 장비 검증률
+  "equipmentStats": { "total": 71, "byRegion": { "경남": 1, "광주": 1, "대전": 32, "원주": 1, "진주": 36 } },
+  "dataAvailable": { "requests": true, "chats": true } }
+
+// GET /dashboard/summary (INSTITUTION_MANAGER, manager1 — seed 실제 값)
+{ "role": "INSTITUTION_MANAGER",
+  "institution": { "id": 2, "name": "대전테크노파크 우주·양자산업센터" },
+  "requestCounts": { ... 10개 상태 ... },                       // 우리 기관 접수함
+  "pendingReview": [ /* actionRequired 와 같은 형식 (SUBMITTED·RESUBMITTED) */ ],
+  "upcomingReservations": [ { "reservationId": 4, "requestId": 15, "requestNo": "REQ-20261105-0001", "equipmentId": 48,
+                              "equipmentName": "진동시험기", "startAt": "2026-11-20T09:00:00+09:00", "endAt": "..." } ],
+  "equipmentNeedsUpdate": { "total": 13, "notConfirmed": 13, "outdated": 0 },  // 기관 확인 전 / 마지막 갱신 90일 경과
+  "equipmentStats": { "total": 71, "byRegion": { ... } },
+  "dataAvailable": { "requests": false } }
+
+// GET /dashboard/summary (ADMIN)
+{ "role": "ADMIN", "pendingUsers": 1, "pendingInstitutions": 0,
+  "requestCounts": { ... 10개 상태 (전체) ... },
+  "institutionVerification": [ /* equipment-stats 의 institutions 와 같은 형식 */ ],
+  "equipmentStats": { "total": 71, "byRegion": { ... } },
+  "dataAvailable": { "requests": false } }
+
+// GET /dashboard/equipment-stats → 활성 장비 기준 (seed 실제 값)
+{ "total": 71,
+  "byRegion": { "경남": 1, "광주": 1, "대전": 32, "원주": 1, "진주": 36 },               // 가나다순
+  "byEquipmentType": { "MEASUREMENT": .., "MANUFACTURING": .., "TEST": .., "SOFTWARE": .., "SUPPORT": .. },
+  "byTestType": [ { "code": "ACOUSTIC_NOISE", "nameKo": "음향·소음 시험", "equipmentCount": 1 }, ... ],  // 15개, 표시 순서
+  "institutions": [ { "id": 1, "name": "한국생산기술연구원 진주뿌리기술지원센터", "region": "진주",
+                      "equipmentCount": 31, "verifiedCount": 0, "verificationRate": 0.0 }, ... ] }  // 장비 수 많은 순
 ```
+
+- 장비 정보 갱신 알림: 매일 오전 9시(한국 시간) 마지막 갱신이 막 90일을 넘긴 장비의 소속 기관 활성 담당자에게 `EQUIPMENT_UPDATE_REQUIRED` (장비마다 한 번, BE-B 알림 구현이 있을 때만). `astra.equipment.update-reminder.enabled=false` 로 끔
 
 ---
 
@@ -602,8 +695,8 @@ UNDER_REVIEW ──reject──▶ REJECTED        (DRAFT~SCHEDULING 에서 기�
 | GET | `/admin/users` | 👑 | 회원 목록 `?role=COMPANY_USER&status=PENDING&page=0&size=20&sort=createdAt,desc` |
 | POST | `/admin/users/{id}/approve` | 👑 | 가입 승인 (PENDING→ACTIVE). 가입하며 만든 조직(기업·신규 기관)도 함께 승인 |
 | POST | `/admin/users/{id}/reject` | 👑 | 가입 거절 `{ reason }` (→REJECTED) |
-| PATCH | `/admin/users/{id}/status` | 👑 | 정지·해제 `{ status: "SUSPENDED" }` |
-| GET | `/admin/organizations` | 👑 | 조직 목록 `?orgType=INSTITUTION&verified=false` |
+| PATCH | `/admin/users/{id}/status` | 👑 | 정지·해제 `{ "status": "SUSPENDED" }` / `{ "status": "ACTIVE" }` |
+| GET | `/admin/organizations` | 👑 | 조직 목록 `?orgType=INSTITUTION&verified=false&page=0&size=20&sort=createdAt,desc` |
 | POST | `/admin/organizations` | 👑 | 기관 직접 등록 |
 | POST | `/admin/organizations/{id}/verify` | 👑 | 신규 기관 신청 승인 |
 | PATCH | `/admin/organizations/{id}` | 👑 | 기관 정보 수정 |
@@ -622,6 +715,24 @@ UNDER_REVIEW ──reject──▶ REJECTED        (DRAFT~SCHEDULING 에서 기�
 // POST /admin/users/5/approve → 200 (목록 항목과 같은 형식, status=ACTIVE, approvedAt 채워짐)
 // POST /admin/users/5/reject { "reason": "소속을 확인할 수 없습니다." } → 200 (status=REJECTED, rejectReason)
 // 실패: 404 NOT_FOUND (없는 회원) / 409 USER_INVALID_STATUS (PENDING 아님) / 400 VALIDATION_FAILED (사유 없음, 정렬 불가 필드)
+
+// PATCH /admin/users/{id}/status { "status": "SUSPENDED" } → 200 (목록 항목과 같은 형식)
+//   ACTIVE → SUSPENDED(정지), SUSPENDED → ACTIVE(해제)만. 정지하면 refresh 토큰을 모두 폐기 → 재발급은 바로 막힘
+//   (이미 받은 access 토큰은 만료까지 최대 1시간 유효)
+// 실패: 400 VALIDATION_FAILED (ACTIVE·SUSPENDED 외 값) / 409 USER_INVALID_STATUS (관리자 계정, PENDING·REJECTED 등)
+
+// GET /admin/organizations?orgType=INSTITUTION&verified=false → 페이지 (기본 최신 등록순, 정렬은 createdAt·id 만)
+{ "content": [ { "id": 15, "orgType": "INSTITUTION", "name": "가상 신규 시험기관", "parentName": null, "businessRegNo": null,
+                 "region": null, "address": "경남 진주시 ...", "phone": "055-000-0000", "email": null, "homepageUrl": null,
+                 "isVerified": false, "createdAt": "2026-11-08T10:00:00+09:00" } ], ... }
+
+// POST /admin/organizations { "name": "가상 시험센터", "region": "진주", "phone": "055-000-0009" } → 201 (위 항목 형식, 시험기관으로 바로 승인)
+// POST /admin/organizations/15/verify → 200 (isVerified=true, 이미 승인됐어도 200)
+// PATCH /admin/organizations/15 { "homepageUrl": "https://..." } → 200 (보낸 값만)
+// 실패: 404 NOT_FOUND / 409 ORGANIZATION_ALREADY_EXISTS (같은 유형에 같은 이름)
+
+// POST /admin/equipment/72/transfer { "institutionId": 6, "reason": "수집 오류" } → 200 장비 상세 (변경 이력에 TRANSFER)
+// 실패: 400 VALIDATION_FAILED (승인된 기관 아님, 이미 그 기관 소속) / 404 EQUIPMENT_NOT_FOUND
 ```
 
 ---

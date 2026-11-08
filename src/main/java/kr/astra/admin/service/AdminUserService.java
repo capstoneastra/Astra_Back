@@ -14,6 +14,7 @@ import kr.astra.organization.service.OrganizationService;
 import kr.astra.user.dto.UserAdminView;
 import kr.astra.user.entity.UserRole;
 import kr.astra.user.entity.UserStatus;
+import kr.astra.user.service.RefreshTokenService;
 import kr.astra.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
@@ -35,6 +36,7 @@ public class AdminUserService {
     private final UserService userService;
     private final OrganizationService organizationService;
     private final ObjectProvider<NotificationService> notificationService;
+    private final RefreshTokenService refreshTokenService;
 
     public PageResponse<AdminUserResponse> list(CurrentUser admin, UserRole role, UserStatus status,
                                                 Pageable pageable) {
@@ -61,6 +63,17 @@ public class AdminUserService {
         UserAdminView user = userService.reject(userId, reason);
         notificationService.ifAvailable(n -> n.notify(user.id(), NotificationType.USER_REJECTED,
                 "회원가입이 거절되었습니다.", null, null));
+        return toResponse(user);
+    }
+
+    /** 정지(SUSPENDED)·해제(ACTIVE). 정지하면 그 회원의 refresh 토큰을 모두 폐기해 토큰 재발급을 바로 막음 */
+    @Transactional
+    public AdminUserResponse changeStatus(CurrentUser admin, Long userId, UserStatus status) {
+        AccessGuard.requireAdmin(admin);
+        UserAdminView user = userService.changeStatus(userId, admin.userId(), status);
+        if (status == UserStatus.SUSPENDED) {
+            refreshTokenService.revokeAll(userId);
+        }
         return toResponse(user);
     }
 

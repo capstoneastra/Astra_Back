@@ -49,7 +49,8 @@ java {
 | 차트 | Recharts (시뮬레이션 그래프, 대시보드) |
 
 ### 실행 환경
-- 로컬: Docker Desktop을 켜고 `./gradlew bootRun` (또는 IntelliJ 실행) → `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고 Flyway가 V1·V2를 적용. Swagger: http://localhost:8080/swagger-ui.html
+- 로컬: Docker Desktop을 켜고 `./gradlew bootRun` (또는 IntelliJ 실행) → `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고 Flyway가 아직 적용 안 된 마이그레이션(V1~)을 순서대로 적용. Swagger: http://localhost:8080/swagger-ui.html
+- FE 연동: 브라우저에서 백엔드를 부르려면 서버 `.env`의 `CORS_ALLOWED_ORIGINS`에 FE 주소가 있어야 함 (기본 `http://localhost:5173`, 쉼표로 여러 개, `http://localhost:*` 패턴 가능). 콘솔에 "blocked by CORS policy"가 뜨면 이 값을 확인
 - 테스트: `./gradlew test` (Testcontainers가 테스트용 DB를 따로 띄움)
 - 시연: 클라우드 VM 1대에 PostgreSQL + `SPRING_PROFILES_ACTIVE=prod`로 jar 실행. 안 되면 노트북 로컬 시연
 - **API 키(`ANTHROPIC_API_KEY`), DB 비밀번호는 절대 커밋 금지.** `.env.example`만 올리고 실제 값은 팀 채팅으로 공유
@@ -121,10 +122,12 @@ equipment/
 | 브랜치 | 용도 |
 |---|---|
 | `main` | 유일한 기본 브랜치이자 **최종 결과물**. 항상 빌드·테스트가 통과하는 상태를 유지 |
-| `feature/#12-equipment-search` | 이슈 하나당 브랜치 하나, `main`에서 따서 `main`으로 PR (`fix/`, `refactor/` 도 같은 형식). 병합 후 삭제 |
+| `feature/#12-equipment-search` | 이슈(또는 담당 기능 묶음) 하나당 브랜치 하나, `main`에서 따서 `main`으로 PR (`fix/`, `refactor/` 도 같은 형식). 병합 후 같은 브랜치를 계속 써도 됨 (아래 "병합 후" 참고) |
 
 - `main`에 직접 push 금지. 모든 변경은 PR로만 병합
-- PR은 **GitHub Actions 빌드(테스트 포함) 통과 + 리뷰 1명 승인 후 Squash merge**. 빌드가 빨간색이면 병합하지 않습니다
+- PR은 **GitHub Actions 빌드(테스트 포함) 통과 + 리뷰 1명 승인 후 "Create a merge commit"(일반 병합)**. 빌드가 빨간색이면 병합하지 않습니다
+  - 병합 버튼 옆 화살표에서 **Create a merge commit**을 고릅니다. Squash merge·Rebase merge는 쓰지 않습니다 (Squash 를 쓰면 병합 후 내 브랜치 기록이 main 과 어긋나 다음 PR 에 이미 병합된 커밋이 다시 보임)
+  - **병합 후**: 같은 브랜치에서 계속 작업하려면 `git fetch origin && git merge origin/main` 한 번이면 됩니다. 다 끝난 브랜치는 삭제
 - PR은 작게: 하루 이상 쌓지 말고 API 1~2개 단위로 올리기. 매일 아침 `git pull`로 `main` 최신 내용을 받고, PR 전에 `main`을 내 브랜치에 merge해서 충돌을 내가 먼저 해결
 - **발표·중간점검 버전은 태그로 표시**: 시연 시나리오를 처음부터 끝까지 확인한 커밋에 `v0.1-midterm`, `v1.0-final`처럼 태그를 붙입니다. 시연은 태그 버전으로 합니다
 
@@ -206,6 +209,8 @@ chore: Flyway 설정 추가
 | BE-C | BE-B | `RequirementService.getSnapshot(requirementId)` (의뢰서에 조건 반영) |
 | BE-B | BE-C | `TestRequestService.createDraft(userId, equipmentId, requirementId, content, aiGenerated)` (AI 초안·자동 추진) |
 | BE-B | 전원 | `NotificationService.notify(userId, type, title, linkPath)` |
+| BE-B | BE-A | `RequestDashboardQuery` (대시보드 의뢰·예약 집계: 상태별 수, 처리할 의뢰, 검토 대기, 다가오는 예약). 인터페이스는 BE-A가 `request/service`에 만들어 둠, 구현하면 대시보드에 자동 반영 |
+| BE-C | BE-A | `ChatSessionQuery.findRecent(userId, limit)` (대시보드 최근 상담), `ConditionExtractor.extract(text)` (`/search` 문장 → 시험유형·조건). 인터페이스는 BE-A가 만들어 둠, 구현 전에는 빈 목록·키워드 해석으로 동작 |
 
 > 인터페이스와 DTO만 먼저 만들어 두고 구현은 각자 채웁니다. 그래야 서로 기다리지 않습니다.
 
