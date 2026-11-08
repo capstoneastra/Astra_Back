@@ -62,6 +62,7 @@ public class ChatPersistence {
             }
         });
         ChatMessage message = messages.saveAndFlush(new ChatMessage(id,ChatRole.USER,content,Map.of("state","PENDING")));
+        sessions.recordActivity(id, OffsetDateTime.now());
         return new Turn(id,ChatResponse.Message.of(message),transcript(user,id));
     }
     @Transactional
@@ -73,6 +74,7 @@ public class ChatPersistence {
             throw new BusinessException(ErrorCode.VERSION_CONFLICT);
         original.mark("DONE");
         ChatMessage assistant = messages.saveAndFlush(new ChatMessage(turn.sessionId(),ChatRole.ASSISTANT,answer,metadata));
+        sessions.recordActivity(turn.sessionId(), OffsetDateTime.now());
         return new ChatResponse.Exchange(ChatResponse.Message.of(original),ChatResponse.Message.of(assistant));
     }
     @Transactional
@@ -91,10 +93,14 @@ public class ChatPersistence {
         if (old.isPresent()) {
             if (!old.get().testTypeCode().equals(extraction.testTypeCode())) throw new BusinessException(ErrorCode.VALIDATION_FAILED,
                     "기존 시험조건과 시험유형이 다릅니다. 새 상담을 시작해 주세요.",null);
-            return requirements.mergeExtracted(user,old.get().id(),extraction.conditions());
+            var result = requirements.mergeExtracted(user,old.get().id(),extraction.conditions());
+            sessions.recordActivity(sessionId, OffsetDateTime.now());
+            return result;
         }
-        return requirements.createForSession(user,transcript.ownerId(),sessionId,
+        var result = requirements.createForSession(user,transcript.ownerId(),sessionId,
                 new RequirementInput(extraction.testTypeCode(),"AI 상담 시험조건",null,null,null,extraction.conditions()));
+        sessions.recordActivity(sessionId, OffsetDateTime.now());
+        return result;
     }
     public Long ownerId(CurrentUser user,Long id) { return owned(user,id,false).getUserId(); }
     private ChatSession owned(CurrentUser user,Long id,boolean lock) {

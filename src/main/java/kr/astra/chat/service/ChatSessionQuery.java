@@ -12,9 +12,10 @@ import kr.astra.chat.dto.ChatSessionSummary;
 public interface ChatSessionQuery {
 
     /**
-     * 사용자의 최근 상담 (updated_at 최신순)
+     * 사용자의 최근 상담 (updated_at 최신순, 같은 시각이면 id 내림차순).
+     * 인증된 기업 본인 또는 ADMIN이 호출합니다. 목록이 비어 있어도 구현 연결은 유효합니다.
      *
-     * @param limit 최대 개수
+     * @param limit 최대 개수 (1~100, 대시보드는 5)
      */
     List<ChatSessionSummary> findRecent(Long userId, int limit);
 }
