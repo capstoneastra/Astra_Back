@@ -10,7 +10,7 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 | 2 | 장비 목록·검색·상세, 시험유형, 기관, EquipmentQueryService | ✅ | PR #5 |
 | 3 | 기관 장비 관리, 유사·중복·비교, 관리자 정지·조직 관리·장비 이관 | ✅ | PR #6 (2026-11-08) |
 | 4 | 대시보드, 자연어 검색, 90일 경과 장비 알림 | ✅ | push 완료 (PR 대기) |
-| 5 | 연동·배포 준비: CORS ✅ / Dockerfile·운영 compose·운영 설정·시연 점검표 ⏳ | 🚧 | CORS 커밋 전 |
+| 5 | 연동·배포 준비: CORS ✅ / Dockerfile·운영 compose·운영 설정·시연 점검표 ⏳ | 🚧 | CORS push 완료 (PR 대기) |
 | 6주차 | 배포, 통합 테스트, 시연 시나리오 확인 | ⏳ | |
 
 ---
@@ -40,7 +40,9 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 
 **팀 공지**: FE — 실제 서버 연결 시 기본 허용 주소는 `http://localhost:5173`, 다른 주소면 알려 주거나 서버 `.env` 의 `CORS_ALLOWED_ORIGINS` 에 추가. 쿠키 없이 `Authorization` 헤더만 쓰면 됨
 
-**바뀐 파일 (커밋 전)**: `src/main/java/kr/astra/global/config/CorsConfig.java`(새), `src/main/java/kr/astra/global/config/SecurityConfig.java`, `src/main/resources/application.yml`, `.env.example`, `src/test/java/kr/astra/CorsTest.java`(새), `src/test/java/kr/astra/global/config/CorsConfigTest.java`(새), `README.md`, `docs/api-spec.md`, `docs/team-guide.md`, 이 파일
+**커밋**: `a6c92da` `7cb3c2e` (push 완료)
+
+**바뀐 파일**: `src/main/java/kr/astra/global/config/CorsConfig.java`(새), `src/main/java/kr/astra/global/config/SecurityConfig.java`, `src/main/resources/application.yml`, `.env.example`, `src/test/java/kr/astra/CorsTest.java`(새), `src/test/java/kr/astra/global/config/CorsConfigTest.java`(새), `README.md`, `docs/api-spec.md`, `docs/team-guide.md`, 이 파일
 
 ---
 
