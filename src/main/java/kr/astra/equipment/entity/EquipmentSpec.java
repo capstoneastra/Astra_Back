@@ -62,4 +62,22 @@ public class EquipmentSpec {
     @Enumerated(EnumType.STRING)
     @Column(name = "usage_scope", nullable = false, length = 20)
     private UsageScope usageScope;
+
+    /** 기관 담당자가 입력한 실제 사양 (REAL, 기관 확인, 일반 사용) */
+    public static EquipmentSpec real(Long equipmentId, String specKey, String label, BigDecimal valueNum,
+                                     BigDecimal minNum, BigDecimal maxNum, String valueText, String unit) {
+        EquipmentSpec s = new EquipmentSpec();
+        s.equipmentId = equipmentId;
+        s.specKey = specKey;
+        s.label = label;
+        s.valueNum = valueNum;
+        s.minNum = minNum;
+        s.maxNum = maxNum;
+        s.valueText = valueText;
+        s.unit = unit;
+        s.sourceType = SpecSourceType.REAL;
+        s.verificationStatus = "VERIFIED";
+        s.usageScope = UsageScope.GENERAL;
+        return s;
+    }
 }

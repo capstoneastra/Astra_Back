@@ -43,6 +43,18 @@ public class EquipmentTestType {
     @Column(length = 300)
     private String note;
 
+    public static EquipmentTestType of(Long equipmentId, String testTypeCode, Integer estCostMin, Integer estCostMax,
+                                       Integer estDurationDays, String note) {
+        EquipmentTestType t = new EquipmentTestType();
+        t.equipmentId = equipmentId;
+        t.testTypeCode = testTypeCode;
+        t.estCostMin = estCostMin;
+        t.estCostMax = estCostMax;
+        t.estDurationDays = estDurationDays;
+        t.note = note;
+        return t;
+    }
+
     /** 복합 키 (equipment_id, test_type_code) */
     @Getter
     @EqualsAndHashCode
