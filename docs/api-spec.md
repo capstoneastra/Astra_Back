@@ -34,6 +34,7 @@
 | 조건·사양 키 | JSON 필드명(camelCase)과 별개로, 조건·사양을 가리키는 **키 값**은 단위 없는 snake_case. 단위는 `unit`에 따로 (`{ "key": "sample_mass", "value": 15, "unit": "kg" }`). 시험유형별 키 목록은 `GET /test-types/{code}`의 `conditionRules` |
 | MOCK 표시 | 시연용 데이터가 섞인 응답엔 `isMock`/`sourceType` 필드를 반드시 포함, 프론트는 "DEMO" 배지 표시 |
 | 동시성 | 상태 변경 요청은 `version` 필드를 보내고, 불일치 시 `409 CONFLICT` |
+| CORS | 브라우저에서 부를 수 있는 프론트 주소는 서버 환경변수 `CORS_ALLOWED_ORIGINS` (쉼표로 여러 개, `http://localhost:*` 패턴 가능, 기본 `http://localhost:5173`). 쿠키는 쓰지 않으므로 `withCredentials` 불필요. 401·403 응답에도 CORS 헤더가 붙음 |
 
 ### 0-3. HTTP 상태 / 에러 코드
 | HTTP | code 예시 | 상황 |

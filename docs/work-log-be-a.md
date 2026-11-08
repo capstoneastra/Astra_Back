@@ -9,8 +9,38 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 | 1-2 | 가입 이메일 인증 + 기업·기관 모두 관리자 승인 | ✅ | PR #5 |
 | 2 | 장비 목록·검색·상세, 시험유형, 기관, EquipmentQueryService | ✅ | PR #5 |
 | 3 | 기관 장비 관리, 유사·중복·비교, 관리자 정지·조직 관리·장비 이관 | ✅ | PR #6 (2026-11-08) |
-| 4 | 대시보드, 자연어 검색, 90일 경과 장비 알림 | ✅ | 아직 (커밋 전) |
+| 4 | 대시보드, 자연어 검색, 90일 경과 장비 알림 | ✅ | push 완료 (PR 대기) |
+| 5 | 연동·배포 준비: CORS ✅ / Dockerfile·운영 compose·운영 설정·시연 점검표 ⏳ | 🚧 | CORS 커밋 전 |
 | 6주차 | 배포, 통합 테스트, 시연 시나리오 확인 | ⏳ | |
+
+---
+
+## 2026-11-08 · 5번 덩어리 ①: CORS 설정
+
+**왜**: FE 는 별도 저장소(React + Vite, 기본 `http://localhost:5173`)라 브라우저에서 백엔드(`localhost:8080`)를 부르면 CORS 설정이 없을 때 모든 요청이 막힘. 지금은 FE 가 MSW 목업이라 드러나지 않았음
+
+**한 것**
+- `global/config/CorsConfig`: 허용 주소 = 환경변수 `CORS_ALLOWED_ORIGINS` (쉼표로 여러 개, `http://localhost:*` 패턴 가능, 끝의 `/` 무시)
+  - 기본 `http://localhost:5173`. `.env.example` 을 그대로 복사해 **빈 값**이 들어가도 기본 주소를 씀 (`${이름:기본값}` 은 빈 문자열일 때 기본값을 안 쓰기 때문)
+  - 메서드 GET·POST·PUT·PATCH·DELETE·OPTIONS, 헤더 전부 허용, `Content-Disposition` 노출, credentials 안 씀(쿠키 없음, Bearer 헤더), 사전 요청 캐시 1시간
+- `SecurityConfig`: `http.cors(...)` → Spring Security 앞단에서 처리되어 **401·403 응답에도 CORS 헤더** (FE 가 401 을 읽고 로그인 화면으로 보낼 수 있음)
+- `application.yml` `astra.cors.allowed-origins`, `.env.example` 에 `CORS_ALLOWED_ORIGINS` 설명
+
+**검토한 것 (계획서 대조)**
+- api-spec §0: 인증은 `Authorization: Bearer` 헤더 → 헤더 허용 필요, 쿠키 없음 → credentials 불필요
+- team-guide: BE-C 상담은 SSE(`POST` + `Accept: text/event-stream`) → 같은 CORS 규칙으로 사전 요청 통과 확인
+- BE-C 브랜치(`feature/be-c`)에 CORS 설정이 없음 → 중복·충돌 없음, `global/`·설정 파일도 안 건드림
+- team-guide 실행 환경의 오래된 문구("Flyway가 V1·V2를 적용")를 고침
+
+**확인**
+- 테스트 93개 통과 (새로 6개: `CorsTest` 4, `CorsConfigTest` 2)
+- 서버를 띄워 브라우저와 같은 요청으로 확인: 허용 주소 사전 요청 200(PATCH·Authorization 허용), 다른 주소 403(허용 헤더 없음), 토큰 없는 요청 401 + CORS 헤더, SSE 경로 사전 요청 200
+
+**문서**: api-spec §0-2 규칙 표에 CORS 줄, team-guide 실행 환경, README 실행하기·테스트 표·현재 상태
+
+**팀 공지**: FE — 실제 서버 연결 시 기본 허용 주소는 `http://localhost:5173`, 다른 주소면 알려 주거나 서버 `.env` 의 `CORS_ALLOWED_ORIGINS` 에 추가. 쿠키 없이 `Authorization` 헤더만 쓰면 됨
+
+**바뀐 파일 (커밋 전)**: `src/main/java/kr/astra/global/config/CorsConfig.java`(새), `src/main/java/kr/astra/global/config/SecurityConfig.java`, `src/main/resources/application.yml`, `.env.example`, `src/test/java/kr/astra/CorsTest.java`(새), `src/test/java/kr/astra/global/config/CorsConfigTest.java`(새), `README.md`, `docs/api-spec.md`, `docs/team-guide.md`, 이 파일
 
 ---
 
