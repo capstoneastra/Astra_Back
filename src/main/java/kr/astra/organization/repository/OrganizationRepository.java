@@ -18,6 +18,8 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
 
     List<Organization> findAllByOrgTypeAndVerifiedTrue(OrgType orgType);
 
+    long countByOrgTypeAndVerifiedFalse(OrgType orgType);
+
     /** 관리자 조직 목록: orgType·verified 는 null 이면 조건 없음 */
     @Query("""
             SELECT o FROM Organization o

@@ -111,6 +111,17 @@ public class UserService {
                 List.of(UserStatus.PENDING, UserStatus.ACTIVE));
     }
 
+    /** 상태별 회원 수 (관리자 대시보드: 승인 대기 회원 수) */
+    public long countByStatus(UserStatus status) {
+        return userRepository.countByStatus(status);
+    }
+
+    /** 기관의 활성 기관 담당자 id (장비 갱신 알림 받는 사람) */
+    public List<Long> findActiveManagerIds(Long institutionId) {
+        return userRepository.findAllByOrganizationIdAndRoleAndStatus(institutionId, UserRole.INSTITUTION_MANAGER,
+                UserStatus.ACTIVE).stream().map(User::getId).toList();
+    }
+
     /** 가입 승인 요청 알림을 받을 관리자 id (ACTIVE 관리자 전원) */
     public List<Long> findActiveAdminIds() {
         return userRepository.findAllByRoleAndStatus(UserRole.ADMIN, UserStatus.ACTIVE).stream()

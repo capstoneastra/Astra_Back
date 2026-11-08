@@ -72,6 +72,11 @@ public class OrganizationService {
                 .collect(Collectors.toMap(OrganizationSummaryResponse::id, Function.identity()));
     }
 
+    /** 승인 대기 중인 기관 수 (관리자 대시보드) */
+    public long countUnverifiedInstitutions() {
+        return organizationRepository.countByOrgTypeAndVerifiedFalse(OrgType.INSTITUTION);
+    }
+
     /** 승인된 기관이면 true (기관 담당자가 기존 기관을 골라 가입할 때 확인) */
     public boolean isVerifiedInstitution(Long organizationId) {
         return organizationRepository.findById(organizationId)

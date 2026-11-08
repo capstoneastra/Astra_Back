@@ -72,6 +72,9 @@ astra:
     from: ${MAIL_FROM:no-reply@astra.local}
     # true 면 메일을 보낸 뒤 서버 로그에도 인증 코드를 남김 (일회용 메일이 늦을 때 대비, 시연 날에만 켜기)
     log-code: ${MAIL_LOG_CODE:false}
+  equipment:
+    update-reminder:
+      enabled: true   # 매일 오전 9시 마지막 갱신 90일 지난 장비 알림 (BE-B 알림 구현이 있을 때만 발송)
   email-verification:
     code-validity-seconds: 600     # 인증 코드 10분
     token-validity-seconds: 1800   # 인증 후 가입까지 30분
