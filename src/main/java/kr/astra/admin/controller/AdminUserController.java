@@ -3,6 +3,7 @@ package kr.astra.admin.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import kr.astra.admin.dto.AdminRequests.ChangeStatusRequest;
 import kr.astra.admin.dto.AdminUserResponse;
 import kr.astra.admin.dto.RejectUserRequest;
 import kr.astra.admin.service.AdminUserService;
@@ -18,6 +19,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -25,7 +27,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "관리자 · 회원", description = "회원 목록, 가입 승인·거절 (api-spec §12, 관리자 전용)")
+@Tag(name = "관리자 · 회원", description = "회원 목록, 가입 승인·거절, 정지·해제 (api-spec §12, 관리자 전용)")
 @RestController
 @RequestMapping("/admin/users")
 @RequiredArgsConstructor
@@ -49,6 +51,16 @@ public class AdminUserController {
     @PostMapping("/{id}/approve")
     public ApiResponse<AdminUserResponse> approve(@AuthenticationPrincipal CurrentUser user, @PathVariable Long id) {
         return ApiResponse.ok(adminUserService.approve(user, id));
+    }
+
+    @Operation(summary = "회원 정지·해제", description = "ACTIVE → SUSPENDED(정지), SUSPENDED → ACTIVE(해제)만 가능. "
+            + "관리자 계정·그 외 상태면 409 USER_INVALID_STATUS. 정지하면 refresh 토큰이 모두 폐기되어 재발급이 바로 막히고, "
+            + "이미 받은 access 토큰은 만료(최대 1시간)까지 유효")
+    @PatchMapping("/{id}/status")
+    public ApiResponse<AdminUserResponse> changeStatus(@AuthenticationPrincipal CurrentUser user,
+                                                       @PathVariable Long id,
+                                                       @Valid @RequestBody ChangeStatusRequest request) {
+        return ApiResponse.ok(adminUserService.changeStatus(user, id, request.status()));
     }
 
     @Operation(summary = "가입 거절", description = "PENDING → REJECTED. 사유는 신청자가 로그인할 때 보임. "

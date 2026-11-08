@@ -50,6 +50,11 @@ public class RefreshTokenService {
                 .ifPresent(token -> token.revoke(now));
     }
 
+    /** 계정 정지 시: 그 사용자의 refresh 토큰 전부 폐기 → 토큰 재발급이 바로 막힘 */
+    public void revokeAll(Long userId) {
+        refreshTokenRepository.revokeAllByUserId(userId, OffsetDateTime.now());
+    }
+
     static String hash(String rawToken) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
