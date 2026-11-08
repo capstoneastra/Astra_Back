@@ -756,8 +756,10 @@ Testcontainers가 테스트 전용 PostgreSQL 16을 띄워 실제 DB로 검증�
 | `ApiConventionTest` | 공통 실패 응답 형식, Swagger·헬스체크 접근 |
 | `SecurityRequireLoginTest` | 비로그인 `401 AUTH_REQUIRED`, 만료 토큰 `401 TOKEN_EXPIRED`, 위조·refresh 토큰 거부, 로그아웃은 로그인 필요 |
 | `AuthFlowTest` | 이메일 인증(코드 틀림·만료·재발송 제한·토큰 1회 사용) → 가입(모두 PENDING·관리자 불가·사업자번호 형식) → 승인 → 로그인 → 내 정보 → 재발급(쓴 토큰 폐기) → 로그아웃, 시연 계정 seed |
-| `EquipmentApiTest` | 장비 목록·검색(q·지역·기관·유형·외부이용·MOCK 필터, 정렬)·상세(REAL 먼저), 시험유형 목록·시험 정보 안내, 기관 목록·상세, BE-C용 `EquipmentQueryService` (seed 실제 값으로 검증) |
-| `AdminUserApprovalTest` | 관리자 회원 목록(필터·정렬·페이지), 승인(조직도 승인)·거절(로그인 시 사유 표시), 상태 오류 409, 권한 403·404 |
+| `EquipmentApiTest` | 장비 목록·검색(q·지역·기관·유형·외부이용·MOCK 필터, 정렬)·상세(REAL 먼저), 유사·중복·비교, 시험유형 목록·시험 정보 안내, 기관 목록·상세, BE-C용 `EquipmentQueryService` (seed 실제 값으로 검증) |
+| `AdminUserApprovalTest` | 관리자 회원 목록(필터·정렬·페이지), 승인(조직도 승인)·거절(로그인 시 사유 표시)·정지/해제(재발급 차단), 상태 오류 409, 권한 403·404 |
+| `EquipmentManageTest` | 기관 장비 등록(ASTRA-EQ 외부 id)·수정·REAL 사양 교체(MOCK 유지)·시험유형·확인·비활성화·변경 이력, 갱신 필요 표시, 소유 기관 403, 관리자 소속 변경 |
+| `AdminOrganizationTest` | 관리자 조직 목록(필터·정렬)·기관 직접 등록·승인·수정, 이름 중복 409, 권한 403 |
 | `AccessGuardTest` | 권한 체크 유틸: ADMIN 마스터, 기관은 소속 기관만, 기업은 본인 데이터만 |
 
 ---
@@ -805,7 +807,8 @@ public ApiResponse<RequestDetail> detail(@AuthenticationPrincipal CurrentUser us
 - ✅ 회원가입·로그인·JWT 인증·권한 체크(`AccessGuard`)·시연 계정 (BE-A). `/auth/**` 외 API는 로그인 필요
 - ✅ 가입 이메일 인증(6자리 코드) + 기업·기관 모두 관리자 승인 후 이용, 관리자 회원 목록·승인·거절 (BE-A)
 - ✅ 장비 목록·검색·상세, 시험유형 목록·시험 정보 안내, 기관 목록·상세, 매칭용 `EquipmentQueryService` 구현 (BE-A)
-- ⏳ 장비 비교·유사 장비(P1), 기관 장비 관리, 대시보드, 자연어 검색 (BE-A)
+- ✅ 기관 장비 관리(등록·수정·사양·시험유형·비활성화·확인·변경 이력), 유사·중복 장비·비교, 관리자 회원 정지·조직 관리·장비 이관 (BE-A)
+- ⏳ 대시보드, 자연어 검색 (BE-A)
 
 ---
 
