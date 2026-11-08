@@ -10,7 +10,7 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 | 2 | 장비 목록·검색·상세, 시험유형, 기관, EquipmentQueryService | ✅ | PR #5 |
 | 3 | 기관 장비 관리, 유사·중복·비교, 관리자 정지·조직 관리·장비 이관 | ✅ | PR #6 (2026-11-08) |
 | 4 | 대시보드, 자연어 검색, 90일 경과 장비 알림 | ✅ | push 완료 (PR 대기) |
-| 5 | 연동·배포 준비: CORS · Dockerfile · 운영 compose · 운영 설정 · 시연 점검표 (배포는 아직) | ✅ | CORS push 완료, 나머지 커밋 전 |
+| 5 | 연동·배포 준비: CORS · Dockerfile · 운영 compose · 운영 설정 · 시연 점검표 (배포는 아직) | ✅ | 커밋 완료 (CORS 는 push 됨, 나머지는 push 전) |
 | 6주차 | 배포, 통합 테스트, 시연 시나리오 확인 | ⏳ | |
 
 ---
@@ -39,7 +39,9 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 
 **남은 것**: 실제 VM 배포 (VM 정해지면), BE-B·BE-C 단계 점검표 채우기·통합 테스트
 
-**바뀐 파일 (커밋 전)**: `Dockerfile`(새), `.dockerignore`(새), `compose.prod.yaml`(새), `src/main/resources/application-prod.yml`, `src/main/java/kr/astra/global/mail/MailConfig.java`, `.env.example`, `src/test/java/kr/astra/DemoScenarioTest.java`(새), `docs/demo-scenario.md`(새), `README.md`, `docs/team-guide.md`, 이 파일
+**커밋**: `eba9e29` `b88ae2a` `fd61d1b` · 계획서 사이트에 "시연 시나리오" 탭 추가 (22번째 버전)
+
+**바뀐 파일**: `Dockerfile`(새), `.dockerignore`(새), `compose.prod.yaml`(새), `src/main/resources/application-prod.yml`, `src/main/java/kr/astra/global/mail/MailConfig.java`, `.env.example`, `src/test/java/kr/astra/DemoScenarioTest.java`(새), `docs/demo-scenario.md`(새), `README.md`, `docs/team-guide.md`, 이 파일
 
 ---
 
