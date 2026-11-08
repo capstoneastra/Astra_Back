@@ -127,7 +127,7 @@ flowchart LR
 | 15 | 가상 시뮬레이션 (시연용) | `simulation` | BE-B |
 | - | 회원가입·로그인·권한, 관리자 승인, 기관 장비 관리 | `auth`, `user`, `organization`, `admin`, `equipment` | BE-A |
 
-API 90개의 상세 명세와 우선순위(P0 시연 필수 / P1 / P2)는 [`docs/api-spec.md`](docs/api-spec.md), 담당자별 할 일은 [`docs/team-guide.md`](docs/team-guide.md) 5번에 있습니다.
+API 92개의 상세 명세와 우선순위(P0 시연 필수 / P1 / P2)는 [`docs/api-spec.md`](docs/api-spec.md), 담당자별 할 일은 [`docs/team-guide.md`](docs/team-guide.md) 5번에 있습니다.
 
 ---
 
@@ -729,6 +729,23 @@ cp .env.example .env        # 필요한 값 채우기 (DB 는 기본값 그대�
 - **FE 연동(CORS)**: 브라우저에서 이 서버를 부를 수 있는 프론트 주소는 `.env`의 `CORS_ALLOWED_ORIGINS`입니다. 비워 두면 `http://localhost:5173`(Vite 기본)이고, 다른 주소는 쉼표로 추가합니다(`http://localhost:*` 패턴 가능). 브라우저 콘솔에 "blocked by CORS policy"가 뜨면 이 값을 확인하세요.
 - `.env`의 `MAIL_HOST`가 비어 있으면 가입 인증 메일을 보내지 않고 **서버 로그에 인증 코드**를 출력합니다 (`[메일 미발송: 로그 출력]`). 실제 발송은 `.env.example`의 SMTP 항목을 채웁니다. 시연 날에는 `MAIL_LOG_CODE=true`로 실행하면 메일을 보낸 뒤 서버 로그에도 `[인증 코드]`가 남아, 일회용 메일이 늦을 때 쓸 수 있습니다 (평소에는 끄기).
 
+### 시연 서버 실행 (Docker)
+
+시연 서버(VM)나 다른 PC에서 DB와 앱을 한 번에 띄울 때 씁니다. 로컬 개발은 위의 `./gradlew bootRun`을 그대로 씁니다.
+
+```bash
+cp .env.example .env      # DB_PASSWORD, JWT_SECRET(32자 이상) 꼭 채우기. MAIL_*, CORS_ALLOWED_ORIGINS 는 필요에 따라
+docker compose -f compose.prod.yaml up -d --build     # 처음 또는 코드가 바뀌었을 때
+docker compose -f compose.prod.yaml logs -f app       # 앱 로그
+docker compose -f compose.prod.yaml down              # 중지 (DB 데이터 유지, 지우려면 -v)
+```
+
+- `Dockerfile`: JDK 21로 jar를 만들고 JRE 21 이미지에서 root가 아닌 사용자로 실행합니다. 테스트는 CI가 맡아서 이미지 빌드 때는 건너뜁니다.
+- `compose.prod.yaml`: PostgreSQL 16(포트를 밖으로 열지 않음) + 앱(`prod` 프로필, 헬스체크). `DB_PASSWORD`·`JWT_SECRET`이 없으면 실행되지 않습니다. `.env`의 `DB_URL`은 로컬용이라 compose가 `db` 서비스 주소로 바꿔 넣습니다.
+- 운영 설정(`application-prod.yml`): 헬스체크 세부 정보 숨김, 인증 코드 로그 끔, Swagger는 기본으로 켜 둠(외부 공개 시 `SWAGGER_ENABLED=false`).
+- `.env`에서 true/false 값(`SWAGGER_ENABLED`, `MAIL_LOG_CODE`)은 빈 값으로 두지 마세요. 빈 값이면 서버가 뜨지 않습니다.
+- 시연 순서와 점검표: [`docs/demo-scenario.md`](docs/demo-scenario.md)
+
 ### 시연 계정
 
 `/auth/**`(로그아웃 제외), Swagger, 헬스체크 외에는 모두 로그인이 필요합니다. 비밀번호는 저장소에 없고 팀 채팅으로 공유합니다.
@@ -761,6 +778,7 @@ Testcontainers가 테스트 전용 PostgreSQL 16을 띄워 실제 DB로 검증�
 | `AdminUserApprovalTest` | 관리자 회원 목록(필터·정렬·페이지), 승인(조직도 승인)·거절(로그인 시 사유 표시)·정지/해제(재발급 차단), 상태 오류 409, 권한 403·404 |
 | `EquipmentManageTest` | 기관 장비 등록(ASTRA-EQ 외부 id)·수정·REAL 사양 교체(MOCK 유지)·시험유형·확인·비활성화·변경 이력, 갱신 필요 표시, 소유 기관 403, 관리자 소속 변경 |
 | `CorsTest`, `CorsConfigTest` | 프론트 주소 사전 요청(preflight) 허용·다른 주소 거절, 401 응답에도 CORS 헤더, `CORS_ALLOWED_ORIGINS` 해석(쉼표·패턴·빈 값이면 기본 주소) |
+| `DemoScenarioTest` | 시연 시나리오(위성 전장품 15kg, 20~2000Hz 진동시험) 중 BE-A 단계를 순서대로: 가입 → 승인 → 검색 → 상세·비교 → 기관 장비 확인 → 대시보드 |
 | `DashboardSearchApiTest` | 대시보드 장비 통계·역할별 요약(의뢰·상담 미연결 시 0·빈 목록), 시연 문장 자연어 검색 해석(진동시험·15kg·20~2000Hz)·지역 필터 |
 | `AdminOrganizationTest` | 관리자 조직 목록(필터·정렬)·기관 직접 등록·승인·수정, 이름 중복 409, 권한 403 |
 | `AccessGuardTest` | 권한 체크 유틸: ADMIN 마스터, 기관은 소속 기관만, 기업은 본인 데이터만 |
@@ -813,7 +831,8 @@ public ApiResponse<RequestDetail> detail(@AuthenticationPrincipal CurrentUser us
 - ✅ 기관 장비 관리(등록·수정·사양·시험유형·비활성화·확인·변경 이력), 유사·중복 장비·비교, 관리자 회원 정지·조직 관리·장비 이관 (BE-A)
 - ✅ 대시보드(장비 통계·역할별 요약), 자연어 검색(키워드 해석, BE-C 추출기 연결 준비), 90일 경과 장비 알림 (BE-A). 의뢰·상담 칸은 BE-B·BE-C 구현 후 자동 반영
 - ✅ CORS 설정 (프론트 주소는 `CORS_ALLOWED_ORIGINS`, 기본 `http://localhost:5173`) (BE-A)
-- ⏳ Dockerfile·운영용 compose, 시연 시나리오 점검, 배포(VM), 통합 테스트 (BE-A, 6주차)
+- ✅ Dockerfile·운영용 compose(`compose.prod.yaml`)·운영 설정, 시연 시나리오 점검표(`docs/demo-scenario.md`) (BE-A). 로컬에서 운영 구성 실행 확인
+- ⏳ 배포(VM), 통합 테스트(BE-B·BE-C 단계 연결) (6주차)
 
 ---
 
@@ -836,7 +855,9 @@ public ApiResponse<RequestDetail> detail(@AuthenticationPrincipal CurrentUser us
 
 | 문서 | 내용 |
 |---|---|
-| [`docs/api-spec.md`](docs/api-spec.md) | API 명세 90개, 에러 코드, 매칭 규칙, 의뢰 상태 전이표 |
+| [`docs/api-spec.md`](docs/api-spec.md) | API 명세 92개, 에러 코드, 매칭 규칙, 의뢰 상태 전이표 |
+| [`docs/demo-scenario.md`](docs/demo-scenario.md) | 시연 시나리오 점검표 (단계별 담당·API·기대 결과·확인) |
+| [`docs/work-log-be-a.md`](docs/work-log-be-a.md) | BE-A 작업 기록 |
 | [`docs/team-guide.md`](docs/team-guide.md) | 기술 스택, 협업 규칙, 담당자별 API·주차별 계획 |
 | [`docs/design/schema.sql`](docs/design/schema.sql) | 전체 테이블 설계 (28개) |
 | [`docs/design/erd.dbml`](docs/design/erd.dbml) | ERD (dbdiagram.io에 붙여넣기) |

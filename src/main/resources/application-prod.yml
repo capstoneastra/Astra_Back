@@ -1,10 +1,31 @@
-# 시연 서버(운영) 설정: SPRING_PROFILES_ACTIVE=prod 로 실행
+# 시연 서버(운영) 설정: SPRING_PROFILES_ACTIVE=prod 로 실행 (compose.prod.yaml 이 넣어 줌)
 # DB 접속 정보는 환경변수 DB_URL / DB_USERNAME / DB_PASSWORD 로 넣습니다.
+# JWT_SECRET 이 없거나 32바이트보다 짧으면 서버가 뜨지 않습니다 (JwtProvider).
 spring:
   docker:
     compose:
       enabled: false
 
+server:
+  # 종료 신호를 받으면 처리 중인 요청을 마치고 내려감
+  shutdown: graceful
+
+# Swagger: 시연·FE 연동 확인용으로 기본은 켜 둠. 외부에 공개할 때는 SWAGGER_ENABLED=false
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:true}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:true}
+
+management:
+  endpoint:
+    health:
+      # 헬스체크는 UP/DOWN 만 (DB 정보 등 세부 내용은 숨김)
+      show-details: never
+
 astra:
   security:
     require-login: true
+  mail:
+    # 운영에서는 인증 코드를 로그에 남기지 않음. 시연 당일만 MAIL_LOG_CODE=true
+    log-code: ${MAIL_LOG_CODE:false}

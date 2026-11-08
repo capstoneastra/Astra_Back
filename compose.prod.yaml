@@ -1,0 +1,56 @@
+# 시연 서버(운영)용: PostgreSQL 16 + 백엔드 앱
+#   docker compose -f compose.prod.yaml up -d --build      # 실행 (처음 또는 코드가 바뀌었을 때)
+#   docker compose -f compose.prod.yaml logs -f app         # 앱 로그
+#   docker compose -f compose.prod.yaml down                # 중지 (DB 데이터는 유지)
+#
+# 같은 폴더의 .env 를 읽습니다 (.env.example 참고). 필수: DB_PASSWORD, JWT_SECRET(32자 이상)
+# 로컬 개발은 계속 compose.yaml + ./gradlew bootRun 을 씁니다 (이 파일은 시연 서버용).
+
+services:
+  db:
+    image: 'postgres:16'
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: astra
+      POSTGRES_USER: ${DB_USERNAME:-astra}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 를 .env 에 넣어 주세요}
+      TZ: Asia/Seoul
+    volumes:
+      - astra-prod-db-data:/var/lib/postgresql/data
+    # DB 포트는 밖으로 열지 않음 (앱만 내부 네트워크로 접속)
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: .
+    image: astra-back:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    # MAIL_*, CORS_ALLOWED_ORIGINS, ANTHROPIC_API_KEY 등 나머지 값은 .env 에서 그대로
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # .env 의 DB_URL(localhost)은 로컬용이라 컨테이너 안에서는 db 서비스로 덮어씀
+      DB_URL: jdbc:postgresql://db:5432/astra
+      DB_USERNAME: ${DB_USERNAME:-astra}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 를 .env 에 넣어 주세요}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET(32자 이상)을 .env 에 넣어 주세요}
+      TZ: Asia/Seoul
+    ports:
+      - '${APP_PORT:-8080}:8080'
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fs http://localhost:8080/actuator/health || exit 1']
+      interval: 10s
+      timeout: 3s
+      start_period: 60s
+      retries: 5
+
+volumes:
+  astra-prod-db-data:
