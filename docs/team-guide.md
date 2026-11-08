@@ -208,6 +208,8 @@ chore: Flyway 설정 추가
 | BE-C | BE-B | `RequirementService.getSnapshot(requirementId)` (의뢰서에 조건 반영) |
 | BE-B | BE-C | `TestRequestService.createDraft(userId, equipmentId, requirementId, content, aiGenerated)` (AI 초안·자동 추진) |
 | BE-B | 전원 | `NotificationService.notify(userId, type, title, linkPath)` |
+| BE-B | BE-A | `RequestDashboardQuery` (대시보드 의뢰·예약 집계: 상태별 수, 처리할 의뢰, 검토 대기, 다가오는 예약). 인터페이스는 BE-A가 `request/service`에 만들어 둠, 구현하면 대시보드에 자동 반영 |
+| BE-C | BE-A | `ChatSessionQuery.findRecent(userId, limit)` (대시보드 최근 상담), `ConditionExtractor.extract(text)` (`/search` 문장 → 시험유형·조건). 인터페이스는 BE-A가 만들어 둠, 구현 전에는 빈 목록·키워드 해석으로 동작 |
 
 > 인터페이스와 DTO만 먼저 만들어 두고 구현은 각자 채웁니다. 그래야 서로 기다리지 않습니다.
 

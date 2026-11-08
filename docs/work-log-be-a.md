@@ -8,9 +8,42 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 | 1 | 인증·권한 (회원가입·로그인·JWT·AccessGuard·시연 계정) | ✅ | PR #5 (2026-11-07) |
 | 1-2 | 가입 이메일 인증 + 기업·기관 모두 관리자 승인 | ✅ | PR #5 |
 | 2 | 장비 목록·검색·상세, 시험유형, 기관, EquipmentQueryService | ✅ | PR #5 |
-| 3 | 기관 장비 관리, 유사·중복·비교, 관리자 정지·조직 관리·장비 이관 | ✅ | 아직 (`feature/be-a`) |
-| 4 | 대시보드, 자연어 검색 | ⏳ | |
+| 3 | 기관 장비 관리, 유사·중복·비교, 관리자 정지·조직 관리·장비 이관 | ✅ | PR #6 (2026-11-08) |
+| 4 | 대시보드, 자연어 검색, 90일 경과 장비 알림 | ✅ | 아직 (커밋 전) |
 | 6주차 | 배포, 통합 테스트, 시연 시나리오 확인 | ⏳ | |
+
+---
+
+## 2026-11-08 · 4번 덩어리: 대시보드 · 자연어 검색 · 90일 알림
+
+**API**
+- `GET /dashboard/equipment-stats`: 전체 수, 지역별(가나다순)·장비 유형별·시험유형별(15개) 장비 수, 기관별 보유·기관 확인 비율
+- `GET /dashboard/summary` (역할별)
+  - 기업: 의뢰 상태별 수(10개 항상), 처리할 의뢰, 최근 상담, 장비 요약
+  - 기관 담당자: 소속 기관, 접수함 상태별 수, 검토 대기, 다가오는 예약, 갱신 필요 장비 수(기관 확인 전·90일 경과)
+  - 관리자: 승인 대기 회원·기관 수, 전체 의뢰 상태별 수, 기관별 장비 확인 비율
+  - 의뢰·예약(BE-B)·상담(BE-C) 칸은 구현 전까지 0·빈 목록 + `dataAvailable=false`
+- `GET /search?q=`: 문장 → 시험유형·조건·지역 해석 + 장비 (최대 20대). `interpreter` = KEYWORD(지금) / AI(BE-C 추출기 연결 시)
+
+**다른 담당자용 인터페이스 (계약 우선, 구현은 그쪽에서)**
+- BE-B: `request/service/RequestDashboardQuery` (+ `RequestActionItem`, `UpcomingReservationItem`)
+- BE-C: `chat/service/ChatSessionQuery` (+ `ChatSessionSummary`), `requirement/service/ConditionExtractor` (+ `ExtractedQuery`)
+- BE-A 는 `ObjectProvider` 로 받아서 구현이 없으면 빈 값·키워드 해석으로 동작. 구현 클래스에 `@Service` 만 붙이면 자동 연결
+
+**그 외**
+- `EquipmentUpdateReminder`: 매일 오전 9시(한국 시간) 마지막 갱신이 막 90일을 넘긴 장비의 담당자에게 `EQUIPMENT_UPDATE_REQUIRED` (장비마다 한 번, BE-B 알림 구현이 있을 때만). `astra.equipment.update-reminder.enabled` 로 끔
+- `global/config/SchedulingConfig` (`@EnableScheduling`) 추가
+- 키워드 해석: 시험유형 이름·키워드 → 시험유형, "20~2000Hz" → 단위 같은 RANGE 조건, "15kg" → 단위 같은 NUMBER 조건, 결과는 조건 규칙 표시 순서
+
+**확인**
+- 테스트 87개 통과 (새로 9개: `DashboardSearchApiTest` 7, `EquipmentUpdateReminderTest` 2), 두 번 실행
+- 서버를 띄워 HTTP 확인: 장비 통계(71대, 진주 36), 역할별 요약 3종, 시연 문장 검색이 api-spec 예시와 같음 (sample_mass 15kg, frequency 20~2000Hz, 진동시험 장비 4대)
+
+**남은 것·주의**
+- BE-B·BE-C 가 인터페이스를 구현해야 의뢰·상담 칸과 AI 해석이 채워짐 (구현 후 응답 형식은 api-spec §10 그대로)
+- 키워드 해석은 단위가 정확히 같을 때만 조건으로 잡음 (kHz→Hz 같은 환산 없음). AI 추출기로 바꾸면 해결
+
+**바뀐 파일 (커밋 전)**: `chat/`, `request/`, `requirement/` 인터페이스·DTO, `dashboard/`, `equipment/`(검색·알림·집계), `global/config/SchedulingConfig`, `user`·`organization` 서비스(집계 메서드), `application.yml`, 테스트 2개, `README.md`, `docs/api-spec.md`, `docs/team-guide.md`, 이 파일
 
 ---
 

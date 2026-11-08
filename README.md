@@ -759,6 +759,7 @@ Testcontainers가 테스트 전용 PostgreSQL 16을 띄워 실제 DB로 검증�
 | `EquipmentApiTest` | 장비 목록·검색(q·지역·기관·유형·외부이용·MOCK 필터, 정렬)·상세(REAL 먼저), 유사·중복·비교, 시험유형 목록·시험 정보 안내, 기관 목록·상세, BE-C용 `EquipmentQueryService` (seed 실제 값으로 검증) |
 | `AdminUserApprovalTest` | 관리자 회원 목록(필터·정렬·페이지), 승인(조직도 승인)·거절(로그인 시 사유 표시)·정지/해제(재발급 차단), 상태 오류 409, 권한 403·404 |
 | `EquipmentManageTest` | 기관 장비 등록(ASTRA-EQ 외부 id)·수정·REAL 사양 교체(MOCK 유지)·시험유형·확인·비활성화·변경 이력, 갱신 필요 표시, 소유 기관 403, 관리자 소속 변경 |
+| `DashboardSearchApiTest` | 대시보드 장비 통계·역할별 요약(의뢰·상담 미연결 시 0·빈 목록), 시연 문장 자연어 검색 해석(진동시험·15kg·20~2000Hz)·지역 필터 |
 | `AdminOrganizationTest` | 관리자 조직 목록(필터·정렬)·기관 직접 등록·승인·수정, 이름 중복 409, 권한 403 |
 | `AccessGuardTest` | 권한 체크 유틸: ADMIN 마스터, 기관은 소속 기관만, 기업은 본인 데이터만 |
 
@@ -808,7 +809,8 @@ public ApiResponse<RequestDetail> detail(@AuthenticationPrincipal CurrentUser us
 - ✅ 가입 이메일 인증(6자리 코드) + 기업·기관 모두 관리자 승인 후 이용, 관리자 회원 목록·승인·거절 (BE-A)
 - ✅ 장비 목록·검색·상세, 시험유형 목록·시험 정보 안내, 기관 목록·상세, 매칭용 `EquipmentQueryService` 구현 (BE-A)
 - ✅ 기관 장비 관리(등록·수정·사양·시험유형·비활성화·확인·변경 이력), 유사·중복 장비·비교, 관리자 회원 정지·조직 관리·장비 이관 (BE-A)
-- ⏳ 대시보드, 자연어 검색 (BE-A)
+- ✅ 대시보드(장비 통계·역할별 요약), 자연어 검색(키워드 해석, BE-C 추출기 연결 준비), 90일 경과 장비 알림 (BE-A). 의뢰·상담 칸은 BE-B·BE-C 구현 후 자동 반영
+- ⏳ 배포(VM + docker compose), 통합 테스트, 시연 시나리오 확인 (BE-A, 6주차)
 
 ---
 
