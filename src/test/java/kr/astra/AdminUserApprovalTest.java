@@ -141,6 +141,36 @@ class AdminUserApprovalTest {
     }
 
     @Test
+    void 정지하면_로그인과_토큰_재발급이_막히고_해제하면_다시_된다() throws Exception {
+        String email = uniqueEmail();
+        long userId = api.signupCompany(email, "테스트 기업 " + UUID.randomUUID(), "666-77-88888")
+                .data().path("userId").asLong();
+        // 승인 전(PENDING)에는 정지 불가
+        assertThat(api.send("PATCH", "/api/v1/admin/users/" + userId + "/status", "{ \"status\": \"SUSPENDED\" }",
+                adminToken()).code()).isEqualTo("USER_INVALID_STATUS");
+        api.post("/api/v1/admin/users/" + userId + "/approve", null, adminToken());
+        String refresh = api.login(email).data().path("refreshToken").asString();
+
+        Res suspended = api.send("PATCH", "/api/v1/admin/users/" + userId + "/status", "{ \"status\": \"SUSPENDED\" }",
+                adminToken());
+        assertThat(suspended.status()).isEqualTo(200);
+        assertThat(suspended.data().path("status").asString()).isEqualTo("SUSPENDED");
+        assertThat(api.login(email).details().path("status").asString()).isEqualTo("SUSPENDED");
+        assertThat(api.post("/api/v1/auth/refresh", "{ \"refreshToken\": \"%s\" }".formatted(refresh), null).status())
+                .isEqualTo(401);
+
+        assertThat(api.send("PATCH", "/api/v1/admin/users/" + userId + "/status", "{ \"status\": \"ACTIVE\" }",
+                adminToken()).data().path("status").asString()).isEqualTo("ACTIVE");
+        assertThat(api.login(email).status()).isEqualTo(200);
+
+        // 관리자 계정, 허용 안 된 상태값
+        assertThat(api.send("PATCH", "/api/v1/admin/users/" + adminId() + "/status", "{ \"status\": \"SUSPENDED\" }",
+                adminToken()).code()).isEqualTo("USER_INVALID_STATUS");
+        assertThat(api.send("PATCH", "/api/v1/admin/users/" + userId + "/status", "{ \"status\": \"PENDING\" }",
+                adminToken()).code()).isEqualTo("VALIDATION_FAILED");
+    }
+
+    @Test
     void 관리자가_아니면_403_없는_회원이면_404() throws Exception {
         long companyUserId = jdbc.queryForObject("SELECT id FROM users WHERE email = 'company@astra.demo'", Long.class);
         String companyToken = jwtProvider.createAccessToken(companyUserId, UserRole.COMPANY_USER, null);
