@@ -80,7 +80,7 @@ class DashboardSearchApiTest {
         assertThat(d.path("recentChats").size()).isZero();
         assertThat(d.path("equipmentStats").path("total").asLong()).isEqualTo(71);
         assertThat(d.path("equipmentStats").path("byRegion").path("진주").asLong()).isEqualTo(36);
-        assertThat(d.path("dataAvailable").path("requests").asBoolean()).isFalse();
+        assertThat(d.path("dataAvailable").path("requests").asBoolean()).isTrue(); // BE-B RequestDashboardQuery 연결됨
         assertThat(d.path("dataAvailable").path("chats").asBoolean()).isTrue();
     }
 

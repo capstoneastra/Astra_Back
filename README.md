@@ -797,9 +797,10 @@ Testcontainers가 테스트 전용 PostgreSQL 16을 띄워 실제 DB로 검증�
 | `SseAsyncDispatchTest` | 로그인이 필요한 SSE(스트리밍) 응답이 끝까지 전달되는지 (비동기 재요청을 보안 설정이 막지 않는지), 비로그인 SSE 는 401 |
 | `CorsTest`, `CorsConfigTest` | 프론트 주소 사전 요청(preflight) 허용·다른 주소 거절, 401 응답에도 CORS 헤더, `CORS_ALLOWED_ORIGINS` 해석(쉼표·패턴·빈 값이면 기본 주소) |
 | `DemoScenarioTest` | 시연 시나리오(위성 전장품 15kg, 20~2000Hz 진동시험) 중 BE-A 단계를 순서대로: 가입 → 승인 → 검색 → 상세·비교 → 기관 장비 확인 → 대시보드 |
-| `DashboardSearchApiTest` | 대시보드 장비 통계·역할별 요약(의뢰·상담 미연결 시 0·빈 목록), 시연 문장 자연어 검색 해석(진동시험·15kg·20~2000Hz)·지역 필터 |
+| `DashboardSearchApiTest` | 대시보드 장비 통계·역할별 요약(의뢰 0건일 때 0·빈 목록, BE-B 연결 여부 `dataAvailable`), 시연 문장 자연어 검색 해석(진동시험·15kg·20~2000Hz)·지역 필터 |
 | `AdminOrganizationTest` | 관리자 조직 목록(필터·정렬)·기관 직접 등록·승인·수정, 이름 중복 409, 권한 403 |
 | `AccessGuardTest` | 권한 체크 유틸: ADMIN 마스터, 기관은 소속 기관만, 기업은 본인 데이터만 |
+| `RequestWorkflowTest` | 시연 11~16단계 (BE-B): 의뢰 생성·작업본 저장(version 충돌 409)·제출 → 기관 접수함·대시보드 → 검토·보완 요청(중복 409) → 보완 제출(필수 항목 누락 400, 제출본 2번·diff) → 통과 → 일정 제안·확정(중복 확정·시간 겹침 409, 맞닿는 시간 허용) → 상태 이력·완료, 취소 시 제안 정리, 알림 읽음, SIM-0048 가상 시뮬레이션 |
 
 ---
 
@@ -848,6 +849,7 @@ public ApiResponse<RequestDetail> detail(@AuthenticationPrincipal CurrentUser us
 - ✅ 장비 목록·검색·상세, 시험유형 목록·시험 정보 안내, 기관 목록·상세, 매칭용 `EquipmentQueryService` 구현 (BE-A)
 - ✅ 기관 장비 관리(등록·수정·사양·시험유형·비활성화·확인·변경 이력), 유사·중복 장비·비교, 관리자 회원 정지·조직 관리·장비 이관 (BE-A)
 - ✅ 대시보드(장비 통계·역할별 요약), 자연어 검색(키워드 해석, BE-C 추출기 연결 준비), 90일 경과 장비 알림 (BE-A). 의뢰·상담 칸은 BE-B·BE-C 구현 후 자동 반영
+- ✅ 시험 의뢰 상태머신(상태 전이표 §11, 상태 갱신·이력·알림 한 트랜잭션)·작성·제출·취소·제출본 이력/diff, 기관 검토·보완 요청·보완 제출·통과·반려·완료, 예약 제안·대안·확정·취소(중복 예약 이중 방어)·장비 달력, 알림, 가상 시뮬레이션(계산형 9종·규칙형 4종, DEMO 경고) (BE-B). `TestRequestService`·`NotificationService`·`RequestDashboardQuery` 구현 → 대시보드 의뢰 칸·가입 승인 알림·장비 갱신 알림 동작. 첨부파일(P2)은 저장소 결정 후
 - ✅ CORS 설정 (프론트 주소는 `CORS_ALLOWED_ORIGINS`, 기본 `http://localhost:5173`) (BE-A)
 - ✅ Dockerfile·운영용 compose(`compose.prod.yaml`)·운영 설정, 시연 시나리오 점검표(`docs/demo-scenario.md`) (BE-A). 로컬에서 운영 구성 실행 확인
 - ⏳ 배포(VM), 통합 테스트(BE-B·BE-C 단계 연결) (6주차)
@@ -876,6 +878,7 @@ public ApiResponse<RequestDetail> detail(@AuthenticationPrincipal CurrentUser us
 | [`docs/api-spec.md`](docs/api-spec.md) | API 명세 92개, 에러 코드, 매칭 규칙, 의뢰 상태 전이표 |
 | [`docs/demo-scenario.md`](docs/demo-scenario.md) | 시연 시나리오 점검표 (단계별 담당·API·기대 결과·확인) |
 | [`docs/work-log-be-a.md`](docs/work-log-be-a.md) | BE-A 작업 기록 |
+| [`docs/work-log-be-b.md`](docs/work-log-be-b.md) | BE-B 작업 기록 (구조, 다른 담당자에게 알릴 것, 정해야 할 것) |
 | [`docs/team-guide.md`](docs/team-guide.md) | 기술 스택, 협업 규칙, 담당자별 API·주차별 계획 |
 | [`docs/design/schema.sql`](docs/design/schema.sql) | 전체 테이블 설계 (28개) |
 | [`docs/design/erd.dbml`](docs/design/erd.dbml) | ERD (dbdiagram.io에 붙여넣기) |
