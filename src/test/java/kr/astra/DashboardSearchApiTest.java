@@ -20,7 +20,7 @@ import tools.jackson.databind.JsonNode;
 
 /**
  * 대시보드 (api-spec §10) 와 자연어 검색 (§2 GET /search). 장비를 바꾸지 않는 조회 테스트라
- * EquipmentApiTest 와 같은 DB(seed 그대로)를 씁니다. 의뢰(BE-B)·상담(BE-C) 구현은 아직 없어 0·빈 목록이어야 합니다.
+ * EquipmentApiTest 와 같은 DB(seed 그대로)를 씁니다. 의뢰(BE-B)는 미연결이며 상담(BE-C)은 연결되어 있지만 seed 상담은 없습니다.
  */
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -81,7 +81,7 @@ class DashboardSearchApiTest {
         assertThat(d.path("equipmentStats").path("total").asLong()).isEqualTo(71);
         assertThat(d.path("equipmentStats").path("byRegion").path("진주").asLong()).isEqualTo(36);
         assertThat(d.path("dataAvailable").path("requests").asBoolean()).isFalse();
-        assertThat(d.path("dataAvailable").path("chats").asBoolean()).isFalse();
+        assertThat(d.path("dataAvailable").path("chats").asBoolean()).isTrue();
     }
 
     @Test
