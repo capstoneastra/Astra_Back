@@ -42,6 +42,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final OrganizationService organizationService;
     private final PasswordEncoder passwordEncoder;
+    private final UserAccountStatusCache statusCache;
 
     /** 이메일은 앞뒤 공백을 지우고 소문자로 저장·비교합니다. */
     public static String normalizeEmail(String email) {
@@ -147,6 +148,7 @@ public class UserService {
         User user = findPendingUser(userId);
         user.approve(adminId, OffsetDateTime.now());
         userRepository.flush();
+        statusCache.evictAfterCommit(userId);
         return UserAdminView.from(user);
     }
 
@@ -156,6 +158,7 @@ public class UserService {
         User user = findPendingUser(userId);
         user.reject(reason.trim());
         userRepository.flush();
+        statusCache.evictAfterCommit(userId);
         return UserAdminView.from(user);
     }
 
@@ -185,6 +188,7 @@ public class UserService {
         }
         user.changeStatus(status);
         userRepository.flush();
+        statusCache.evictAfterCommit(userId); // 정지는 다음 요청부터 바로 막힘
         return UserAdminView.from(user);
     }
 

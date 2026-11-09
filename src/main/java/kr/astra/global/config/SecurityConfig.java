@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import kr.astra.global.exception.ErrorCode;
+import kr.astra.global.security.AccountStatusChecker;
 import kr.astra.global.security.JwtAuthenticationFilter;
 import kr.astra.global.security.JwtProvider;
 import org.springframework.beans.factory.annotation.Value;
@@ -56,14 +57,15 @@ public class SecurityConfig {
     private boolean requireLogin;
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtProvider jwtProvider) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtProvider jwtProvider,
+                                                   AccountStatusChecker accountStatusChecker) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults()) // CorsConfig 의 corsConfigurationSource 사용 (401·403 에도 CORS 헤더)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .addFilterBefore(new JwtAuthenticationFilter(jwtProvider), UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new JwtAuthenticationFilter(jwtProvider, accountStatusChecker), UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> {
                     // SSE(SseEmitter)·비동기 응답이 끝날 때와 오류 페이지로 넘길 때의 내부 재요청(ASYNC·ERROR dispatch)은
                     // JWT 필터가 다시 돌지 않아 비로그인으로 보임 → 막으면 스트림이 중간에 끊김 (응답이 이미 나가는 중이라
@@ -108,7 +110,10 @@ public class SecurityConfig {
         };
     }
 
-    /** 토큰이 만료됐으면 TOKEN_EXPIRED, 그 외(없음·위조·형식 오류)는 AUTH_REQUIRED */
+    /**
+     * 토큰이 만료됐으면 TOKEN_EXPIRED(401), 계정이 정지·거절·승인 대기면 ACCOUNT_NOT_ACTIVE(403),
+     * 그 외(없음·위조·형식 오류·계정 없음)는 AUTH_REQUIRED(401)
+     */
     private static ErrorCode authErrorOf(HttpServletRequest req) {
         return req.getAttribute(JwtAuthenticationFilter.AUTH_ERROR_ATTRIBUTE) instanceof ErrorCode code
                 ? code : ErrorCode.AUTH_REQUIRED;

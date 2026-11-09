@@ -54,8 +54,8 @@ public class AdminUserController {
     }
 
     @Operation(summary = "회원 정지·해제", description = "ACTIVE → SUSPENDED(정지), SUSPENDED → ACTIVE(해제)만 가능. "
-            + "관리자 계정·그 외 상태면 409 USER_INVALID_STATUS. 정지하면 refresh 토큰이 모두 폐기되어 재발급이 바로 막히고, "
-            + "이미 받은 access 토큰은 만료(최대 1시간)까지 유효")
+            + "관리자 계정·그 외 상태면 409 USER_INVALID_STATUS. 정지하면 refresh 토큰이 모두 폐기되고, "
+            + "이미 받은 access 토큰도 다음 요청부터 바로 403 ACCOUNT_NOT_ACTIVE (해제하면 바로 통과)")
     @PatchMapping("/{id}/status")
     public ApiResponse<AdminUserResponse> changeStatus(@AuthenticationPrincipal CurrentUser user,
                                                        @PathVariable Long id,

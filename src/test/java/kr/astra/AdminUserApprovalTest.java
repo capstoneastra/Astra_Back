@@ -171,6 +171,35 @@ class AdminUserApprovalTest {
     }
 
     @Test
+    void 정지하면_이미_받은_access_토큰도_다음_요청부터_바로_막힌다() throws Exception {
+        String email = uniqueEmail();
+        long userId = api.signupCompany(email, "테스트 기업 " + UUID.randomUUID(), "777-88-99999")
+                .data().path("userId").asLong();
+        api.post("/api/v1/admin/users/" + userId + "/approve", null, adminToken());
+        String access = api.login(email).data().path("accessToken").asString();
+        assertThat(api.get("/api/v1/users/me", access).status()).isEqualTo(200); // 상태가 캐시에 들어감
+
+        api.send("PATCH", "/api/v1/admin/users/" + userId + "/status", "{ \"status\": \"SUSPENDED\" }", adminToken());
+        Res blocked = api.get("/api/v1/users/me", access);
+        assertThat(blocked.status()).isEqualTo(403);
+        assertThat(blocked.code()).isEqualTo("ACCOUNT_NOT_ACTIVE");
+        assertThat(api.get("/api/v1/equipment", access).code()).isEqualTo("ACCOUNT_NOT_ACTIVE");
+        // 공개 API(가입용 기관 목록)는 토큰이 붙어 있어도 그대로 쓸 수 있음
+        assertThat(api.get("/api/v1/auth/institutions", access).status()).isEqualTo(200);
+
+        api.send("PATCH", "/api/v1/admin/users/" + userId + "/status", "{ \"status\": \"ACTIVE\" }", adminToken());
+        assertThat(api.get("/api/v1/users/me", access).status()).isEqualTo(200); // 해제도 바로 반영
+    }
+
+    @Test
+    void 계정이_없는_토큰은_401() throws Exception {
+        String ghost = jwtProvider.createAccessToken(987654321L, UserRole.COMPANY_USER, null);
+        Res res = api.get("/api/v1/users/me", ghost);
+        assertThat(res.status()).isEqualTo(401);
+        assertThat(res.code()).isEqualTo("AUTH_REQUIRED");
+    }
+
+    @Test
     void 관리자가_아니면_403_없는_회원이면_404() throws Exception {
         long companyUserId = jdbc.queryForObject("SELECT id FROM users WHERE email = 'company@astra.demo'", Long.class);
         String companyToken = jwtProvider.createAccessToken(companyUserId, UserRole.COMPANY_USER, null);

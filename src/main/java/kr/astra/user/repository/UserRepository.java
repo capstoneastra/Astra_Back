@@ -21,6 +21,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     long countByStatus(UserStatus status);
 
+    /** 계정 상태만 (JWT 필터가 요청마다 확인할 때) */
+    @Query("SELECT u.status FROM User u WHERE u.id = :id")
+    Optional<UserStatus> findStatusById(@Param("id") Long id);
+
     List<User> findAllByOrganizationIdAndRoleAndStatus(Long organizationId, UserRole role, UserStatus status);
 
     boolean existsByOrganizationIdAndStatusIn(Long organizationId, List<UserStatus> statuses);
