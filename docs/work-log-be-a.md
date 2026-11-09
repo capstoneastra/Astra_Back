@@ -9,9 +9,17 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 | 1-2 | 가입 이메일 인증 + 기업·기관 모두 관리자 승인 | ✅ | PR #5 |
 | 2 | 장비 목록·검색·상세, 시험유형, 기관, EquipmentQueryService | ✅ | PR #5 |
 | 3 | 기관 장비 관리, 유사·중복·비교, 관리자 정지·조직 관리·장비 이관 | ✅ | PR #6 (2026-11-08) |
-| 4 | 대시보드, 자연어 검색, 90일 경과 장비 알림 | ✅ | push 완료 (PR 대기) |
-| 5 | 연동·배포 준비: CORS · Dockerfile · 운영 compose · 운영 설정 · 시연 점검표 (배포는 아직) | ✅ | 커밋 완료 (CORS 는 push 됨, 나머지는 push 전) |
-| 6주차 | 배포, 통합 테스트, 시연 시나리오 확인 | ⏳ | |
+| 4 | 대시보드, 자연어 검색, 90일 경과 장비 알림 | ✅ | PR #7 (2026-11-08) |
+| 5 | 연동·배포 준비: CORS(PR #7) · Dockerfile · 운영 compose · 운영 설정 · 시연 점검표 (배포는 아직) | ✅ | PR #7 · PR #8 (2026-11-08) |
+| 통합 1차 | BE-C 병합 후 통합 점검, SSE 끊김 수정 | ✅ | PR #10 (2026-11-09) |
+| 추가 | 비교표 이용 조건(비용·기간), 정지 계정 즉시 차단, 기존 서비스(ZEUS)와의 차이 | ✅ | push 완료 (PR 대기) |
+| 6주차 | 배포, 통합 테스트, 시연 시나리오 확인 | 🔶 진행 중 | 배포는 VM 정해지면, BE-B 구현 대기 |
+
+**지금 남은 것** (2026-11-09 기준)
+- `feature/be-a` → main PR (커밋 3개: 비교표 이용 조건 · 즉시 차단 · 문서)
+- 공인시험(KOLAS)·운용 인력·보안 협의 정보 필드 설계 — 팀과 의논 후 진행 (DB 변경 시 V6)
+- 실제 VM 배포 (VM 정해지면), `POST /admin/equipment/import`(P2)
+- 다른 담당 대기: BE-B 의뢰·예약·알림 구현 (시연 10·11·13~16단계), BE-C 대화 → 시험조건 502·오류 로그 (아래 11-09 통합 점검 참고)
 
 ---
 
@@ -37,7 +45,9 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 - 테스트 188개 통과 (새로 4개: 비교표 이용 조건 2, 즉시 차단 2), BE-C 88개 포함
 - 실제 서버: 비교표 `usage`·`testTypeEstimate`(48 가능, 37 불가), 없는 testType 400 / 정지 직후 같은 토큰 403 (0.07초), 해제 직후 200, 공개 API 200, 계정 없는 토큰 401 (확인용 계정은 원래 상태로 되돌림)
 
-**바뀐 파일 (커밋 전)**: `equipment/dto/EquipmentInputs.java`, `equipment/dto/EquipmentManageResponses.java`, `equipment/service/EquipmentCompareService.java`, `equipment/controller/EquipmentCompareController.java`, `global/security/AccountStatusChecker.java`(새), `global/security/JwtAuthenticationFilter.java`, `global/config/SecurityConfig.java`, `user/service/UserAccountStatusCache.java`(새), `user/service/UserService.java`, `user/repository/UserRepository.java`, `admin/controller/AdminUserController.java`, 테스트 3개(`EquipmentApiTest`, `EquipmentManageTest`, `AdminUserApprovalTest`), `README.md`, `docs/api-spec.md`, 이 파일
+**커밋**: `e627028`(비교표) `be1fa39`(즉시 차단) `406ef9e`(문서) · push 완료, PR 대기
+
+**바뀐 파일**: `equipment/dto/EquipmentInputs.java`, `equipment/dto/EquipmentManageResponses.java`, `equipment/service/EquipmentCompareService.java`, `equipment/controller/EquipmentCompareController.java`, `global/security/AccountStatusChecker.java`(새), `global/security/JwtAuthenticationFilter.java`, `global/config/SecurityConfig.java`, `user/service/UserAccountStatusCache.java`(새), `user/service/UserService.java`, `user/repository/UserRepository.java`, `admin/controller/AdminUserController.java`, 테스트 3개(`EquipmentApiTest`, `EquipmentManageTest`, `AdminUserApprovalTest`), `README.md`, `docs/api-spec.md`, 이 파일
 
 ---
 
@@ -71,7 +81,9 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 2. Gemini 실패 시 HTTP 상태·오류 메시지를 로그에 남기기 (키 제외) — 지금은 원인을 알 수 없음
 3. 503(과부하)은 잠깐 뒤 재시도하거나 다른 모델로 바꾸는 처리 고려, 기본 모델 `gemini-3.8-flash` 는 현재 과부하가 잦음
 
-**바뀐 파일 (커밋 전)**: `src/main/java/kr/astra/global/config/SecurityConfig.java`, `src/test/java/kr/astra/SseAsyncDispatchTest.java`(새), `docs/demo-scenario.md`, `README.md`, 이 파일
+**커밋**: `1cff75f`(SSE 수정) `704f385`(문서) · PR #10 병합
+
+**바뀐 파일**: `src/main/java/kr/astra/global/config/SecurityConfig.java`, `src/test/java/kr/astra/SseAsyncDispatchTest.java`(새), `docs/demo-scenario.md`, `README.md`, 이 파일
 
 **로컬 DB**: 점검하면서 상담 세션·시험조건·매칭 기록이 생김 (`docker compose down -v` 로 초기화 가능)
 
@@ -101,7 +113,7 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 
 **남은 것**: 실제 VM 배포 (VM 정해지면), BE-B·BE-C 단계 점검표 채우기·통합 테스트
 
-**커밋**: `eba9e29` `b88ae2a` `fd61d1b` · 계획서 사이트에 "시연 시나리오" 탭 추가 (22번째 버전)
+**커밋**: `eba9e29` `b88ae2a` `fd61d1b` `65bfee6` · PR #8 병합 · 계획서 사이트에 "시연 시나리오" 탭 추가 (22번째 버전)
 
 **바뀐 파일**: `Dockerfile`(새), `.dockerignore`(새), `compose.prod.yaml`(새), `src/main/resources/application-prod.yml`, `src/main/java/kr/astra/global/mail/MailConfig.java`, `.env.example`, `src/test/java/kr/astra/DemoScenarioTest.java`(새), `docs/demo-scenario.md`(새), `README.md`, `docs/team-guide.md`, 이 파일
 
@@ -132,7 +144,7 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 
 **팀 공지**: FE — 실제 서버 연결 시 기본 허용 주소는 `http://localhost:5173`, 다른 주소면 알려 주거나 서버 `.env` 의 `CORS_ALLOWED_ORIGINS` 에 추가. 쿠키 없이 `Authorization` 헤더만 쓰면 됨
 
-**커밋**: `a6c92da` `7cb3c2e` (push 완료)
+**커밋**: `a6c92da` `7cb3c2e` `82db710` · PR #7 병합
 
 **바뀐 파일**: `src/main/java/kr/astra/global/config/CorsConfig.java`(새), `src/main/java/kr/astra/global/config/SecurityConfig.java`, `src/main/resources/application.yml`, `.env.example`, `src/test/java/kr/astra/CorsTest.java`(새), `src/test/java/kr/astra/global/config/CorsConfigTest.java`(새), `README.md`, `docs/api-spec.md`, `docs/team-guide.md`, 이 파일
 
@@ -165,9 +177,13 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 
 **남은 것·주의**
 - BE-B·BE-C 가 인터페이스를 구현해야 의뢰·상담 칸과 AI 해석이 채워짐 (구현 후 응답 형식은 api-spec §10 그대로)
+  - (2026-11-09 현재) BE-C `ChatSessionQuery` 구현됨 → 최근 상담 연결, `dataAvailable.chats=true`
+  - 아직 구현 없음: BE-B `RequestDashboardQuery`·`NotificationService`(의뢰·예약 칸, 90일 알림 발송), BE-C `ConditionExtractor`(검색은 키워드 해석으로 동작)
 - 키워드 해석은 단위가 정확히 같을 때만 조건으로 잡음 (kHz→Hz 같은 환산 없음). AI 추출기로 바꾸면 해결
 
-**바뀐 파일 (커밋 전)**: `chat/`, `request/`, `requirement/` 인터페이스·DTO, `dashboard/`, `equipment/`(검색·알림·집계), `global/config/SchedulingConfig`, `user`·`organization` 서비스(집계 메서드), `application.yml`, 테스트 2개, `README.md`, `docs/api-spec.md`, `docs/team-guide.md`, 이 파일
+**커밋**: `e00b35b` `c6539b5` `dce3838` · PR #7 병합
+
+**바뀐 파일**: `chat/`, `request/`, `requirement/` 인터페이스·DTO, `dashboard/`, `equipment/`(검색·알림·집계), `global/config/SchedulingConfig`, `user`·`organization` 서비스(집계 메서드), `application.yml`, 테스트 2개, `README.md`, `docs/api-spec.md`, `docs/team-guide.md`, 이 파일
 
 ---
 
@@ -193,11 +209,11 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 - 서버를 띄워 manager1 토큰으로 HTTP 확인: 등록 → `ASTRA-EQ-0072`, 다른 기관 수정 403, 이력 CREATE→UPDATE→SPECS_UPDATE→CONFIRM, 비활성화 후 404, 유사·중복·비교 정상
 
 **남은 것·주의**
-- 정지한 계정의 access 토큰은 만료(최대 1시간)까지 유효 (요청마다 DB 확인은 안 함)
-- `POST /admin/equipment/import`(P2) 미구현 (seed 로 적재돼 있음), 90일 경과 알림은 4번 덩어리로
+- ~~정지한 계정의 access 토큰은 만료(최대 1시간)까지 유효~~ → **2026-11-09 해결** (다음 요청부터 바로 403)
+- `POST /admin/equipment/import`(P2) 미구현 (seed 로 적재돼 있음), 90일 경과 알림은 4번 덩어리에서 구현함
 - 로컬 DB 에 확인용 비활성 장비 `ASTRA-EQ-0072` 가 남아 있음 (`docker compose down -v` 로 초기화 가능)
 
-**커밋**: `beb1b22` `d5b3caf` `b341891` `3208007`
+**커밋**: `beb1b22` `d5b3caf` `b341891` `3208007` · PR #6 병합
 
 ---
 
