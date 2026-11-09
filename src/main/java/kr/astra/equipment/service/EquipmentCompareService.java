@@ -17,12 +17,14 @@ import kr.astra.equipment.dto.EquipmentManageResponses.Similar;
 import kr.astra.equipment.dto.EquipmentSummaryResponse;
 import kr.astra.equipment.entity.Equipment;
 import kr.astra.equipment.entity.EquipmentSpec;
+import kr.astra.equipment.entity.EquipmentTestType;
 import kr.astra.equipment.entity.SpecSourceType;
 import kr.astra.equipment.repository.EquipmentJdbcRepository;
 import kr.astra.equipment.repository.EquipmentJdbcRepository.DuplicateRow;
 import kr.astra.equipment.repository.EquipmentJdbcRepository.SimilarRow;
 import kr.astra.equipment.repository.EquipmentRepository;
 import kr.astra.equipment.repository.EquipmentSpecRepository;
+import kr.astra.equipment.repository.EquipmentTestTypeRepository;
 import kr.astra.global.exception.BusinessException;
 import kr.astra.global.exception.ErrorCode;
 import kr.astra.testtype.service.TestTypeService;
@@ -45,6 +47,7 @@ public class EquipmentCompareService {
 
     private final EquipmentRepository equipmentRepository;
     private final EquipmentSpecRepository specRepository;
+    private final EquipmentTestTypeRepository testTypeLinkRepository;
     private final EquipmentJdbcRepository jdbcRepository;
     private final EquipmentService equipmentService;
     private final TestTypeService testTypeService;
@@ -104,14 +107,21 @@ public class EquipmentCompareService {
      * POST /equipment/compare: 장비 2~5대의 사양 비교표. 같은 장비를 두 번 넣으면 400, 없는 장비가 있으면 404.
      * 칸마다 같은 키에 REAL 이 있으면 REAL, 없으면 MOCK. 줄 순서는 요청 장비 순서대로 처음 나온 키 순.
      */
-    public Comparison compare(List<Long> equipmentIds) {
+    public Comparison compare(List<Long> equipmentIds, String testType) {
+        String code = testType == null || testType.isBlank() ? null : testType.trim();
+        if (code != null && !testTypeService.nameMap().containsKey(code)) {
+            String reason = "없는 시험유형 코드입니다: " + code;
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED, reason,
+                    Map.of("fields", List.of(Map.of("field", "testType", "reason", reason))));
+        }
         if (new HashSet<>(equipmentIds).size() != equipmentIds.size()) {
             String reason = "같은 장비가 두 번 있습니다.";
             throw new BusinessException(ErrorCode.VALIDATION_FAILED, reason,
                     Map.of("fields", List.of(Map.of("field", "equipmentIds", "reason", reason))));
         }
-        Set<Long> active = equipmentRepository.findAllById(equipmentIds).stream().filter(Equipment::isActive)
-                .map(Equipment::getId).collect(Collectors.toSet());
+        Map<Long, Equipment> activeById = equipmentRepository.findAllById(equipmentIds).stream()
+                .filter(Equipment::isActive).collect(Collectors.toMap(Equipment::getId, Function.identity()));
+        Set<Long> active = activeById.keySet();
         List<Long> missing = equipmentIds.stream().filter(id -> !active.contains(id)).toList();
         if (!missing.isEmpty()) {
             throw new BusinessException(ErrorCode.EQUIPMENT_NOT_FOUND, Map.of("equipmentIds", missing));
@@ -137,6 +147,23 @@ public class EquipmentCompareService {
                     return s == null ? null : new Comparison.Cell(id, s.getValueNum(), s.getMinNum(), s.getMaxNum(),
                             s.getValueText(), s.getUnit(), s.getSourceType());
                 }).toList())).toList();
-        return new Comparison(equipment, rows, usedMock);
+        Map<Long, EquipmentTestType> estimates = code == null ? Map.of()
+                : testTypeLinkRepository.findAllByEquipmentIdIn(equipmentIds).stream()
+                        .filter(t -> t.getTestTypeCode().equals(code))
+                        .collect(Collectors.toMap(EquipmentTestType::getEquipmentId, Function.identity()));
+        List<Comparison.Usage> usage = equipmentIds.stream().map(id -> {
+            Equipment e = activeById.get(id);
+            Comparison.TestTypeEstimate estimate = null;
+            if (code != null) {
+                EquipmentTestType t = estimates.get(id);
+                estimate = t == null ? new Comparison.TestTypeEstimate(code, false, null, null, null)
+                        : new Comparison.TestTypeEstimate(code, true, t.getEstCostMin(), t.getEstCostMax(),
+                                t.getEstDurationDays());
+            }
+            return new Comparison.Usage(id, e.getAccessScope(), e.getFeeText(), e.getFeeAmount(), e.getFeeUnit(),
+                    e.getDurationText(), e.getUtilizationRate(), e.getAvailability(), e.getVerificationStatus(),
+                    e.getInfoUpdatedAt(), estimate);
+        }).toList();
+        return new Comparison(equipment, rows, usage, code, usedMock);
     }
 }

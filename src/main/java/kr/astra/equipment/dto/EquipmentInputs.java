@@ -120,8 +120,13 @@ public final class EquipmentInputs {
             @Size(max = 300) String reason) {
     }
 
-    /** POST /equipment/compare: 장비 2~5대 */
+    /**
+     * POST /equipment/compare: 장비 2~5대
+     *
+     * @param testType 선택. 보내면 장비별로 그 시험의 예상 비용·소요일을 함께 줌 (예: VIBRATION)
+     */
     public record CompareRequest(
-            @NotNull @Size(min = 2, max = 5, message = "비교할 장비는 2~5대입니다.") List<@NotNull Long> equipmentIds) {
+            @NotNull @Size(min = 2, max = 5, message = "비교할 장비는 2~5대입니다.") List<@NotNull Long> equipmentIds,
+            @Size(max = 50) String testType) {
     }
 }

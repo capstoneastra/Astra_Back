@@ -317,6 +317,34 @@ class EquipmentApiTest {
         assertThat(missing.details().path("equipmentIds").toString()).isEqualTo("[999999]");
     }
 
+    @Test
+    void 비교표는_장비별_이용_조건과_시험유형_예상_비용을_함께_준다() throws Exception {
+        JsonNode plain = api.post("/api/v1/equipment/compare", "{ \"equipmentIds\": [48, 44] }", token).data();
+        JsonNode usage = plain.path("usage");
+        assertThat(usage.size()).isEqualTo(2);
+        assertThat(usage.get(0).path("equipmentId").asLong()).isEqualTo(48);
+        assertThat(usage.get(0).path("availability").asString()).isEqualTo("UNKNOWN");
+        assertThat(usage.get(0).path("accessScope").asString()).isEqualTo("UNKNOWN");
+        assertThat(usage.get(0).path("feeAmount").isNull()).isTrue(); // seed 는 요금 정보 없음 → 화면에 "정보 없음"
+        assertThat(usage.get(0).path("infoUpdatedAt").isNull()).isFalse();
+        assertThat(usage.get(0).path("testTypeEstimate").isNull()).isTrue(); // testType 을 안 보냄
+        assertThat(plain.path("testType").isNull()).isTrue();
+
+        // 진동시험 기준: 48 은 가능(예상 비용 정보는 seed 에 없음), 37(전기·RF)은 진동시험 불가
+        JsonNode byType = api.post("/api/v1/equipment/compare",
+                "{ \"equipmentIds\": [48, 37], \"testType\": \"VIBRATION\" }", token).data();
+        assertThat(byType.path("testType").asString()).isEqualTo("VIBRATION");
+        JsonNode e48 = byType.path("usage").get(0).path("testTypeEstimate");
+        assertThat(e48.path("code").asString()).isEqualTo("VIBRATION");
+        assertThat(e48.path("supported").asBoolean()).isTrue();
+        assertThat(e48.path("estCostMin").isNull()).isTrue();
+        assertThat(byType.path("usage").get(1).path("testTypeEstimate").path("supported").asBoolean()).isFalse();
+
+        Res unknown = api.post("/api/v1/equipment/compare", "{ \"equipmentIds\": [48, 44], \"testType\": \"NOPE\" }", token);
+        assertThat(unknown.code()).isEqualTo("VALIDATION_FAILED");
+        assertThat(unknown.details().path("fields").get(0).path("field").asString()).isEqualTo("testType");
+    }
+
     // ------------------------------------------------------------ BE-C 용 내부 인터페이스
 
     @Test

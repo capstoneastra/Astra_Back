@@ -43,10 +43,11 @@ public class EquipmentCompareController {
         return ApiResponse.ok(compareService.duplicates(region, testType));
     }
 
-    @Operation(summary = "장비 사양 비교표", description = "장비 2~5대. 사양 키별 한 줄, 칸마다 REAL 이 있으면 REAL·없으면 MOCK. "
-            + "없거나 비활성 장비가 있으면 404 EQUIPMENT_NOT_FOUND (details.equipmentIds)")
+    @Operation(summary = "장비 사양·이용 조건 비교표", description = "장비 2~5대. 사양 키별 한 줄(칸마다 REAL 이 있으면 REAL·없으면 MOCK) "
+            + "+ 장비별 이용 조건(요금·소요 기간·가동률·가용 상태). testType 을 보내면 그 시험의 예상 비용·소요일도. "
+            + "없거나 비활성 장비가 있으면 404 EQUIPMENT_NOT_FOUND (details.equipmentIds), 없는 testType 은 400")
     @PostMapping("/compare")
     public ApiResponse<Comparison> compare(@Valid @RequestBody CompareRequest request) {
-        return ApiResponse.ok(compareService.compare(request.equipmentIds()));
+        return ApiResponse.ok(compareService.compare(request.equipmentIds(), request.testType()));
     }
 }
