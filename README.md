@@ -777,6 +777,7 @@ Testcontainers가 테스트 전용 PostgreSQL 16을 띄워 실제 DB로 검증�
 | `EquipmentApiTest` | 장비 목록·검색(q·지역·기관·유형·외부이용·MOCK 필터, 정렬)·상세(REAL 먼저), 유사·중복·비교, 시험유형 목록·시험 정보 안내, 기관 목록·상세, BE-C용 `EquipmentQueryService` (seed 실제 값으로 검증) |
 | `AdminUserApprovalTest` | 관리자 회원 목록(필터·정렬·페이지), 승인(조직도 승인)·거절(로그인 시 사유 표시)·정지/해제(재발급 차단), 상태 오류 409, 권한 403·404 |
 | `EquipmentManageTest` | 기관 장비 등록(ASTRA-EQ 외부 id)·수정·REAL 사양 교체(MOCK 유지)·시험유형·확인·비활성화·변경 이력, 갱신 필요 표시, 소유 기관 403, 관리자 소속 변경 |
+| `SseAsyncDispatchTest` | 로그인이 필요한 SSE(스트리밍) 응답이 끝까지 전달되는지 (비동기 재요청을 보안 설정이 막지 않는지), 비로그인 SSE 는 401 |
 | `CorsTest`, `CorsConfigTest` | 프론트 주소 사전 요청(preflight) 허용·다른 주소 거절, 401 응답에도 CORS 헤더, `CORS_ALLOWED_ORIGINS` 해석(쉼표·패턴·빈 값이면 기본 주소) |
 | `DemoScenarioTest` | 시연 시나리오(위성 전장품 15kg, 20~2000Hz 진동시험) 중 BE-A 단계를 순서대로: 가입 → 승인 → 검색 → 상세·비교 → 기관 장비 확인 → 대시보드 |
 | `DashboardSearchApiTest` | 대시보드 장비 통계·역할별 요약(의뢰·상담 미연결 시 0·빈 목록), 시연 문장 자연어 검색 해석(진동시험·15kg·20~2000Hz)·지역 필터 |

@@ -1,5 +1,6 @@
 package kr.astra.global.config;
 
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -64,6 +65,10 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(new JwtAuthenticationFilter(jwtProvider), UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> {
+                    // SSE(SseEmitter)·비동기 응답이 끝날 때와 오류 페이지로 넘길 때의 내부 재요청(ASYNC·ERROR dispatch)은
+                    // JWT 필터가 다시 돌지 않아 비로그인으로 보임 → 막으면 스트림이 중간에 끊김 (응답이 이미 나가는 중이라
+                    // "response is already committed"). 원래 요청에서 이미 인증·권한을 통과했으므로 여기서는 허용
+                    auth.dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll();
                     auth.requestMatchers(HttpMethod.POST, LOGOUT_PATH).authenticated();
                     auth.requestMatchers(PUBLIC_PATHS).permitAll();
                     if (requireLogin) {
