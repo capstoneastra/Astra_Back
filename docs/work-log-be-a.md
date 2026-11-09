@@ -15,6 +15,32 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 
 ---
 
+## 2026-11-09 · 비교표 이용 조건 · 정지 계정 즉시 차단 · 기존 서비스와의 차이
+
+**1. 비교표에 비용·기간·가용성 추가** (`POST /equipment/compare`) — 시험 실무자 피드백 "일정과 비용을 사전에 비교하기 어렵다"
+- 응답에 `usage`(장비별 접근 범위·요금 원문·금액·단위·소요 기간·가동률·가용 상태·기관 확인 상태·정보 갱신일) 추가. 기존 필드는 그대로 (추가만)
+- 요청에 선택 `testType` → `usage[].testTypeEstimate`(그 시험의 예상 비용·소요일, 그 장비가 못 하면 `supported=false`), 없는 코드는 400
+- seed 장비는 요금·예상 비용이 대부분 비어 있어 null(화면에 "정보 없음"), 기관이 입력하면 채워짐
+
+**3. 정지 계정 즉시 차단** (`global/security` 변경 → 팀 공지 필요)
+- `AccountStatusChecker`(global) + `UserAccountStatusCache`(user, 30초 캐시): JWT 필터가 요청마다 계정 상태 확인
+- 승인·거절·정지·해제 시 **DB 커밋 직후** 캐시 삭제 (커밋 전에 지우면 다른 요청이 옛 상태를 다시 캐시할 수 있어서)
+- 정지·거절·승인 대기 → 보호된 API 403 `ACCOUNT_NOT_ACTIVE`, 계정 없음 → 401 `AUTH_REQUIRED`, 공개 API 는 그대로. 새 에러 코드 없음
+- 이전 기록(3번 덩어리)의 "정지해도 access 토큰은 최대 1시간 유효"는 **해결됨**. api-spec §0-4·§12, Swagger 설명도 고침
+
+**4. 기존 서비스와의 차이** (README §1, 계획서 개요)
+- ZEUS(과기정통부, 국가 R&D 장비)가 **2026-07-27 부터 AI 검색 시범 운영**(연구 목적 자연어 → 가까운 이용 가능 장비 추천 → 예약, 12월 정식 예정) → "자연어로 장비 찾기"는 차별점이 아님
+- 보도(데일리안·아시아경제)에 없는 ZEUS 기능은 단정하지 않음. ASTRA 차별점은 조건별 충족·미충족 근거, 사양·요금·기간 비교, 의뢰서 → 기관 검토·보완 → 예약 흐름, 시연 데이터·기관 확인 표시
+- 발표 때 "자연어 검색"보다 **"조건별 근거 + 시험 의뢰 흐름"**을 강조하는 게 좋음
+
+**확인**
+- 테스트 188개 통과 (새로 4개: 비교표 이용 조건 2, 즉시 차단 2), BE-C 88개 포함
+- 실제 서버: 비교표 `usage`·`testTypeEstimate`(48 가능, 37 불가), 없는 testType 400 / 정지 직후 같은 토큰 403 (0.07초), 해제 직후 200, 공개 API 200, 계정 없는 토큰 401 (확인용 계정은 원래 상태로 되돌림)
+
+**바뀐 파일 (커밋 전)**: `equipment/dto/EquipmentInputs.java`, `equipment/dto/EquipmentManageResponses.java`, `equipment/service/EquipmentCompareService.java`, `equipment/controller/EquipmentCompareController.java`, `global/security/AccountStatusChecker.java`(새), `global/security/JwtAuthenticationFilter.java`, `global/config/SecurityConfig.java`, `user/service/UserAccountStatusCache.java`(새), `user/service/UserService.java`, `user/repository/UserRepository.java`, `admin/controller/AdminUserController.java`, 테스트 3개(`EquipmentApiTest`, `EquipmentManageTest`, `AdminUserApprovalTest`), `README.md`, `docs/api-spec.md`, 이 파일
+
+---
+
 ## 2026-11-09 · BE-C 병합 후 통합 점검 + SSE 끊김 버그 수정
 
 **상황**: PR #9 (BE-C: AI 상담·시험조건·매칭·자동 추진) main 병합 → `feature/be-a` 에 fast-forward 로 받음. 합친 코드 전체 **테스트 182개 통과** (BE-A 94 + BE-C 88)

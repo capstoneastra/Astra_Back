@@ -62,6 +62,7 @@
 
 - 소유권 체크: 기관 담당자는 `user.organization_id == equipment.institution_id` (의뢰는 `test_requests.institution_id`) 일 때만 수정 가능, 아니면 `403 FORBIDDEN`
 - 상태가 `ACTIVE`가 아닌 계정(PENDING/REJECTED/SUSPENDED)은 로그인 시 `403 ACCOUNT_NOT_ACTIVE` (승인 대기 안내 화면)
+- 로그인한 뒤 관리자가 정지·거절하면 **이미 받은 access 토큰도 다음 요청부터** `403 ACCOUNT_NOT_ACTIVE` (서버가 요청마다 계정 상태 확인, 30초 캐시 + 상태 변경 시 즉시 반영). 계정이 없어진 토큰은 `401 AUTH_REQUIRED`. 가입·로그인 같은 공개 API 는 그대로 사용 가능
 - 관리자 계정은 회원가입으로 만들 수 없음. 서버 초기 세팅(seed/환경변수)으로만 생성
 
 ---
@@ -163,7 +164,7 @@
 | GET | `/equipment/{id}` | 로그인 | 장비 상세 (사양, 이용조건, 가동률, 갱신일) | 2 |
 | GET | `/equipment/{id}/similar` | 로그인 | 동일·유사 장비 (같은 시험유형/분류, 이름 유사도) | 12 |
 | GET | `/equipment/duplicates` | 로그인 | 지역 내 중복 장비 그룹 목록 `?region=대전&testType=VIBRATION` | 12 |
-| POST | `/equipment/compare` | 로그인 | 장비 N개 사양 비교표 `{ "equipmentIds": [1,5,9] }` | 12 |
+| POST | `/equipment/compare` | 로그인 | 장비 N개 사양·이용 조건 비교표 `{ "equipmentIds": [1,5,9], "testType"?: "VIBRATION" }` | 12 |
 | GET | `/search` | 로그인 | 시험항목·자연어 통합 검색 `?q=15kg 시료 진동시험` | 3 |
 | GET | `/test-types` | 로그인 | 시험유형 목록 (15개, 표시 순서, 장비 수 포함) | 3 |
 | GET | `/test-types/{code}` | 로그인 | 시험 정보 안내: 가능 기관·예상비용·기간·이용조건 + 입력할 조건 목록(`conditionRules`) | 4 |
@@ -258,15 +259,25 @@
     "equipmentCount": 3, "institutionCount": 2,
     "equipment": [ /* 목록 항목 형식: ASTRA-CAND-0044, ASTRA-CAND-0045, ASTRA-CAND-0048 */ ] } ]
 
-// POST /equipment/compare { "equipmentIds": [48, 44] } → 장비 2~5대 비교표
+// POST /equipment/compare { "equipmentIds": [48, 44], "testType"?: "VIBRATION" } → 장비 2~5대 비교표
 //   rows: 사양 키별 한 줄 (요청 순서대로 처음 나온 키 순). values 는 equipment 순서와 같고 사양이 없으면 null
 //   칸마다 같은 키에 REAL 이 있으면 REAL, 없으면 MOCK. MOCK 이 하나라도 쓰였으면 usedMockData=true (DEMO 표시)
+//   usage: 장비별 이용 조건 (equipment 순서와 같음). 값이 없으면 null → 화면에 "정보 없음" (seed 는 요금·예상 비용 대부분 없음)
+//   testType 을 보내면 usage[].testTypeEstimate 에 그 시험의 예상 비용·소요일. 그 장비가 그 시험을 못 하면 supported=false
 { "equipment": [ /* 목록 항목 48 */, /* 목록 항목 44 */ ],
   "rows": [ { "key": "frequency", "label": "주파수 범위",
               "values": [ { "equipmentId": 48, "min": 10, "max": 3000, "unit": "Hz", "sourceType": "MOCK" },
                           { "equipmentId": 44, "min": 5, "max": 1800, "unit": "Hz", "sourceType": "MOCK" } ] }, ... ],
+  "usage": [ { "equipmentId": 48, "accessScope": "UNKNOWN", "feeText": null, "feeAmount": null, "feeUnit": null,
+               "durationText": null, "utilizationRate": null, "availability": "UNKNOWN",
+               "verificationStatus": "LISTING_CONFIRMED", "infoUpdatedAt": "2026-11-07T11:52:01.241657+09:00",
+               "testTypeEstimate": { "code": "VIBRATION", "supported": true, "estCostMin": null, "estCostMax": null,
+                                     "estDurationDays": null } }, ... ],
+  "testType": "VIBRATION",
   "usedMockData": true }
-// 실패: 400 VALIDATION_FAILED (1대 또는 6대 이상, 같은 장비 중복) / 404 EQUIPMENT_NOT_FOUND { "equipmentIds": [999999] }
+// 기관이 입력한 장비 예: "feeText": "300,000원/일", "feeAmount": 300000, "feeUnit": "DAY", "durationText": "1~2일",
+//   "utilizationRate": 60, "availability": "AVAILABLE", testTypeEstimate { "estCostMin": 300000, "estCostMax": 600000, "estDurationDays": 2 }
+// 실패: 400 VALIDATION_FAILED (1대 또는 6대 이상, 같은 장비 중복, 없는 testType) / 404 EQUIPMENT_NOT_FOUND { "equipmentIds": [999999] }
 
 // GET /test-types → 15개, display_order 순. equipmentCount = 그 시험을 할 수 있는 활성 장비 수 (0 이어도 포함)
 [ { "code": "ACOUSTIC_NOISE", "nameKo": "음향·소음 시험", "description": null, "keywords": ["소음", "음향", "dB"], "equipmentCount": 1 },
@@ -717,8 +728,8 @@ UNDER_REVIEW ──reject──▶ REJECTED        (DRAFT~SCHEDULING 에서 기�
 // 실패: 404 NOT_FOUND (없는 회원) / 409 USER_INVALID_STATUS (PENDING 아님) / 400 VALIDATION_FAILED (사유 없음, 정렬 불가 필드)
 
 // PATCH /admin/users/{id}/status { "status": "SUSPENDED" } → 200 (목록 항목과 같은 형식)
-//   ACTIVE → SUSPENDED(정지), SUSPENDED → ACTIVE(해제)만. 정지하면 refresh 토큰을 모두 폐기 → 재발급은 바로 막힘
-//   (이미 받은 access 토큰은 만료까지 최대 1시간 유효)
+//   ACTIVE → SUSPENDED(정지), SUSPENDED → ACTIVE(해제)만. 정지하면 refresh 토큰을 모두 폐기하고,
+//   이미 받은 access 토큰도 다음 요청부터 바로 403 ACCOUNT_NOT_ACTIVE (해제하면 같은 토큰이 다시 바로 통과)
 // 실패: 400 VALIDATION_FAILED (ACTIVE·SUSPENDED 외 값) / 409 USER_INVALID_STATUS (관리자 계정, PENDING·REJECTED 등)
 
 // GET /admin/organizations?orgType=INSTITUTION&verified=false → 페이지 (기본 최신 등록순, 정렬은 createdAt·id 만)
