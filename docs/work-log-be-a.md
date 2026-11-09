@@ -15,6 +15,42 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 
 ---
 
+## 2026-11-09 · BE-C 병합 후 통합 점검 + SSE 끊김 버그 수정
+
+**상황**: PR #9 (BE-C: AI 상담·시험조건·매칭·자동 추진) main 병합 → `feature/be-a` 에 fast-forward 로 받음. 합친 코드 전체 **테스트 182개 통과** (BE-A 94 + BE-C 88)
+
+**BE-C 가 BE-A·공통 파일에서 바꾼 것** (확인함, 문제 없음)
+- `ChatSessionQuery` 주석 보충(시그니처 그대로), `DashboardSearchApiTest` 의 `chats` 기대값 true 로 (상담 연결됨)
+- `application.yml`·`.env.example` 에 `AI_PROVIDER`(기본 **gemini**), `GEMINI_API_KEY`, `GEMINI_MODEL`(기본 `gemini-3.8-flash`). team-guide 는 Claude 기준이라 시연 때 어느 쪽을 쓸지 팀 합의 필요
+
+**찾아서 고친 버그 (BE-A, `SecurityConfig`)**: 로그인이 필요한 SSE 스트림(AI 상담 스트리밍)이 마지막에 끊김
+- 원인: `SseEmitter` 는 응답을 마칠 때 비동기 재요청(ASYNC dispatch)을 하는데 JWT 필터는 그때 다시 돌지 않음 → Spring Security 가 비로그인으로 보고 `Access Denied` → 응답이 이미 나가는 중이라 연결이 끊김 (로그: "response is already committed")
+- 수정: `auth.dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()` (원래 요청에서 이미 인증·권한 통과)
+- `SseAsyncDispatchTest` 추가: LLM 없이 같은 구조의 테스트용 SSE 로 확인. **수정 전 코드로는 실패, 수정 후 통과**를 직접 확인
+- BE-C 테스트는 실제 서버(비동기 재요청)를 거치지 않아 드러나지 않았던 것으로 보임
+
+**실제 서버 통합 점검 (Gemini)**
+- `gemini-3.8-flash`(기본값): Google 쪽 **503 UNAVAILABLE "high demand"** (일시적 과부하) → 모든 AI 단계 502. 키는 정상 (모델 목록 조회됨)
+- 이번 실행에만 `--astra.ai.gemini-model=gemini-3.5-flash` 로 다시 확인 (`.env` 는 그대로)
+  - ✅ AI 상담 JSON (약 10초): 진동시험 추천, 시료 15kg·주파수 20~2000Hz 추출, 고정구 무게 되물음
+  - ✅ AI 상담 SSE: delta 이벤트 … `done` 까지 끝까지 수신 (보안 수정 후)
+  - ✅ 조건 직접 입력 → 분석(누락 `fixture_mass` + 질문) → 보완 → 매칭: 0045·0047·0048 SUITABLE 100점, 0044 주파수 NOT_MET → UNSUITABLE, 추천 이유 문장
+  - ✅ 대시보드 최근 상담 (BE-A ← BE-C `ChatSessionQuery`), `dataAvailable.chats=true`
+  - ⚠️ 대화 → 시험조건(`POST /chat/sessions/{id}/requirement`) 계속 502 (약 2초), 자동 추진 ANALYZE 단계 실패. 같은 형식 스키마로 Gemini 를 직접 부르면 200 → BE-C 쪽 처리(요청 내용·응답 검증)에서 걸리는 것으로 보임. BE-C 클라이언트가 실패 원인을 로그에 안 남겨 더 좁히지 못함
+  - ⏳ AI 의뢰서 초안 API(`/test-requests/ai-draft`) 없음 (BE-B 의뢰 저장 필요)
+- `docs/demo-scenario.md` 확인 칸 갱신, 7번 기대 결과를 실제 매칭 결과로 수정
+
+**BE-C(주현욱 님)께 전달할 것**
+1. 대화 → 시험조건, 자동 추진 ANALYZE 가 `gemini-3.5-flash` 에서 2~3초 만에 502
+2. Gemini 실패 시 HTTP 상태·오류 메시지를 로그에 남기기 (키 제외) — 지금은 원인을 알 수 없음
+3. 503(과부하)은 잠깐 뒤 재시도하거나 다른 모델로 바꾸는 처리 고려, 기본 모델 `gemini-3.8-flash` 는 현재 과부하가 잦음
+
+**바뀐 파일 (커밋 전)**: `src/main/java/kr/astra/global/config/SecurityConfig.java`, `src/test/java/kr/astra/SseAsyncDispatchTest.java`(새), `docs/demo-scenario.md`, `README.md`, 이 파일
+
+**로컬 DB**: 점검하면서 상담 세션·시험조건·매칭 기록이 생김 (`docker compose down -v` 로 초기화 가능)
+
+---
+
 ## 2026-11-08 · 5번 덩어리 ②~⑤: Dockerfile · 운영용 compose · 운영 설정 · 시연 점검표
 
 **한 것**
