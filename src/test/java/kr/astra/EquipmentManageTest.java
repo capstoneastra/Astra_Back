@@ -237,6 +237,29 @@ class EquipmentManageTest {
     // ------------------------------------------------------------ 관리자 소속 변경
 
     @Test
+    void 기관이_입력한_요금과_예상_비용이_비교표에_나온다() throws Exception {
+        long id = create(manager1); // 300,000원/일, 1~2일, 가동률 60, 진동시험 30만~60만원·2일
+        JsonNode d = api.post("/api/v1/equipment/compare",
+                "{ \"equipmentIds\": [%d, 48], \"testType\": \"VIBRATION\" }".formatted(id), company).data();
+        JsonNode mine = d.path("usage").get(0);
+        assertThat(mine.path("feeText").asString()).isEqualTo("300,000원/일");
+        assertThat(mine.path("feeAmount").asInt()).isEqualTo(300000);
+        assertThat(mine.path("feeUnit").asString()).isEqualTo("DAY");
+        assertThat(mine.path("durationText").asString()).isEqualTo("1~2일");
+        assertThat(mine.path("utilizationRate").asInt()).isEqualTo(60);
+        assertThat(mine.path("availability").asString()).isEqualTo("AVAILABLE");
+        assertThat(mine.path("accessScope").asString()).isEqualTo("EXTERNAL_ALLOWED");
+        assertThat(mine.path("verificationStatus").asString()).isEqualTo("INSTITUTION_VERIFIED");
+        JsonNode estimate = mine.path("testTypeEstimate");
+        assertThat(estimate.path("supported").asBoolean()).isTrue();
+        assertThat(estimate.path("estCostMin").asInt()).isEqualTo(300000);
+        assertThat(estimate.path("estCostMax").asInt()).isEqualTo(600000);
+        assertThat(estimate.path("estDurationDays").asInt()).isEqualTo(2);
+        // 기관이 넣은 사양은 REAL, 시연 장비 48 은 MOCK 이 섞여 DEMO 표시
+        assertThat(d.path("usedMockData").asBoolean()).isTrue();
+    }
+
+    @Test
     void 관리자는_장비를_다른_기관으로_옮길_수_있다() throws Exception {
         long id = create(manager1);
         assertThat(api.post("/api/v1/admin/equipment/" + id + "/transfer", "{ \"institutionId\": 6 }", manager1).code())
