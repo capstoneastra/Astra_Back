@@ -537,6 +537,7 @@
 | Method | URL | 권한 | 설명 |
 |---|---|---|---|
 | POST | `/test-requests/{id}/reservations` | 🏢 🏛 | 일정 제안 `{ startAt, endAt, note }` (SCHEDULING 상태에서) |
+| GET | `/test-requests/{id}/reservations` | 🏢 🏛 | 이 의뢰의 일정 제안·확정 목록 (최신순, `proposedBySide`: COMPANY/INSTITUTION) |
 | POST | `/reservations/{id}/counter` | 🏢 🏛 | 대안 일정 제안 (→COUNTER_PROPOSED) |
 | POST | `/reservations/{id}/confirm` | 🏛 | 예약 확정 → 의뢰 CONFIRMED |
 | POST | `/reservations/{id}/cancel` | 🏢 🏛 | 예약 취소 |

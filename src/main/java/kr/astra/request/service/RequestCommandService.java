@@ -1,0 +1,175 @@
+package kr.astra.request.service;
+
+import java.math.BigDecimal;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import kr.astra.equipment.dto.EquipmentDetailResponse;
+import kr.astra.equipment.service.EquipmentService;
+import kr.astra.global.exception.BusinessException;
+import kr.astra.global.exception.ErrorCode;
+import kr.astra.global.security.AccessGuard;
+import kr.astra.global.security.CurrentUser;
+import kr.astra.matching.service.MatchingService;
+import kr.astra.request.dto.CreateDraftCommand;
+import kr.astra.request.dto.RequestInputs;
+import kr.astra.request.dto.RequestResponses.ActionResult;
+import kr.astra.request.dto.RequestResponses.DraftSaved;
+import kr.astra.request.entity.RequestAction;
+import kr.astra.request.entity.RequestStatus;
+import kr.astra.request.entity.TestRequest;
+import kr.astra.request.entity.TestRequestRevision;
+import kr.astra.requirement.dto.RequirementSnapshot;
+import kr.astra.requirement.service.RequirementApplicationService;
+import kr.astra.user.dto.UserMeResponse;
+import kr.astra.user.entity.UserRole;
+import kr.astra.user.service.UserService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/** 기업 쪽 의뢰 작성·제출·취소 (api-spec §5) */
+@Service
+@RequiredArgsConstructor
+@Transactional
+public class RequestCommandService {
+
+    private final TestRequestService testRequestService;
+    private final RequestWorkflow workflow;
+    private final RequestContent content;
+    private final EquipmentService equipmentService;
+    private final UserService userService;
+    private final RequirementApplicationService requirementService;
+    private final MatchingService matchingService;
+
+    /**
+     * POST /test-requests. 시험조건(requirementId)이 있으면 조건을 의뢰서 content.conditions 에 옮겨 담습니다.
+     * matchResultId 는 그 시험조건의 매칭 결과 중 이 장비 행이어야 합니다 (BE-C 검증 재사용).
+     */
+    public Long create(CurrentUser actor, RequestInputs.Create input) {
+        AccessGuard.requireRole(actor, UserRole.COMPANY_USER);
+        if (input.matchResultId() != null && input.requirementId() == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED, "matchResultId 를 보내려면 requirementId 도 필요합니다.",
+                    Map.of("field", "requirementId"));
+        }
+        EquipmentDetailResponse equipment = equipmentService.getDetail(input.equipmentId());
+        RequirementSnapshot requirement = null;
+        if (input.requirementId() != null) {
+            requirement = requirementService.snapshot(actor, input.requirementId()); // 본인 시험조건인지 확인
+            if (input.matchResultId() != null) {
+                matchingService.validateSelection(actor, input.requirementId(), input.equipmentId(),
+                        input.matchResultId());
+            }
+        }
+        UserMeResponse me = userService.getMe(actor.userId());
+        String title = firstNonBlank(input.title(), requirement == null ? null : requirement.title(),
+                equipment.name() + " 시험 의뢰");
+        return testRequestService.createDraft(new CreateDraftCommand(actor.userId(), equipment.id(),
+                input.requirementId(), input.matchResultId(), title, initialContent(me, equipment, requirement),
+                false));
+    }
+
+    /** PUT /test-requests/{id}/draft — 작업본 저장. 제출은 하지 않습니다. */
+    public DraftSaved saveDraft(CurrentUser actor, Long requestId, RequestInputs.SaveDraft input) {
+        TestRequest request = workflow.lock(requestId);
+        AccessGuard.requireOwner(actor, request.getRequesterId());
+        RequestWorkflow.checkVersion(request, input.version());
+        content.validate(input.content());
+
+        TestRequestRevision working = workflow.editableRevision(request, actor.userId());
+        working.updateContent(content.write(input.content()), input.changeSummary(), actor.userId());
+        workflow.saveRevision(working);
+        if (request.getStatus() == RequestStatus.DRAFT) {
+            // 접수 전에는 제목·희망 일정을 바로 반영. 보완 중에는 보완 제출할 때 반영
+            RequestContent.Schedule s = content.schedule(input.content());
+            request.updateDraftInfo(input.title(), s.start(), s.end());
+        }
+        workflow.bumpVersion(request);
+        return new DraftSaved(request.getId(), request.getStatus(), request.getVersion(), working.getRevisionNo(),
+                content.read(working.getContent()));
+    }
+
+    /** POST /test-requests/{id}/submit — DRAFT → SUBMITTED, 1번 제출본 고정, 기관 담당자 전원에게 알림 */
+    public ActionResult submit(CurrentUser actor, Long requestId, Integer version) {
+        TestRequest request = workflow.begin(requestId, RequestAction.SUBMIT, actor, version);
+        TestRequestRevision revision = workflow.currentRevision(request);
+        Map<String, Object> body = content.read(revision.getContent());
+        content.validate(body);
+        RequestContent.Schedule s = content.schedule(body);
+        request.updateDraftInfo(null, s.start(), s.end());
+        revision.submit(OffsetDateTime.now());
+        workflow.saveRevision(revision);
+        workflow.transition(request, RequestAction.SUBMIT, actor, null);
+        return result(request);
+    }
+
+    /** POST /test-requests/{id}/cancel — DRAFT~SCHEDULING → CANCELED. 열린 보완 요청·제안 중 예약은 함께 닫힘 */
+    public ActionResult cancel(CurrentUser actor, Long requestId, RequestInputs.Cancel input) {
+        TestRequest request = workflow.begin(requestId, RequestAction.CANCEL, actor, input == null ? null : input.version());
+        workflow.transition(request, RequestAction.CANCEL, actor, input == null ? null : input.reason());
+        return result(request);
+    }
+
+    private static ActionResult result(TestRequest request) {
+        return RequestWorkflow.result(request);
+    }
+
+    // ------------------------------------------------------------ 의뢰서 본문 초기값 (api-spec §5 스키마)
+
+    private static Map<String, Object> initialContent(UserMeResponse me, EquipmentDetailResponse equipment,
+                                                      RequirementSnapshot requirement) {
+        Map<String, Object> c = new LinkedHashMap<>();
+        c.put("applicant", fields("companyName", me.organization() == null ? null : me.organization().name(),
+                "contactName", me.name(), "phone", me.phone(), "email", me.email()));
+        c.put("test", requirement == null ? new LinkedHashMap<>()
+                : fields("testTypeCode", requirement.testTypeCode(), "purpose", requirement.purpose()));
+        c.put("sample", requirement == null ? new LinkedHashMap<>()
+                : fields("name", requirement.sampleName(), "quantity", requirement.sampleQuantity()));
+        c.put("conditions", requirement == null ? new ArrayList<>() : conditions(requirement.conditions()));
+        c.put("schedule", new LinkedHashMap<>());
+        c.put("equipment", fields("id", equipment.id(), "externalId", equipment.externalId(), "name",
+                equipment.name()));
+        c.put("notes", "");
+        return c;
+    }
+
+    private static List<Map<String, Object>> conditions(List<RequirementSnapshot.Condition> conditions) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (RequirementSnapshot.Condition c : conditions) {
+            out.add(fields("key", c.key(), "label", c.label(), "value", plain(c.value()), "min", plain(c.min()),
+                    "max", plain(c.max()), "valueText", c.valueText(), "unit", c.unit(),
+                    "status", c.status() == null ? null : c.status().name()));
+        }
+        return out;
+    }
+
+    /** 15.000 → 15 처럼 JSON 에 깔끔하게 (100 이 1E+2 가 되지 않게 scale 0 이상 유지) */
+    private static BigDecimal plain(BigDecimal v) {
+        if (v == null) {
+            return null;
+        }
+        BigDecimal s = v.stripTrailingZeros();
+        return s.scale() < 0 ? s.setScale(0) : s;
+    }
+
+    private static Map<String, Object> fields(Object... pairs) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        for (int i = 0; i < pairs.length; i += 2) {
+            if (pairs[i + 1] != null) {
+                m.put((String) pairs[i], pairs[i + 1]);
+            }
+        }
+        return m;
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String v : values) {
+            if (v != null && !v.isBlank()) {
+                return v.strip();
+            }
+        }
+        return TestRequestServiceImpl.DEFAULT_TITLE;
+    }
+}
