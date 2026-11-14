@@ -162,6 +162,8 @@
 |---|---|---|---|---|
 | GET | `/equipment` | 로그인 | 장비 통합 검색/목록 | 1 |
 | GET | `/equipment/{id}` | 로그인 | 장비 상세 (사양, 이용조건, 가동률, 갱신일) | 2 |
+| GET | `/equipment/spec-definitions` | 로그인 | 허용 사양 키·한글명·기준 단위·값 형식 목록 | 2 |
+| GET | `/equipment/{id}/availability` | 로그인 | `?from=YYYY-MM-DD&to=YYYY-MM-DD` 기간별 가용성 | 2 |
 | GET | `/equipment/{id}/similar` | 로그인 | 동일·유사 장비 (같은 시험유형/분류, 이름 유사도) | 12 |
 | GET | `/equipment/duplicates` | 로그인 | 지역 내 중복 장비 그룹 목록 `?region=대전&testType=VIBRATION` | 12 |
 | POST | `/equipment/compare` | 로그인 | 장비 N개 사양·이용 조건 비교표 `{ "equipmentIds": [1,5,9], "testType"?: "VIBRATION" }` | 12 |
@@ -170,6 +172,8 @@
 | GET | `/test-types/{code}` | 로그인 | 시험 정보 안내: 가능 기관·예상비용·기간·이용조건 + 입력할 조건 목록(`conditionRules`) | 4 |
 | GET | `/institutions` | 로그인 | 기관 목록 (승인된 기관, 가나다순, 장비 수 포함) | |
 | GET | `/institutions/{id}` | 로그인 | 기관 상세 + 보유 장비 수·유형별 수·가능 시험유형 | |
+| GET | `/institutions/{id}/security` | 로그인 | 기관 보안시설·시료/데이터 반출·NDA 협의 안내 | |
+| PATCH | `/institutions/{id}/security` | 🏛(소유기관) 👑 | `hasSecureFacility`, `securityNote` 수정 | |
 
 **GET `/equipment` 쿼리**
 
@@ -182,6 +186,7 @@
 | `testType` | `VIBRATION` | |
 | `availability` | `AVAILABLE` | |
 | `externalOnly` | `true` | 외부 이용 가능만 |
+| `accreditedOnly` | `true` | 유효한 공인성적서 발급 정보가 있는 장비만. testType 지정 시 같은 시험유형의 공인 여부로 필터. 기본 false |
 | `includeMock` | `true` | 기본 true(시연), 운영 시 false |
 | `page`, `size`, `sort` | `sort=infoUpdatedAt,desc` | 기본 `size=20`, 정렬은 `externalId`(기본, 오름차순)·`infoUpdatedAt`만. 그 외 필드는 `400 VALIDATION_FAILED` |
 
@@ -193,7 +198,7 @@
 { "id": 48, "externalId": "ASTRA-CAND-0048", "name": "진동시험기", "model": "EDS5000LS4-445",
   "institution": { "id": 2, "name": "대전테크노파크 우주·양자산업센터" }, "region": "대전",
   "equipmentType": "TEST", "testTypes": ["VIBRATION"],
-  "availability": "UNKNOWN", "utilizationRate": null, "feeText": null,
+  "availability": "UNKNOWN", "availabilityNeedsConfirmation": true, "utilizationRate": null, "feeText": null,
   "verificationStatus": "LISTING_CONFIRMED", "isMock": true, "infoUpdatedAt": "2026-11-07T11:52:01.241657+09:00" }
 // infoUpdatedAt: 초기 적재 데이터는 DB 를 만든(마이그레이션) 시각. 기관이 수정·확인하면 그 시각으로 바뀜
 
@@ -203,9 +208,11 @@
 { ...,
   "manufacturer": "(주)팜테크", "category": null, "description": null,
   "usage": { "accessScope": "UNKNOWN", "feeText": null, "feeAmount": null, "feeUnit": null,
-             "durationText": null, "utilizationRate": null, "availability": "UNKNOWN" },
+             "durationText": null, "utilizationRate": null, "availability": "UNKNOWN",
+             "availabilityUpdatedAt": null, "availabilityUpdatedBy": null, "availabilityNote": null,
+             "availabilityNeedsConfirmation": true, "leadTimeDays": null, "operationMode": "UNKNOWN" },
   "specs": [
-    { "key": "frequency", "label": "주파수 범위", "min": 10, "max": 3000, "unit": "Hz",
+    { "key": "frequency", "label": "주파수 범위", "min": 10, "max": 3000, "unit": "Hz", "originalUnit": "Hz",
       "sourceType": "MOCK", "usageScope": "DEMO_ONLY", "verificationStatus": "NOT_VERIFIED" },
     { "key": "max_payload", "label": "최대 시료 질량", "value": 40, "unit": "kg", "sourceType": "MOCK", ... },
     { "key": "max_fixture_mass", "label": "고정구 질량 허용 예시", "value": 15, "unit": "kg", "sourceType": "MOCK", ... },
@@ -233,7 +240,8 @@
     { "conditionKey": "sample_mass",     "label": "시료 질량",   "valueType": "NUMBER", "unit": "kg", "isRequired": true,  "specKey": "max_payload",      "comparator": "MAX_LIMIT" },
     { "conditionKey": "fixture_mass",    "label": "고정구 질량", "valueType": "NUMBER", "unit": "kg", "isRequired": true,  "specKey": "max_fixture_mass", "comparator": "MAX_LIMIT" },
     { "conditionKey": "frequency",       "label": "주파수 범위", "valueType": "RANGE",  "unit": "Hz", "isRequired": true,  "specKey": "frequency",        "comparator": "RANGE_WITHIN" },
-    { "conditionKey": "excitation_axis", "label": "가진 축",     "valueType": "TEXT",   "unit": null, "isRequired": false, "specKey": null,               "comparator": "NONE" } ],
+    { "conditionKey": "excitation_axis", "label": "가진 축",     "valueType": "TEXT",   "unit": null, "isRequired": false, "specKey": null,               "comparator": "NONE" },
+    { "conditionKey": "accredited_required", "label": "공인성적서 필요 여부", "valueType": "TEXT", "unit": null, "isRequired": false, "specKey": null, "comparator": "NONE" } ],
   "institutions": [
     { "id": 6, "name": "한국신뢰성기술센터", "region": "대전", "equipmentCount": 2,
       "estCostMin": null, "estCostMax": null, "estDurationDays": null, "accessScope": "UNKNOWN" },
@@ -270,13 +278,15 @@
                           { "equipmentId": 44, "min": 5, "max": 1800, "unit": "Hz", "sourceType": "MOCK" } ] }, ... ],
   "usage": [ { "equipmentId": 48, "accessScope": "UNKNOWN", "feeText": null, "feeAmount": null, "feeUnit": null,
                "durationText": null, "utilizationRate": null, "availability": "UNKNOWN",
+               "availabilityNeedsConfirmation": true, "leadTimeDays": null, "operationMode": "UNKNOWN",
                "verificationStatus": "LISTING_CONFIRMED", "infoUpdatedAt": "2026-11-07T11:52:01.241657+09:00",
                "testTypeEstimate": { "code": "VIBRATION", "supported": true, "estCostMin": null, "estCostMax": null,
-                                     "estDurationDays": null } }, ... ],
+                                     "estDurationDays": null, "isAccredited": null,
+                                     "accreditationNo": null, "accreditationValidUntil": null } }, ... ],
   "testType": "VIBRATION",
   "usedMockData": true }
-// 기관이 입력한 장비 예: "feeText": "300,000원/일", "feeAmount": 300000, "feeUnit": "DAY", "durationText": "1~2일",
-//   "utilizationRate": 60, "availability": "AVAILABLE", testTypeEstimate { "estCostMin": 300000, "estCostMax": 600000, "estDurationDays": 2 }
+// seed의 시험별 예상 비용·기간·공인정보는 미확인(null). 임의 가격·공인번호를 채우지 않음
+// rows[].values[].originalUnit은 입력 원문 단위. 숫자와 unit은 항상 기준 단위
 // 실패: 400 VALIDATION_FAILED (1대 또는 6대 이상, 같은 장비 중복, 없는 testType) / 404 EQUIPMENT_NOT_FOUND { "equipmentIds": [999999] }
 
 // GET /test-types → 15개, display_order 순. equipmentCount = 그 시험을 할 수 있는 활성 장비 수 (0 이어도 포함)
@@ -310,6 +320,9 @@
 | PATCH | `/equipment/{id}` | 🏛(소유기관) | 기본정보·이용조건·요금·가동률·가용상태 수정 (보낸 값만) → `INSTITUTION_VERIFIED`, `infoUpdatedAt` 갱신 |
 | PUT | `/equipment/{id}/specs` | 🏛(소유기관) | 실제 사양(REAL) 전체를 보낸 목록으로 교체 (빈 목록이면 REAL 삭제). MOCK 사양은 수정 불가 |
 | PUT | `/equipment/{id}/test-types` | 🏛(소유기관) | 가능 시험유형 + 예상 비용·소요기간 (기능 4 데이터) |
+| GET | `/equipment/{id}/downtimes` | 🏛(소유기관) 👑 | `?from=&to=` 정비·운휴 일정과 사유 |
+| POST | `/equipment/{id}/downtimes` | 🏛(소유기관) 👑 | `{startAt,endAt,reason}` 정비·운휴 등록 → 201 `{id}` |
+| DELETE | `/equipment/{id}/downtimes/{downtimeId}` | 🏛(소유기관) 👑 | 정비·운휴 삭제 → 200 data=null |
 | POST | `/equipment/{id}/confirm` | 🏛(소유기관) | "현재 정보가 맞음" 확인만 → `INSTITUTION_VERIFIED`, `infoUpdatedAt=now` |
 | DELETE | `/equipment/{id}` | 🏛(소유기관) | 비활성화 (`is_active=false`, 기존 의뢰 이력 보존) |
 | GET | `/equipment/{id}/change-logs` | 🏛(소유기관) | 누가 언제 무엇을 바꿨는지 |
@@ -317,44 +330,42 @@
 
 - 권한: 기관 담당자는 소속 기관 장비만 (`AccessGuard.requireInstitution`), 아니면 `403 FORBIDDEN`. 관리자는 전부. 기업 회원은 `403`
 - 없거나 비활성인 장비는 `404 EQUIPMENT_NOT_FOUND` (변경 이력 조회는 비활성 장비도 가능)
-- 모든 변경은 `equipment_change_logs`에 `action`(CREATE / UPDATE / SPECS_UPDATE / TEST_TYPES_UPDATE / CONFIRM / DEACTIVATE / TRANSFER)과 `changes` `{"필드": {"before", "after"}}`로 기록
+- 장비 기본정보·사양·시험유형 변경은 `equipment_change_logs`에 `action`(CREATE / UPDATE / SPECS_UPDATE / TEST_TYPES_UPDATE / CONFIRM / DEACTIVATE / TRANSFER)과 `changes` `{"필드": {"before", "after"}}`로 기록. 정비 등록자는 별도 일정의 createdBy로 기록
 - 입력 오류는 `400 VALIDATION_FAILED` + 필드 경로 (`specs[0].value`: 값 없음, `specs[0].min`: min > max, `specs[1].key`: 키 중복, `testTypes[0].code`: 없는 코드·중복)
 
 **초기 데이터 → 기관 인수인계 흐름**
 1. 관리자가 공개자료로 모은 71대를 `import`로 적재 (`verification_status=NEEDS_MANUAL_REVIEW`, 화면에 "기관 미확인" 표시)
 2. 기관 담당자가 가입·승인되면 대시보드에 "우리 기관 장비 N대 확인 필요" 표시
 3. 담당자가 수정하거나 `confirm`을 누르면 `INSTITUTION_VERIFIED`로 바뀌고, 화면의 "기관 미확인" 표시가 사라짐
-4. `infoUpdatedAt`이 90일을 넘으면 담당자에게 `EQUIPMENT_UPDATE_REQUIRED` 알림, 검색 결과에 "정보 갱신 필요" 표시
+4. 상태 확인일 `availabilityUpdatedAt`(없으면 생성일)이 90일을 넘으면 담당자에게 `EQUIPMENT_UPDATE_REQUIRED` 알림. `confirm`은 일반 정보만 확인하며 상태 확인은 `usage.availability`를 포함해 PATCH
 
 > MOCK 사양은 시연용이라 관리자 seed로만 들어갑니다. 기관이 REAL 사양을 입력하면 화면과 매칭은 REAL을 우선 사용합니다.
 
 ```json
-// POST /equipment
-{ "name": "진동시험기", "model": "V-850", "manufacturer": "...", "category": "검사/시험장비",
-  "equipmentType": "TEST", "description": "...",
-  "usage": { "accessScope": "EXTERNAL_ALLOWED", "feeText": "300,000원/일", "feeAmount": 300000, "feeUnit": "DAY",
-             "durationText": "1~2일", "utilizationRate": 60, "availability": "AVAILABLE" },
-  "specs": [ { "key": "frequency", "label": "주파수 범위", "min": 5, "max": 3000, "unit": "Hz" },
-             { "key": "max_payload", "label": "최대 시료 질량", "value": 50, "unit": "kg" },
-             { "key": "max_fixture_mass", "label": "고정구 질량 허용", "value": 20, "unit": "kg" } ],
-  "testTypes": [ { "code": "VIBRATION", "estCostMin": 300000, "estCostMax": 600000, "estDurationDays": 2 } ] }
-// → 201 { "id": 72, "externalId": "ASTRA-EQ-0072", "verificationStatus": "INSTITUTION_VERIFIED" }
-// 사양은 REAL(verificationStatus=VERIFIED)로 저장, isMock=false, region 을 안 보내면 기관 지역
+// POST /equipment (장비 48의 실제 seed 목록 정보를 사용한 요청 형식. 사양·가격은 확인 전이므로 생략)
+{ "name": "진동시험기", "model": "EDS5000LS4-445", "manufacturer": "(주)팜테크",
+  "equipmentType": "TEST", "usage": { "accessScope": "UNKNOWN", "availability": "UNKNOWN" },
+  "testTypes": [ { "code": "VIBRATION" } ] }
+// → 201 data: {id, externalId, verificationStatus}. 새 ID는 서버가 부여
+// 입력한 사양은 REAL(verificationStatus=VERIFIED)로 저장하므로 기관의 실제 확인값만 입력
+// region 을 안 보내면 기관 지역
 
-// PATCH /equipment/72 { "model": "V-900", "usage": { "feeAmount": 450000 } } → 200 장비 상세 (보낸 값만 수정)
-// PUT /equipment/48/specs { "specs": [ { "key": "frequency", "label": "주파수 범위", "min": 5, "max": 3000, "unit": "Hz" } ] }
-//   → 200 장비 상세. specs: frequency(REAL), frequency(MOCK), max_payload(MOCK) ... (MOCK 은 그대로)
-// PUT /equipment/72/test-types { "testTypes": [ { "code": "VIBRATION", "estCostMin": 300000, "estCostMax": 600000, "estDurationDays": 2 } ] } → 200 장비 상세
+// PATCH /equipment/48 { "model": "EDS5000LS4-445" } → 200 장비 상세 (보낸 값만 수정)
+// PUT /equipment/37/specs (장비 37의 REAL seed 주파수를 사용한 요청 형식)
+// { "specs": [ { "key": "frequency", "label": "주파수 범위", "min": 75, "max": 110, "unit": "GHz" } ] }
+//   → 200 장비 상세. REAL은 Hz로 환산, originalUnit=GHz. 기존 MOCK은 유지
+// PUT /equipment/48/test-types { "testTypes": [ { "code": "VIBRATION" } ] } → 200 장비 상세
 // POST /equipment/48/confirm → 200 장비 상세 (verificationStatus=INSTITUTION_VERIFIED, infoUpdatedAt=지금)
-// DELETE /equipment/72 → 200 { "success": true, "data": null }
+// DELETE /equipment/{id} → 200 { "success": true, "data": null }
 
 // GET /institutions/me/equipment → 페이지 (기관 담당자: 소속 기관 / 관리자: ?institutionId= 필수). 기본 정렬 externalId
-//   needsUpdate = updateReasons 가 있으면 true. NOT_CONFIRMED: 기관 확인 전, OUTDATED: 마지막 갱신 90일 경과
+//   needsUpdate = updateReasons가 있거나 availabilityNeedsConfirmation이면 true.
+//   NOT_CONFIRMED: 일반 정보 기관 확인 전, OUTDATED: 일반 정보 마지막 갱신 90일 경과
 { "content": [ { "id": 48, "externalId": "ASTRA-CAND-0048", "name": "진동시험기", "model": "EDS5000LS4-445",
                  "equipmentType": "TEST", "testTypes": ["VIBRATION"], "availability": "UNKNOWN",
                  "verificationStatus": "LISTING_CONFIRMED", "specVerificationStatus": "NOT_VERIFIED", "isMock": true,
                  "infoUpdatedAt": "2026-11-07T11:52:01.241657+09:00", "daysSinceUpdate": 1,
-                 "needsUpdate": true, "updateReasons": ["NOT_CONFIRMED"] }, ... ],
+                 "needsUpdate": true, "updateReasons": ["NOT_CONFIRMED"], "availabilityNeedsConfirmation": true }, ... ],
   "page": 0, "size": 20, "totalElements": 13, "totalPages": 1 }
 
 // GET /equipment/72/change-logs → 페이지, 최신순
@@ -366,6 +377,42 @@
                  "changes": { "name": { "before": null, "after": "진동시험기" }, ..., "specs": { "before": null, "after": [ ... ] } },
                  "createdAt": "..." } ], ... }
 ```
+
+---
+
+### 2-2. 사양 사전·가용성·현업 정보 (V6)
+
+`GET /equipment/spec-definitions`는 `specKey`, `nameKo`, `baseUnit`, `valueType`을 가진 배열(현재 29건)을 반환합니다. 사양 등록/교체는 이 사전의 키와 형식을 따라야 합니다. NUMBER는 value만, RANGE는 min/max 둘 다, TEXT는 비어 있지 않은 valueText만 받습니다. 수치는 기준 단위로 환산하고 입력 단위는 originalUnit에 보관합니다. 알 수 없는 키·단위·잘못된 형식은 `400 VALIDATION_FAILED`입니다. 현재 값에 맞춰 조회 폼을 구성하고 임의 사양 키를 만들지 않습니다.
+
+`GET /equipment/{id}/availability`의 from/to는 한국 날짜이며 to 날짜를 포함합니다. from 생략은 오늘, to 생략은 from+60일이며 총 366일 이내입니다. 날짜 역전·초과는 `400 VALIDATION_FAILED`입니다. 응답 data의 구조는 다음과 같습니다.
+
+| 필드 | 형식·의미 |
+|---|---|
+| equipmentId, from, to | 장비 ID, 조회 시작·종료 날짜 |
+| availability | 장비에 저장된 현재 상태 |
+| available | 전체 조회 구간이 AVAILABLE인 경우에만 true |
+| needsConfirmation | UNKNOWN, 확인일 없음/90일 초과, 기관 확인자 없음이면 true |
+| leadTimeDays | 대기 일수. null은 미확인 |
+| intervals[] | `{startAt,endAt,availability}`. 시간대 포함 ISO 날짜/시간. 시작 포함·끝 제외 |
+
+확정 예약(CONFIRMED)은 BUSY, 정비·운휴는 MAINTENANCE로 합칩니다. 겹친 구간은 UNAVAILABLE > MAINTENANCE > BUSY > UNKNOWN > AVAILABLE 순으로 표시합니다. 확인이 필요한 AVAILABLE은 UNKNOWN으로 표시하고, 종료 근거가 없는 현재 BUSY는 미래에도 보수적으로 BUSY를 유지합니다. 예약자·의뢰 내용은 공개하지 않습니다. 예약 제안·변경제안·확정 시 정비 겹침 또는 MAINTENANCE/UNAVAILABLE 상태는 `409 RESERVATION_OVERLAP`입니다.
+
+정비 등록은 시간대 포함 startAt/endAt(끝 > 시작), 공백 아닌 reason(최대 500자)이 필수입니다. 확정 예약과 겹치면 `409 RESERVATION_OVERLAP`. 목록의 항목은 id, equipmentId, startAt, endAt, reason, createdBy, createdAt이며 같은 날짜 조회 범위를 사용합니다. 없는 일정 삭제는 `404 NOT_FOUND`. 정비 조회·등록·삭제는 소유기관 담당자/관리자만 가능합니다.
+
+| PATCH usage 필드 | 의미 |
+|---|---|
+| availability | AVAILABLE: 운영 가능 확인, BUSY: 사용 중/일정 협의, MAINTENANCE: 정비, UNAVAILABLE: 제공 중단, UNKNOWN: 미확인 |
+| availabilityNote | 상태 판단 근거, 최대 500자 |
+| leadTimeDays | 0 이상 대기 일수 |
+| operationMode | INSTITUTION_OPERATED(기관 전담), SUPERVISED_SELF_SERVICE(입회 후 자가), SELF_SERVICE(자가), UNKNOWN |
+
+availability를 보내면 서버가 availabilityUpdatedAt/By를 기록하고 알림 주기를 초기화합니다. 일반 정보 수정·confirm은 상태 확인 시각을 바꾸지 않습니다. 목록·상세 usage·비교 usage·기관 관리 목록에 availabilityNeedsConfirmation이 추가됩니다. V6 seed의 시연 상태는 장비 45 AVAILABLE, 46 BUSY, 50 MAINTENANCE, 51 UNAVAILABLE이며 DEMO 근거를 표시하고 모두 기관 확인 필요입니다. 나머지 67대는 UNKNOWN입니다.
+
+`PUT /equipment/{id}/test-types`의 항목에는 isAccredited(boolean/null), accreditationNo(최대 100자), accreditationValidUntil(날짜)을 추가합니다. true에는 인정번호·유효일까지 필수입니다. 비교의 testTypeEstimate.isAccredited는 만료일을 반영하며 false는 불가/만료, null은 미확인입니다. 시험유형을 지정한 비교에서만 시험별 공인정보를 반환합니다.
+
+`GET /institutions/2/security`의 seed 응답 data는 `{"hasSecureFacility":null,"securityNote":null}`입니다. PATCH는 같은 두 필드를 받으며 null/생략은 변경하지 않습니다. securityNote는 최대 1000자입니다. 반출·NDA 안내이며 법적 허가 판정은 아닙니다.
+
+활성 TEST/MEASUREMENT 장비는 등록·시험유형 교체·분류 변경 시 시험유형이 하나 이상 필요하며, 위반 시 `400 VALIDATION_FAILED`(testTypes)입니다. seed 연결 누락도 검사합니다. 가공·소프트웨어·지원 장비 25대는 유형을 추측해 연결하지 않고 검색·비교에 유지합니다. 상태 정의와 변경 책임은 [데이터 사전](design/data-dictionary.md)을 참조합니다.
 
 ---
 
@@ -410,6 +457,8 @@
 > 설계 원칙(PPT 12p): AI 추출값은 `source=AI_EXTRACTED`, 불확실하면 `UNCONFIRMED`로 저장하고 사용자가 직접 수정 가능해야 함.
 > `missing`은 그 시험유형의 `test_condition_rules` 중 `is_required=true`인데 값이 없는 조건입니다. AI는 정해진 조건 키 목록 안에서만 추출합니다.
 
+structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 시험의 test_condition_rules에서 동적으로 만듭니다. 프롬프트에 spec_definitions와 condition_aliases를 함께 전달합니다. 예: 무게·중량→VIBRATION의 sample_mass, 가진→test_types.keywords의 VIBRATION. 모르는 유형·키·단위, 근거 없는 값은 서버에서 `AI_UPSTREAM_ERROR`로 거부하며 잘못된 응답을 성공 결과로 저장하지 않습니다. 허용된 값 중 불확실한 조건은 UNCONFIRMED로 남깁니다. chat_messages.metadata와 match_condition_checks에 추출·조건별 판정 근거를 보관합니다.
+
 ---
 
 ## 4. AI 매칭 · 비교 (BE-C) — 기능 7
@@ -430,13 +479,15 @@
 | `NONE` | 비교하지 않음 → 기관 확인 | `excitation_axis` |
 
 - 요구 조건이 비었거나 장비에 해당 사양이 없으면 `UNKNOWN`입니다.
-- 단위가 다르면 규칙의 `unit`으로 환산한 뒤 비교합니다. 예: 장비 데이터의 `frequency`는 RF 장비는 GHz, 진동시험기는 Hz입니다.
+- V6부터 사양과 규칙의 단위는 `spec_definitions.base_unit`으로 통일합니다. RF 장비 37의 REAL frequency는 75~110 GHz에서 75000000000~110000000000 Hz로 환산하며 `originalUnit=GHz`를 보관합니다. 요구 조건도 기준 단위로 환산해 비교합니다.
+- 후보는 `EquipmentQueryService.findCandidates()` 결과에 한정합니다. UNAVAILABLE·MAINTENANCE는 제외하며 UNKNOWN·오래된 상태·기관 미확인 DEMO는 확인 필요를 표시합니다.
+- 선택 조건 `accredited_required`는 TEXT(`필요`/`불필요`), specKey=null, comparator=NONE입니다. 일반 NONE 조건과 별도로 코드가 공인 능력을 판정합니다. `필요`이면 유효 공인정보 → MET, 불가·만료 → NOT_MET, 미확인 → UNKNOWN. `불필요`는 MET입니다. 만료일 당일까지 한국 날짜 기준으로 유효합니다.
 - REAL 사양이 있으면 REAL을, 없으면 MOCK을 씁니다. MOCK을 썼으면 `usedMockData=true`입니다.
 - 점수(예시): MET 비율 × 100, NOT_MET이 하나라도 있으면 `UNSUITABLE`, UNKNOWN이 있으면 `PARTIAL`, 전부 MET이면 `SUITABLE`.
 
 ```json
 // GET /match-runs/{id}
-{ "id": 3, "requirementId": 7, "algorithmVersion": "rule-v1", "createdAt": "...",
+{ "id": 3, "requirementId": 7, "algorithmVersion": "rule-v2", "createdAt": "...",
   "results": [
     { "id": 31, "rank": 1, "score": 66.7, "verdict": "PARTIAL", "usedMockData": true,
       "equipment": { "id": 48, "externalId": "ASTRA-CAND-0048", "name": "진동시험기", "institutionName": "대전테크노파크 우주·양자산업센터" },
@@ -477,6 +528,9 @@
 
 **의뢰서 본문 `content` (JSONB) 스키마 — 프론트/백 공통 계약**
 (질량·주파수·크기 같은 수치 조건은 모두 `conditions[]`에 조건 키로 넣고, `sample`에는 시료 이름·수량·준비일만 둡니다.)
+
+선택 객체 `serviceRequirements`의 허용 키는 accreditedRequired(공인성적서 필요), operatorSupportRequested(운용 인력 지원 요청), securityOrExportControlled(보안·수출통제 협의 대상)입니다. 값은 boolean/null이며 생략·null은 미확인, false는 요청하지 않음입니다. 그 외 키·숫자/문자 값은 `400 VALIDATION_FAILED`. AI 초안은 명시적으로 확인한 accredited_required만 accreditedRequired로 옮기고 나머지는 추측하지 않습니다.
+
 ```json
 {
   "applicant": { "companyName": "가상 A기업", "contactName": "홍길동", "phone": "010-...", "email": "..." },
@@ -487,6 +541,7 @@
                   { "key": "frequency", "label": "주파수 범위", "min": 20, "max": 2000, "unit": "Hz", "status": "CONFIRMED" } ],
   "schedule": { "desiredStartDate": "2026-11-20", "desiredEndDate": "2026-11-21" },
   "equipment": { "id": 48, "externalId": "ASTRA-CAND-0048", "name": "진동시험기" },
+  "serviceRequirements": { "accreditedRequired": null, "operatorSupportRequested": null, "securityOrExportControlled": null },
   "notes": "자유 기재"
 }
 ```
@@ -667,7 +722,7 @@
                       "equipmentCount": 31, "verifiedCount": 0, "verificationRate": 0.0 }, ... ] }  // 장비 수 많은 순
 ```
 
-- 장비 정보 갱신 알림: 매일 오전 9시(한국 시간) 마지막 갱신이 막 90일을 넘긴 장비의 소속 기관 활성 담당자에게 `EQUIPMENT_UPDATE_REQUIRED` (장비마다 한 번, BE-B 알림 구현이 있을 때만). `astra.equipment.update-reminder.enabled=false` 로 끔
+- 장비 상태 갱신 알림: 매일 오전 9시(한국 시간) `availability_updated_at`(없으면 생성일)이 90일을 넘긴 장비의 소속 기관 활성 담당자에게 `EQUIPMENT_UPDATE_REQUIRED`. 상태 확인 주기당 한 번이며 중단 기간에 누락된 장비도 처리합니다. 담당자가 없으면 다음 실행에서 재시도합니다. `astra.equipment.update-reminder.enabled=false` 로 끕니다
 
 ---
 
@@ -760,4 +815,4 @@ UNDER_REVIEW ──reject──▶ REJECTED        (DRAFT~SCHEDULING 에서 기�
 | AI 자동추진 완료/대기 | 실행자 | `AI_RUN_DONE` / `AI_RUN_WAITING` |
 | 회원 가입 신청 (기업·기관 담당자) | 관리자 전원 | `USER_APPROVAL_REQUESTED` |
 | 가입 승인 / 거절 | 신청자 | `USER_APPROVED` / `USER_REJECTED` |
-| 장비 정보 90일 경과 | 소속 기관 담당자 | `EQUIPMENT_UPDATE_REQUIRED` |
+| 장비 상태 확인 90일 경과 | 소속 기관 담당자 | `EQUIPMENT_UPDATE_REQUIRED` |

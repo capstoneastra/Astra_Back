@@ -406,7 +406,7 @@ AI 상담부터 장비 추천, 의뢰서 초안까지 맡습니다. API 수는 �
 #### 주의할 점
 
 - 매칭 판단은 LLM에 맡기지 말고 코드(규칙)로 하세요. LLM은 조건 추출과 설명 문장에만 씁니다. 그래야 결과가 매번 같고 근거를 설명할 수 있습니다.
-- 매칭 기준은 `test_condition_rules`입니다. 조건 키(`sample_mass`)를 어떤 사양 키(`max_payload`)와 어떤 방식(`MAX_LIMIT`)으로 비교할지가 들어 있고, seed에 15개 시험유형 초안(32개 규칙)이 있습니다. 1주차에 검토해서 확정하세요. 규칙 수정은 `tools/json_to_seed.py`의 `CONDITION_RULES`에서 합니다.
+- 매칭 기준은 `test_condition_rules`입니다. 조건 키(`sample_mass`)를 어떤 사양 키(`max_payload`)와 어떤 방식(`MAX_LIMIT`)으로 비교할지 정의합니다. V2는 15개 시험유형·32개 규칙이며 V6에서 선택 공인 요구 조건을 추가해 47개입니다. 사양 키·기준 단위는 `spec_definitions`를 따릅니다. 규칙을 변경할 때는 새 마이그레이션, `schema.sql`, `seed.sql`, `docs/design/tools/json_to_seed.py`를 함께 맞춥니다. 담당별 계약은 [보완 인계](backend-hardening-handoff.md)를 참조하세요.
 - 장비 데이터의 `frequency`는 RF 장비는 GHz, 진동시험기는 Hz입니다. 비교 전에 단위 환산을 꼭 하세요.
 - 시연 중 응답이 느리거나 실패할 수 있으니, 시연 대화는 미리 돌려 결과를 확인해 두세요.
 

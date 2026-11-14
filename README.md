@@ -149,7 +149,7 @@ API 92개의 상세 명세와 우선순위(P0 시연 필수 / P1 / P2)는 [`docs
 
 ## 5. ERD
 
-테이블 28개. 아래 그림은 `docs/design/schema.sql`에서 자동 생성했습니다. 도메인별 상세는 펼쳐서 보세요 (`created_at`, `updated_at` 컬럼은 생략).
+테이블 31개. 아래 그림은 `docs/design/schema.sql`에서 자동 생성했습니다. 도메인별 상세는 펼쳐서 보세요 (`created_at`, `updated_at` 컬럼은 생략).
 
 <!-- ERD:START (python docs/design/tools/schema_to_mermaid.py 출력으로 교체) -->
 
@@ -160,13 +160,17 @@ erDiagram
     organizations |o--o{ users : ""
     users ||--o{ refresh_tokens : ""
     test_types ||--o{ test_condition_rules : ""
+    spec_definitions |o--o{ test_condition_rules : ""
     organizations ||--o{ equipment : ""
     users |o--o{ equipment : ""
     equipment ||--o{ equipment_specs : ""
+    spec_definitions ||--o{ equipment_specs : ""
     equipment ||--o{ equipment_change_logs : ""
     users ||--o{ equipment_change_logs : ""
     equipment ||--o{ equipment_test_types : ""
     test_types ||--o{ equipment_test_types : ""
+    equipment ||--o{ equipment_downtimes : ""
+    users ||--o{ equipment_downtimes : ""
     users ||--o{ chat_sessions : ""
     chat_sessions ||--o{ chat_messages : ""
     users ||--o{ test_requirements : ""
@@ -226,6 +230,8 @@ erDiagram
         varchar phone
         varchar email
         varchar homepage_url
+        boolean has_secure_facility
+        varchar security_note
         boolean is_verified
     }
     users {
@@ -283,7 +289,7 @@ erDiagram
 </details>
 
 <details>
-<summary><b>장비 · 시험유형</b> (6개 테이블)</summary>
+<summary><b>장비 · 시험유형</b> (9개 테이블)</summary>
 
 ```mermaid
 erDiagram
@@ -306,6 +312,12 @@ erDiagram
         varchar duration_text
         numeric utilization_rate
         varchar availability "AVAILABLE / BUSY / MAINTENANCE / UNAVAILABLE / UNKNOWN"
+        timestamptz availability_updated_at
+        bigint availability_updated_by FK
+        varchar availability_note
+        timestamptz availability_reminded_at
+        int lead_time_days
+        varchar operation_mode "INSTITUTION_OPERATED / SUPERVISED_SELF_SERVICE / SELF_SERVICE / UNKNOWN"
         varchar source_type "WEB / PDF / INSTITUTION / MANUAL"
         varchar source_url
         varchar source_file
@@ -323,13 +335,14 @@ erDiagram
     equipment_specs {
         bigint id PK
         bigint equipment_id FK
-        varchar spec_key
+        varchar spec_key FK
         varchar label
         numeric value_num
         numeric min_num
         numeric max_num
         varchar value_text
         varchar unit
+        varchar original_unit
         varchar source_type "REAL / MOCK"
         varchar verification_status
         varchar usage_scope "GENERAL / DEMO_ONLY"
@@ -355,6 +368,9 @@ erDiagram
         int est_cost_max
         int est_duration_days
         varchar note
+        boolean is_accredited
+        varchar accreditation_no
+        date accreditation_valid_until
     }
     test_condition_rules {
         varchar test_type_code PK, FK
@@ -363,9 +379,28 @@ erDiagram
         varchar value_type "NUMBER / RANGE / TEXT"
         varchar unit
         boolean is_required
-        varchar spec_key
+        varchar spec_key FK
         varchar comparator "RANGE_WITHIN / MAX_LIMIT / MIN_LIMIT / NONE"
         int display_order
+    }
+    spec_definitions {
+        varchar spec_key PK
+        varchar name_ko
+        varchar base_unit
+        varchar value_type "NUMBER / RANGE / TEXT"
+    }
+    condition_aliases {
+        varchar test_type_code PK
+        varchar condition_key PK
+        varchar alias PK
+    }
+    equipment_downtimes {
+        bigint id PK
+        bigint equipment_id FK
+        timestamptz start_at
+        timestamptz end_at
+        varchar reason
+        bigint created_by FK
     }
     organizations {
         bigint id PK
@@ -374,14 +409,19 @@ erDiagram
         bigint id PK
     }
     organizations ||--o{ equipment : "institution_id"
+    users |o--o{ equipment : "availability_updated_by"
     users |o--o{ equipment : "created_by"
     users |o--o{ equipment : "updated_by"
     equipment ||--o{ equipment_specs : "equipment_id"
+    spec_definitions ||--o{ equipment_specs : "spec_key"
     equipment ||--o{ equipment_change_logs : "equipment_id"
     users ||--o{ equipment_change_logs : "changed_by"
     equipment ||--o{ equipment_test_types : "equipment_id"
     test_types ||--o{ equipment_test_types : "test_type_code"
     test_types ||--o{ test_condition_rules : "test_type_code"
+    spec_definitions |o--o{ test_condition_rules : "spec_key"
+    equipment ||--o{ equipment_downtimes : "equipment_id"
+    users ||--o{ equipment_downtimes : "created_by"
 ```
 
 </details>
@@ -736,7 +776,7 @@ cp .env.example .env        # 필요한 값 채우기 (DB 는 기본값 그대�
 ./gradlew bootRun           # Windows: gradlew.bat bootRun
 ```
 
-- `bootRun`을 하면 `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고, Flyway가 `V1__init.sql`(테이블), `V2__seed.sql`(초기 데이터), `V3__demo_accounts.sql`(시연 계정), `V4__email_verifications.sql`(가입 이메일 인증), `V5__fill_institution_region.sql`(지역이 비어 있던 기관·장비 31대에 '진주' 채움)을 적용합니다.
+- `bootRun`을 하면 `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고, Flyway가 `V1__init.sql`(테이블), `V2__seed.sql`(초기 데이터), `V3__demo_accounts.sql`(시연 계정), `V4__email_verifications.sql`(가입 이메일 인증), `V5__fill_institution_region.sql`(지역이 비어 있던 기관·장비 31대에 '진주' 채움), `V6__equipment_integrity_and_availability.sql`(사양 사전·기준 단위·가용성·정비·공인·운용·보안)을 적용합니다.
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - 헬스체크: http://localhost:8080/actuator/health
 - IntelliJ: **Project SDK와 Gradle JVM을 모두 21**로 맞춘 뒤 `AstraApplication`을 실행합니다.
@@ -875,11 +915,13 @@ public ApiResponse<RequestDetail> detail(@AuthenticationPrincipal CurrentUser us
 
 | 문서 | 내용 |
 |---|---|
-| [`docs/api-spec.md`](docs/api-spec.md) | API 명세 92개, 에러 코드, 매칭 규칙, 의뢰 상태 전이표 |
+| [`docs/api-spec.md`](docs/api-spec.md) | API 명세, 에러 코드, 매칭 규칙, 의뢰 상태 전이표 |
 | [`docs/demo-scenario.md`](docs/demo-scenario.md) | 시연 시나리오 점검표 (단계별 담당·API·기대 결과·확인) |
 | [`docs/work-log-be-a.md`](docs/work-log-be-a.md) | BE-A 작업 기록 |
 | [`docs/work-log-be-b.md`](docs/work-log-be-b.md) | BE-B 작업 기록 (구조, 다른 담당자에게 알릴 것, 정해야 할 것) |
 | [`docs/team-guide.md`](docs/team-guide.md) | 기술 스택, 협업 규칙, 담당자별 API·주차별 계획 |
-| [`docs/design/schema.sql`](docs/design/schema.sql) | 전체 테이블 설계 (28개) |
+| [`docs/design/schema.sql`](docs/design/schema.sql) | 전체 테이블 설계 (31개, V6) |
+| [`docs/design/data-dictionary.md`](docs/design/data-dictionary.md) | 컬럼·상태·단위의 의미와 변경 책임 |
+| [`docs/backend-hardening-handoff.md`](docs/backend-hardening-handoff.md) | 보완 전 수치, V6 변경 계약, 팀 공지 필요 사항과 검증 결과 |
 | [`docs/design/erd.dbml`](docs/design/erd.dbml) | ERD (dbdiagram.io에 붙여넣기) |
 | [`docs/design/seed.sql`](docs/design/seed.sql) | 초기 데이터 (`docs/design/tools/json_to_seed.py`로 생성) |
