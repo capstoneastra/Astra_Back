@@ -17,7 +17,7 @@ schema = (ROOT / "schema.sql").read_text(encoding="utf-8")
 GROUPS = [
     ("user_org", ["organizations", "users", "refresh_tokens", "email_verifications", "notifications"]),
     ("equipment_domain", ["equipment", "equipment_specs", "equipment_change_logs", "test_types",
-                          "equipment_test_types", "test_condition_rules"]),
+                          "equipment_test_types", "test_condition_rules", "spec_definitions", "condition_aliases", "equipment_downtimes"]),
     ("ai_domain", ["chat_sessions", "chat_messages", "test_requirements", "requirement_conditions",
                    "match_runs", "match_results", "match_condition_checks", "ai_pipeline_runs"]),
     ("request_domain", ["test_requests", "test_request_revisions", "request_status_history",

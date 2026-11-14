@@ -4,7 +4,7 @@
 Project ASTRA { database_type: 'PostgreSQL' }
 
 TableGroup user_org { organizations users refresh_tokens email_verifications notifications }
-TableGroup equipment_domain { equipment equipment_specs equipment_change_logs test_types equipment_test_types test_condition_rules }
+TableGroup equipment_domain { equipment equipment_specs equipment_change_logs test_types equipment_test_types test_condition_rules spec_definitions condition_aliases equipment_downtimes }
 TableGroup ai_domain { chat_sessions chat_messages test_requirements requirement_conditions match_runs match_results match_condition_checks ai_pipeline_runs }
 TableGroup request_domain { test_requests test_request_revisions request_status_history supplement_requests attachments reservations }
 TableGroup simulation_domain { simulation_models simulation_presets simulation_runs }
@@ -20,6 +20,8 @@ Table organizations {
   phone varchar(30)
   email varchar(200)
   homepage_url varchar(500)
+  has_secure_facility boolean
+  security_note varchar(1000)
   is_verified boolean [not null, default: `FALSE`, note: '가입으로 생긴 기업·신규 기관은 관리자가 회원 승인할 때 TRUE']
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
@@ -67,6 +69,16 @@ Table email_verifications {
   created_at timestamptz [not null, default: `now()`]
 }
 
+Table spec_definitions {
+  spec_key varchar(80) [pk]
+  name_ko varchar(100) [not null]
+  base_unit varchar(30)
+  value_type varchar(10) [not null, note: 'NUMBER | RANGE | TEXT']
+  indexes {
+    (spec_key, base_unit) [unique]
+  }
+}
+
 Table test_types {
   code varchar(50) [pk, note: 'VIBRATION, TENSILE, ELECTRICAL_RF_ANALYSIS ...']
   name_ko varchar(100) [not null, note: '진동시험']
@@ -82,11 +94,20 @@ Table test_condition_rules {
   value_type varchar(10) [not null, note: 'NUMBER | RANGE | TEXT']
   unit varchar(30) [note: '기준 단위 (비교 전 이 단위로 환산)']
   is_required boolean [not null, default: `FALSE`, note: 'TRUE 인데 비어 있으면 AI 분석이 MISSING 처리']
-  spec_key varchar(80) [note: '비교할 equipment_specs.spec_key (NULL = 비교 안 함, 기관 확인)']
+  spec_key varchar(80) [ref: > spec_definitions.spec_key, note: '비교할 equipment_specs.spec_key (NULL = 비교 안 함, 기관 확인)']
   comparator varchar(20) [not null, default: `'NONE'`, note: 'RANGE_WITHIN | MAX_LIMIT | MIN_LIMIT | NONE']
   display_order int [not null, default: `0`]
   indexes {
     (test_type_code, condition_key) [pk]
+  }
+}
+
+Table condition_aliases {
+  test_type_code varchar(50) [not null]
+  condition_key varchar(80) [not null]
+  alias varchar(100) [not null]
+  indexes {
+    (test_type_code, condition_key, alias) [pk]
   }
 }
 
@@ -108,7 +129,13 @@ Table equipment {
   fee_unit varchar(20) [note: 'HOUR | DAY | CASE | SAMPLE | NEGOTIABLE']
   duration_text varchar(200)
   utilization_rate numeric(5,2) [note: '가동률 %']
-  availability varchar(20) [not null, default: `'UNKNOWN'`, note: 'AVAILABLE | BUSY | MAINTENANCE | UNAVAILABLE | UNKNOWN  — 출처 / 검증']
+  availability varchar(20) [not null, default: `'UNKNOWN'`, note: 'AVAILABLE | BUSY | MAINTENANCE | UNAVAILABLE | UNKNOWN']
+  availability_updated_at timestamptz [note: '기관이 가용 상태를 마지막으로 확인한 시각']
+  availability_updated_by bigint [ref: > users.id, note: '상태 확인자. NULL이면 기관 확인 필요']
+  availability_note varchar(500) [note: '판단 근거 또는 DEMO 표시']
+  availability_reminded_at timestamptz [note: '이번 상태 확인 주기의 알림 시각']
+  lead_time_days int [note: '착수까지 대기 일수. NULL은 미확인']
+  operation_mode varchar(30) [not null, default: `'UNKNOWN'`, note: 'INSTITUTION_OPERATED | SUPERVISED_SELF_SERVICE | SELF_SERVICE | UNKNOWN']
   source_type varchar(20) [note: 'WEB | PDF | INSTITUTION | MANUAL']
   source_url varchar(1000)
   source_file varchar(200)
@@ -129,19 +156,21 @@ Table equipment {
 Table equipment_specs {
   id bigint [pk]
   equipment_id bigint [not null, ref: > equipment.id]
-  spec_key varchar(80) [not null, note: 'frequency, max_payload, max_fixture_mass, measurement_range_x ...']
+  spec_key varchar(80) [not null, ref: > spec_definitions.spec_key, note: 'frequency, max_payload, max_fixture_mass, measurement_range_x ...']
   label varchar(100) [not null]
   value_num numeric [note: '단일값']
   min_num numeric [note: '범위 최소']
   max_num numeric [note: '범위 최대']
   value_text varchar(300) [note: '숫자로 표현 불가한 값']
   unit varchar(30)
+  original_unit varchar(30)
   source_type varchar(10) [not null, note: 'REAL | MOCK']
   verification_status varchar(30) [not null, default: `'NOT_VERIFIED'`]
   usage_scope varchar(20) [not null, default: `'GENERAL'`, note: 'GENERAL | DEMO_ONLY']
   indexes {
     (equipment_id, spec_key, source_type) [unique]
   }
+  Note: 'CHECK ((value_num IS NOT NULL AND min_num IS NULL AND max_num IS NULL AND value_text IS NULL) OR (value_num IS NULL AND min_num IS NOT NULL AND max_num IS NOT NULL AND min_num <= max_num AND value_text IS NULL) OR (value_num IS NULL AND min_num IS NULL AND max_num IS NULL AND value_text IS NOT NULL AND length(pg_catalog.btrim(value_text)) > 0))'
 }
 
 Table equipment_change_logs {
@@ -160,9 +189,24 @@ Table equipment_test_types {
   est_cost_max int
   est_duration_days int
   note varchar(300)
+  is_accredited boolean
+  accreditation_no varchar(100)
+  accreditation_valid_until date
   indexes {
     (equipment_id, test_type_code) [pk]
   }
+  Note: 'CHECK (is_accredited IS DISTINCT FROM TRUE OR (accreditation_no IS NOT NULL AND length(pg_catalog.btrim(accreditation_no)) > 0 AND accreditation_valid_until IS NOT NULL))'
+}
+
+Table equipment_downtimes {
+  id bigint [pk]
+  equipment_id bigint [not null, ref: > equipment.id]
+  start_at timestamptz [not null]
+  end_at timestamptz [not null]
+  reason varchar(500) [not null]
+  created_by bigint [not null, ref: > users.id]
+  created_at timestamptz [not null, default: `now()`]
+  Note: 'CHECK (end_at > start_at)'
 }
 
 Table chat_sessions {
@@ -219,7 +263,7 @@ Table requirement_conditions {
 Table match_runs {
   id bigint [pk]
   requirement_id bigint [not null, ref: > test_requirements.id]
-  algorithm_version varchar(30) [not null, note: '\'rule-v1\', \'rule-v1+llm\' ...']
+  algorithm_version varchar(30) [not null, note: '신규 \'rule-v2\', 기존 \'rule-v1\' 이력 보존']
   requirement_snapshot jsonb [not null, note: '실행 당시 조건 스냅샷']
   created_by bigint [ref: > users.id]
   created_at timestamptz [not null, default: `now()`]

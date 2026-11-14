@@ -15,7 +15,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * 실제 PostgreSQL 16(Testcontainers)에 Flyway V1·V2 를 적용한 뒤
+ * 실제 PostgreSQL 16(Testcontainers)에 Flyway V1~V6을 적용한 뒤
  * 초기 데이터와 설계상 중요한 DB 제약조건이 동작하는지 검증합니다.
  * Docker 가 켜져 있어야 실행됩니다.
  */
@@ -51,7 +51,8 @@ class DatabaseSchemaTest {
         assertThat(count("equipment")).isEqualTo(71);
         assertThat(count("equipment_specs")).isEqualTo(117);
         assertThat(count("test_types")).isEqualTo(15);
-        assertThat(count("test_condition_rules")).isEqualTo(32);
+        assertThat(count("test_condition_rules")).isEqualTo(47); // 15개 유형에 선택 공인 요구 조건 추가
+        assertThat(count("spec_definitions")).isEqualTo(29);
         assertThat(count("equipment_test_types")).isEqualTo(48);
         assertThat(count("simulation_models")).isEqualTo(20);
         assertThat(count("simulation_presets")).isEqualTo(71);
@@ -78,6 +79,40 @@ class DatabaseSchemaTest {
     void 시험유형마다_필수_조건이_하나_이상_있다() {
         assertThat(count("test_types t WHERE NOT EXISTS "
                 + "(SELECT 1 FROM test_condition_rules r WHERE r.test_type_code = t.code AND r.is_required)")).isZero();
+    }
+
+    @Test
+    void 시험과_측정_장비는_모두_시험유형에_연결된다() {
+        assertThat(count("equipment e WHERE is_active AND equipment_type IN ('TEST','MEASUREMENT') "
+                + "AND NOT EXISTS (SELECT 1 FROM equipment_test_types t WHERE t.equipment_id=e.id)")).isZero();
+        assertThat(count("equipment e WHERE is_active AND NOT EXISTS "
+                + "(SELECT 1 FROM equipment_test_types t WHERE t.equipment_id=e.id)")).isEqualTo(25);
+    }
+
+    @Test
+    void 사양은_사전과_기준단위를_따르고_잘못된_키와_값을_DB에서_거부한다() {
+        assertThat(count("equipment_specs s JOIN spec_definitions d USING (spec_key) WHERE s.unit IS DISTINCT FROM d.base_unit")).isZero();
+        assertThat(count("equipment_specs WHERE spec_key='frequency' AND unit='Hz'")).isEqualTo(16);
+        for (String sql : List.of(
+                "UPDATE equipment_specs SET spec_key='invented' WHERE equipment_id=" + equipmentId,
+                "UPDATE equipment_specs SET min_num=20,max_num=10 WHERE equipment_id=" + equipmentId + " AND spec_key='frequency'",
+                "UPDATE equipment_specs SET value_num=NULL WHERE equipment_id=" + equipmentId + " AND spec_key='max_payload'",
+                "UPDATE equipment_specs SET unit='GHz' WHERE equipment_id=" + equipmentId + " AND spec_key='frequency'")) {
+            assertThatThrownBy(() -> jdbc.update(sql)).isInstanceOf(DataIntegrityViolationException.class);
+        }
+    }
+
+    @Test
+    void 확정예약과_정비는_양방향으로_겹칠수없고_맞닿을수있다() {
+        long request = newRequest();
+        reserve(request, "2027-01-01 10:00+09", "2027-01-01 12:00+09", "CONFIRMED");
+        String insert = "INSERT INTO equipment_downtimes(equipment_id,start_at,end_at,reason,created_by) VALUES (?,?::timestamptz,?::timestamptz,'정비',?)";
+        assertThatThrownBy(() -> jdbc.update(insert,equipmentId,"2027-01-01 11:00+09","2027-01-01 13:00+09",companyUserId))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        jdbc.update(insert,equipmentId,"2027-01-01 12:00+09","2027-01-01 14:00+09",companyUserId);
+        long second = newRequest();
+        assertThatThrownBy(() -> reserve(second,"2027-01-01 13:00+09","2027-01-01 15:00+09","CONFIRMED"))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     // ------------------------------------------------------------ 중복 예약 방지 (api-spec §7)

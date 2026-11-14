@@ -1,6 +1,6 @@
 -- =====================================================================
 -- ASTRA 우주항공 시험장비 공동활용 플랫폼 - 초기 DB 스키마 (PostgreSQL 16)
--- v0.1 (2026-11-05) / 설계 초안 - 팀 리뷰 후 확정
+-- V6 반영 (2026-11-14). 운영 DB 변경은 db/migration의 새 버전으로만 적용
 --
 -- 규칙
 --  * PK: BIGSERIAL id (외부 노출 코드는 별도 컬럼: external_id, request_no 등)
@@ -30,6 +30,8 @@ CREATE TABLE organizations (
     phone             VARCHAR(30),
     email             VARCHAR(200),
     homepage_url      VARCHAR(500),
+    has_secure_facility BOOLEAN,
+    security_note VARCHAR(1000),
     is_verified       BOOLEAN      NOT NULL DEFAULT FALSE,   -- 가입으로 생긴 기업·신규 기관은 관리자가 회원 승인할 때 TRUE
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
@@ -83,6 +85,14 @@ CREATE INDEX idx_email_verifications_email ON email_verifications(email, created
 -- ---------------------------------------------------------------------
 -- 2. 장비 / 시험유형  (기능 1·2·3·4·12)
 -- ---------------------------------------------------------------------
+CREATE TABLE spec_definitions (
+    spec_key VARCHAR(80) PRIMARY KEY,
+    name_ko VARCHAR(100) NOT NULL,
+    base_unit VARCHAR(30),
+    value_type VARCHAR(10) NOT NULL CHECK (value_type IN ('NUMBER','RANGE','TEXT')),
+    UNIQUE (spec_key, base_unit)
+);
+
 CREATE TABLE test_types (
     code              VARCHAR(50)  PRIMARY KEY,         -- VIBRATION, TENSILE, ELECTRICAL_RF_ANALYSIS ...
     name_ko           VARCHAR(100) NOT NULL,            -- 진동시험
@@ -100,12 +110,21 @@ CREATE TABLE test_condition_rules (
     value_type        VARCHAR(10)  NOT NULL CHECK (value_type IN ('NUMBER','RANGE','TEXT')),
     unit              VARCHAR(30),                   -- 기준 단위 (비교 전 이 단위로 환산)
     is_required       BOOLEAN      NOT NULL DEFAULT FALSE, -- TRUE 인데 비어 있으면 AI 분석이 MISSING 처리
-    spec_key          VARCHAR(80),                   -- 비교할 equipment_specs.spec_key (NULL = 비교 안 함, 기관 확인)
+    spec_key          VARCHAR(80) REFERENCES spec_definitions(spec_key),                   -- 비교할 equipment_specs.spec_key (NULL = 비교 안 함, 기관 확인)
     comparator        VARCHAR(20)  NOT NULL DEFAULT 'NONE'
                       CHECK (comparator IN ('RANGE_WITHIN','MAX_LIMIT','MIN_LIMIT','NONE')),
                       -- RANGE_WITHIN: 요구 범위가 장비 범위 안 / MAX_LIMIT: 요구값 ≤ 장비값 / MIN_LIMIT: 장비값 ≤ 요구값(분해능 등)
     display_order     INT          NOT NULL DEFAULT 0,
-    PRIMARY KEY (test_type_code, condition_key)
+    PRIMARY KEY (test_type_code, condition_key),
+    FOREIGN KEY (spec_key,unit) REFERENCES spec_definitions(spec_key,base_unit)
+);
+
+CREATE TABLE condition_aliases (
+    test_type_code VARCHAR(50) NOT NULL,
+    condition_key VARCHAR(80) NOT NULL,
+    alias VARCHAR(100) NOT NULL,
+    PRIMARY KEY (test_type_code, condition_key, alias),
+    FOREIGN KEY (test_type_code, condition_key) REFERENCES test_condition_rules(test_type_code, condition_key) ON DELETE CASCADE
 );
 
 CREATE TABLE equipment (
@@ -128,6 +147,13 @@ CREATE TABLE equipment (
     duration_text     VARCHAR(200),
     utilization_rate  NUMERIC(5,2),                       -- 가동률 %
     availability      VARCHAR(20)  NOT NULL DEFAULT 'UNKNOWN' CHECK (availability IN ('AVAILABLE','BUSY','MAINTENANCE','UNAVAILABLE','UNKNOWN')),
+    availability_updated_at TIMESTAMPTZ,                  -- 기관이 가용 상태를 마지막으로 확인한 시각
+    availability_updated_by BIGINT REFERENCES users(id),  -- 상태 확인자. NULL이면 기관 확인 필요
+    availability_note VARCHAR(500),                       -- 판단 근거 또는 DEMO 표시
+    availability_reminded_at TIMESTAMPTZ,                 -- 이번 상태 확인 주기의 알림 시각
+    lead_time_days INT CHECK (lead_time_days >= 0),         -- 착수까지 대기 일수. NULL은 미확인
+    operation_mode VARCHAR(30) NOT NULL DEFAULT 'UNKNOWN'
+        CHECK (operation_mode IN ('INSTITUTION_OPERATED','SUPERVISED_SELF_SERVICE','SELF_SERVICE','UNKNOWN')),
     -- 출처 / 검증
     source_type       VARCHAR(20)  CHECK (source_type IN ('WEB','PDF','INSTITUTION','MANUAL')),
     source_url        VARCHAR(1000),
@@ -160,17 +186,23 @@ CREATE INDEX idx_equipment_model_trgm  ON equipment USING gin (model gin_trgm_op
 CREATE TABLE equipment_specs (
     id                BIGSERIAL PRIMARY KEY,
     equipment_id      BIGINT       NOT NULL REFERENCES equipment(id) ON DELETE CASCADE,
-    spec_key          VARCHAR(80)  NOT NULL,        -- frequency, max_payload, max_fixture_mass, measurement_range_x ...
+    spec_key          VARCHAR(80)  NOT NULL REFERENCES spec_definitions(spec_key),        -- frequency, max_payload, max_fixture_mass, measurement_range_x ...
     label             VARCHAR(100) NOT NULL,
     value_num         NUMERIC,                      -- 단일값
     min_num           NUMERIC,                      -- 범위 최소
     max_num           NUMERIC,                      -- 범위 최대
     value_text        VARCHAR(300),                 -- 숫자로 표현 불가한 값
     unit              VARCHAR(30),
+    original_unit VARCHAR(30),
     source_type       VARCHAR(10)  NOT NULL CHECK (source_type IN ('REAL','MOCK')),
     verification_status VARCHAR(30) NOT NULL DEFAULT 'NOT_VERIFIED',
     usage_scope       VARCHAR(20)  NOT NULL DEFAULT 'GENERAL' CHECK (usage_scope IN ('GENERAL','DEMO_ONLY')),
-    UNIQUE (equipment_id, spec_key, source_type)
+    UNIQUE (equipment_id, spec_key, source_type),
+    FOREIGN KEY (spec_key,unit) REFERENCES spec_definitions(spec_key,base_unit),
+    CONSTRAINT ck_specs_value CHECK (
+        (value_num IS NOT NULL AND min_num IS NULL AND max_num IS NULL AND value_text IS NULL)
+        OR (value_num IS NULL AND min_num IS NOT NULL AND max_num IS NOT NULL AND min_num <= max_num AND value_text IS NULL)
+        OR (value_num IS NULL AND min_num IS NULL AND max_num IS NULL AND value_text IS NOT NULL AND length(trim(value_text)) > 0))
 );
 CREATE INDEX idx_specs_key ON equipment_specs(spec_key);
 
@@ -193,6 +225,11 @@ CREATE TABLE equipment_test_types (
     est_cost_max      INT,
     est_duration_days INT,
     note              VARCHAR(300),
+    is_accredited BOOLEAN,
+    accreditation_no VARCHAR(100),
+    accreditation_valid_until DATE,
+    CONSTRAINT ck_accreditation_evidence CHECK (is_accredited IS DISTINCT FROM TRUE
+        OR (accreditation_no IS NOT NULL AND length(trim(accreditation_no)) > 0 AND accreditation_valid_until IS NOT NULL)),
     PRIMARY KEY (equipment_id, test_type_code)
 );
 CREATE INDEX idx_ett_test_type ON equipment_test_types(test_type_code);
@@ -200,6 +237,18 @@ CREATE INDEX idx_ett_test_type ON equipment_test_types(test_type_code);
 -- ---------------------------------------------------------------------
 -- 3. AI 상담 / 시험조건  (기능 5·6)
 -- ---------------------------------------------------------------------
+CREATE TABLE equipment_downtimes (
+    id BIGSERIAL PRIMARY KEY,
+    equipment_id BIGINT NOT NULL REFERENCES equipment(id),
+    start_at TIMESTAMPTZ NOT NULL,
+    end_at TIMESTAMPTZ NOT NULL,
+    reason VARCHAR(500) NOT NULL CHECK (length(trim(reason)) > 0),
+    created_by BIGINT NOT NULL REFERENCES users(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (end_at > start_at)
+);
+CREATE INDEX idx_downtimes_equipment_period ON equipment_downtimes(equipment_id,start_at,end_at);
+
 CREATE TABLE chat_sessions (
     id                BIGSERIAL PRIMARY KEY,
     user_id           BIGINT       NOT NULL REFERENCES users(id),
@@ -262,7 +311,7 @@ CREATE TABLE requirement_conditions (
 CREATE TABLE match_runs (
     id                BIGSERIAL PRIMARY KEY,
     requirement_id    BIGINT       NOT NULL REFERENCES test_requirements(id) ON DELETE CASCADE,
-    algorithm_version VARCHAR(30)  NOT NULL,         -- 'rule-v1', 'rule-v1+llm' ...
+    algorithm_version VARCHAR(30)  NOT NULL,         -- 신규 'rule-v2', 기존 'rule-v1' 이력 보존
     requirement_snapshot JSONB     NOT NULL,         -- 실행 당시 조건 스냅샷
     created_by        BIGINT       REFERENCES users(id),
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT now()
@@ -503,3 +552,43 @@ CREATE TABLE notifications (
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_notifications_user ON notifications(user_id, read_at, created_at DESC);
+
+-- V6: 사양 사전 및 예약·정비 경합 검증
+CREATE FUNCTION validate_equipment_spec() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE d spec_definitions;
+BEGIN
+    SELECT * INTO d FROM spec_definitions WHERE spec_key = NEW.spec_key;
+    IF NOT FOUND THEN RETURN NEW; END IF; -- FK가 알 수 없는 키를 거절한다.
+    IF NEW.unit IS DISTINCT FROM d.base_unit
+       OR (d.value_type = 'NUMBER' AND NEW.value_num IS NULL)
+       OR (d.value_type = 'RANGE' AND (NEW.min_num IS NULL OR NEW.max_num IS NULL))
+       OR (d.value_type = 'TEXT' AND NEW.value_text IS NULL) THEN
+        RAISE EXCEPTION '사양 사전의 값 형식/기준 단위와 일치하지 않습니다.' USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+END $$;
+
+CREATE FUNCTION guard_equipment_schedule() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM id FROM equipment WHERE id = NEW.equipment_id FOR UPDATE;
+    IF TG_TABLE_NAME = 'reservations' THEN
+        IF NEW.status = 'CONFIRMED' AND EXISTS (
+            SELECT 1 FROM equipment_downtimes d WHERE d.equipment_id=NEW.equipment_id
+                AND d.start_at<NEW.end_at AND d.end_at>NEW.start_at) THEN
+            RAISE EXCEPTION '확정 예약과 정비 일정이 겹칩니다.' USING ERRCODE='23P01';
+        END IF;
+    ELSIF EXISTS (SELECT 1 FROM reservations r WHERE r.equipment_id=NEW.equipment_id
+            AND r.status='CONFIRMED' AND r.start_at<NEW.end_at AND r.end_at>NEW.start_at) THEN
+        RAISE EXCEPTION '정비 일정과 확정 예약이 겹칩니다.' USING ERRCODE='23P01';
+    END IF;
+    RETURN NEW;
+END $$;
+
+CREATE TRIGGER tr_validate_equipment_spec BEFORE INSERT OR UPDATE ON equipment_specs
+    FOR EACH ROW EXECUTE FUNCTION validate_equipment_spec();
+
+CREATE TRIGGER tr_reservation_downtime BEFORE INSERT OR UPDATE ON reservations
+    FOR EACH ROW EXECUTE FUNCTION guard_equipment_schedule();
+
+CREATE TRIGGER tr_downtime_reservation BEFORE INSERT OR UPDATE ON equipment_downtimes
+    FOR EACH ROW EXECUTE FUNCTION guard_equipment_schedule();

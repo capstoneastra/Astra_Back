@@ -17,7 +17,7 @@ schema = (ROOT / "schema.sql").read_text(encoding="utf-8")
 DOMAINS = [
     ("사용자 · 조직", ["organizations", "users", "refresh_tokens", "email_verifications", "notifications"]),
     ("장비 · 시험유형", ["equipment", "equipment_specs", "equipment_change_logs", "test_types",
-                    "equipment_test_types", "test_condition_rules"]),
+                    "equipment_test_types", "test_condition_rules", "spec_definitions", "condition_aliases", "equipment_downtimes"]),
     ("AI 상담 · 시험조건 · 매칭 · 자동 추진", ["chat_sessions", "chat_messages", "test_requirements",
                                       "requirement_conditions", "match_runs", "match_results",
                                       "match_condition_checks", "ai_pipeline_runs"]),
