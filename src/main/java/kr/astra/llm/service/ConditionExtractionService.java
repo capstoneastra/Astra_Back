@@ -39,7 +39,13 @@ public class ConditionExtractionService {
         props.put("evidence", Map.of("type", "string"));
         var schema = StructuredJson.object(Map.of("conditions", Map.of("type","array","items",StructuredJson.object(props))));
         String prompt = prompts.load("condition-extraction");
-        String payload = json.write(Map.of("input", input, "rules", rules));
+        var definitions = testTypes.specDefinitions();
+        Set<String> definedKeys = new HashSet<>();
+        definitions.forEach(d -> definedKeys.add(d.specKey()));
+        if (rules.stream().anyMatch(r -> r.specKey() != null && !definedKeys.contains(r.specKey())))
+            throw StructuredJson.invalid();
+        String payload = json.write(Map.of("input", input, "rules", rules, "specDefinitions", definitions,
+                "aliases", testTypes.conditionAliases(code)));
         LlmClient.Reply reply = llm.complete(new LlmClient.Request(prompt, payload, schema, "medium"));
         JsonNode root = json.parse(reply.text());
         json.fields(root, "conditions");
@@ -80,13 +86,16 @@ public class ConditionExtractionService {
     }
 
     private String detect(String input) {
-        List<String> codes = testTypes.findAllOrdered().stream().map(t -> t.getCode()).toList();
+        var types = testTypes.findAllOrdered();
+        List<String> codes = types.stream().map(t -> t.getCode()).toList();
         Map<String,Object> codeSchema = new LinkedHashMap<>();
         codeSchema.put("type", List.of("string","null"));
         List<Object> choices = new ArrayList<>(codes); choices.add(null);
         codeSchema.put("enum", choices);
         var reply = llm.complete(new LlmClient.Request(prompts.load("test-type"),
-                json.write(Map.of("input",input,"types",codes)), StructuredJson.object(Map.of("testTypeCode",codeSchema)), "medium"));
+                json.write(Map.of("input",input,"types",types.stream().map(t -> Map.of("code",t.getCode(),
+                        "nameKo",t.getNameKo(),"keywords",t.getKeywords())).toList())),
+                StructuredJson.object(Map.of("testTypeCode",codeSchema)), "medium"));
         JsonNode root = json.parse(reply.text());
         json.fields(root,"testTypeCode");
         String code = json.text(root,"testTypeCode",false,50);

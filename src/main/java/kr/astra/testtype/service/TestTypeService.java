@@ -37,6 +37,11 @@ public class TestTypeService {
     private final TestConditionRuleRepository ruleRepository;
     private final EquipmentService equipmentService;
     private final OrganizationService organizationService;
+    private final kr.astra.equipment.service.SpecDefinitionService specDefinitions;
+    private final kr.astra.testtype.repository.ConditionAliasQuery aliases;
+
+    public List<kr.astra.equipment.service.SpecDefinitionService.Definition> specDefinitions() { return specDefinitions.list(); }
+    public Map<String,List<String>> conditionAliases(String code) { return aliases.forType(code); }
 
     /** GET /test-types: 전체 (display_order 순) + 활성 장비 수 */
     public List<TestTypeSummaryResponse> list() {

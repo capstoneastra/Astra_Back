@@ -29,6 +29,8 @@ public class ConditionValidator {
                 continue;
             }
             if (!any) throw invalid();
+            if ("accredited_required".equals(c.key()) && !Set.of("필요", "불필요").contains(
+                    c.valueText() == null ? "" : c.valueText())) throw invalid();
             for (BigDecimal n : Arrays.asList(c.value(),c.min(),c.max()))
                 if (n != null && (n.precision() > 30 || Math.abs((long)n.scale()) > 12)) throw invalid();
             boolean number = c.value() != null && c.min() == null && c.max() == null && c.valueText() == null;

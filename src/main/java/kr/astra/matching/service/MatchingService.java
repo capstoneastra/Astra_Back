@@ -34,7 +34,8 @@ public class MatchingService {
         RequirementSnapshot snapshot = requirements.snapshot(user, requirementId);
         var rules = requirements.rules(snapshot.testTypeCode());
         List<Candidate> candidates = equipmentQuery.findCandidates(snapshot.testTypeCode(), region).stream()
-                .map(e -> new Candidate(e, matcher.evaluate(rules, snapshot.conditions(), equipmentQuery.getSpecs(e.id()))))
+                .map(e -> new Candidate(e, matcher.evaluate(rules, snapshot.conditions(), equipmentQuery.getSpecs(e.id()),
+                        equipment.accredited(e.id(), snapshot.testTypeCode()))))
                 .sorted(Comparator.comparingInt((Candidate c) -> verdictOrder(c.evaluation.verdict()))
                         .thenComparing(c -> c.evaluation.score(), Comparator.reverseOrder())
                         .thenComparing(c -> c.equipment.id()))
@@ -47,6 +48,7 @@ public class MatchingService {
             var e = c.evaluation;
             String reason = e.checks().stream().map(check -> check.conditionKey() + ": " + check.result())
                     .collect(java.util.stream.Collectors.joining(", ")) + ". " + descriptions.get(c.equipment.id()) + " " + DISCLAIMER;
+            if (c.equipment.availabilityNeedsConfirmation()) reason += " 가용 상태는 기관 확인이 필요합니다.";
             run.getResults().add(new MatchResult(run, c.equipment.id(), rank++, e.score(), e.verdict(),
                     e.usedMockData() || c.equipment.isMock(), reason, e.checks()));
         }
@@ -93,7 +95,7 @@ public class MatchingService {
         try {
             var e = equipment.getDetail(id);
             return new EquipmentCandidate(e.id(), e.externalId(), e.name(), e.institution().id(),
-                    e.institution().name(), e.region(), e.isMock());
+                    e.institution().name(), e.region(), e.isMock(), e.availability(), e.usage().availabilityNeedsConfirmation());
         } catch (BusinessException e) {
             if (e.getErrorCode() != ErrorCode.EQUIPMENT_NOT_FOUND) throw e;
             // Historical checks remain available when BE-A no longer exposes an inactive equipment.

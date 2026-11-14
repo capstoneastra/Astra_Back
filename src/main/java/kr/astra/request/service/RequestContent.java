@@ -65,6 +65,15 @@ public class RequestContent {
             }
         }
         Object conditions = content.get("conditions");
+        Object services = content.get("serviceRequirements");
+        if (services != null) {
+            if (!(services instanceof Map<?,?> m)) throw invalid("content.serviceRequirements", "객체여야 합니다.");
+            for (var entry : m.entrySet()) {
+                if (!Set.of("accreditedRequired", "operatorSupportRequested", "securityOrExportControlled").contains(entry.getKey())
+                        || entry.getValue() != null && !(entry.getValue() instanceof Boolean))
+                    throw invalid("content.serviceRequirements", "허용된 항목은 boolean 또는 null이어야 합니다.");
+            }
+        }
         if (conditions != null) {
             if (!(conditions instanceof List<?> list)) {
                 throw invalid("content.conditions", "conditions 는 배열이어야 합니다.");

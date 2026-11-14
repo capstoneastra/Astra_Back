@@ -43,7 +43,7 @@ class MatchingServiceTest {
         var result=service.run(user,7L,null,5);
         assertThat(result.results()).extracting(r -> r.equipment().id()).containsExactly(2L,9L);
         assertThat(result.results()).allSatisfy(r -> { assertThat(r.usedMockData()).isTrue(); assertThat(r.checks()).hasSize(1); });
-        verify(runs).saveAndFlush(argThat(r -> r.getRequirementSnapshot().equals(snapshot) && r.getAlgorithmVersion().equals("rule-v1")));
+        verify(runs).saveAndFlush(argThat(r -> r.getRequirementSnapshot().equals(snapshot) && r.getAlgorithmVersion().equals("rule-v2")));
     }
     @Test void linkedResultChecksOwnerBeforeRelationshipAndRejectsStaleSnapshot() {
         var run=new MatchRun(8L,2L,snapshot);

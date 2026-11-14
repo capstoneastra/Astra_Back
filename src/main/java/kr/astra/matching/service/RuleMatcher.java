@@ -17,6 +17,10 @@ public class RuleMatcher {
     public record Evaluation(BigDecimal score, MatchVerdict verdict, boolean usedMockData, List<MatchResponse.Check> checks) {}
     public Evaluation evaluate(List<ConditionRuleResponse> rules, List<RequirementSnapshot.Condition> conditions,
             List<EquipmentSpecView> specs) {
+        return evaluate(rules, conditions, specs, null);
+    }
+    public Evaluation evaluate(List<ConditionRuleResponse> rules, List<RequirementSnapshot.Condition> conditions,
+            List<EquipmentSpecView> specs, Boolean accredited) {
         Map<String, RequirementSnapshot.Condition> byKey = new HashMap<>();
         conditions.forEach(c -> byKey.put(c.key(), c));
         Map<String, EquipmentSpecView> chosen = new HashMap<>();
@@ -31,14 +35,17 @@ public class RuleMatcher {
             var spec = rule.specKey() == null ? null : chosen.get(rule.specKey());
             if (spec != null && rule.comparator() != ConditionComparator.NONE)
                 mock |= spec.sourceType() == SpecSourceType.MOCK;
-            CheckResult result = compare(rule, c, spec);
-            String note = rule.comparator() == ConditionComparator.NONE ? "자동 비교 대상이 아닙니다. 기관 확인이 필요합니다."
+            boolean accreditation = "accredited_required".equals(rule.conditionKey());
+            CheckResult result = accreditation ? accreditation(c, accredited) : compare(rule, c, spec);
+            String note = accreditation ? "장비·시험유형의 기관 확인 공인 여부와 한국 날짜 기준 인정 유효기간으로 판정"
+                    : rule.comparator() == ConditionComparator.NONE ? "자동 비교 대상이 아닙니다. 기관 확인이 필요합니다."
                     : result == CheckResult.UNKNOWN ? "조건 미확인, 사양 누락 또는 값·단위를 비교할 수 없습니다."
                     : rule.comparator().name() + ": 규칙 단위 " + rule.unit() + "로 환산하여 비교";
             if (spec != null) note += " (" + spec.sourceType() + ")";
             checks.add(new MatchResponse.Check(rule.conditionKey(),
                     c == null ? "미정" : display(c.value(), c.min(), c.max(), c.valueText(), c.unit()),
-                    spec == null ? "미확인" : display(spec.value(), spec.min(), spec.max(), spec.valueText(), spec.unit()),
+                    accreditation ? accredited == null ? "미확인" : accredited ? "공인 가능" : "불가 또는 인정 만료"
+                            : spec == null ? "미확인" : display(spec.value(), spec.min(), spec.max(), spec.valueText(), spec.unit()),
                     result, note));
         }
         long met = checks.stream().filter(c -> c.result() == CheckResult.MET).count();
@@ -48,6 +55,13 @@ public class RuleMatcher {
         BigDecimal score = checks.isEmpty() ? BigDecimal.ZERO
                 : BigDecimal.valueOf(met * 100).divide(BigDecimal.valueOf(checks.size()), 2, RoundingMode.HALF_UP);
         return new Evaluation(score, verdict, mock, List.copyOf(checks));
+    }
+
+    private CheckResult accreditation(RequirementSnapshot.Condition c, Boolean accredited) {
+        if (c == null || c.status() != ConditionStatus.CONFIRMED) return CheckResult.UNKNOWN;
+        if ("불필요".equals(c.valueText())) return CheckResult.MET;
+        if (!"필요".equals(c.valueText()) || accredited == null) return CheckResult.UNKNOWN;
+        return accredited ? CheckResult.MET : CheckResult.NOT_MET;
     }
 
     private CheckResult compare(ConditionRuleResponse rule, RequirementSnapshot.Condition c, EquipmentSpecView s) {

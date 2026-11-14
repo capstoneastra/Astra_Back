@@ -21,6 +21,9 @@ class ConditionExtractionTest {
     final StructuredJson json=new StructuredJson(JsonMapper.builder().build());
     final ConditionExtractionService service=new ConditionExtractionService(llm,new PromptLoader(),json,types,new ConditionValidator());
     @BeforeEach void setup() {
+        when(types.specDefinitions()).thenReturn(List.of(
+                new kr.astra.equipment.service.SpecDefinitionService.Definition("payload", "질량", "kg", ConditionValueType.NUMBER),
+                new kr.astra.equipment.service.SpecDefinitionService.Definition("fixture", "고정구", "kg", ConditionValueType.NUMBER)));
         when(types.getConditionRules("VIBRATION")).thenReturn(List.of(
                 new ConditionRuleResponse("mass","질량",ConditionValueType.NUMBER,"kg",true,"payload",ConditionComparator.MAX_LIMIT),
                 new ConditionRuleResponse("fixture","고정구",ConditionValueType.NUMBER,"kg",true,"fixture",ConditionComparator.MAX_LIMIT)));

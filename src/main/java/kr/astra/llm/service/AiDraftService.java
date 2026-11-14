@@ -73,6 +73,11 @@ public class AiDraftService {
         content.put("schedule",Map.of()); // Dates and standard were not supplied; do not invent them.
         content.put("equipment",fields("id",selected.id(),"externalId",selected.externalId(),"name",selected.name()));
         content.put("notes",notes);
+        Map<String,Object> serviceRequirements = new LinkedHashMap<>();
+        snapshot.conditions().stream().filter(c -> "accredited_required".equals(c.key())
+                && c.status() == kr.astra.requirement.entity.ConditionStatus.CONFIRMED)
+                .findFirst().ifPresent(c -> serviceRequirements.put("accreditedRequired", "필요".equals(c.valueText())));
+        content.put("serviceRequirements",serviceRequirements);
         return new Prepared(new CreateDraftCommand(owner,selected.id(),snapshot.requirementId(),input.matchResultId(),
                 snapshot.title() == null ? "AI 시험 의뢰 초안" : snapshot.title(),content,true),List.copyOf(aiNotes),snapshot);
     }

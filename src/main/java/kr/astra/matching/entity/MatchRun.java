@@ -20,6 +20,6 @@ public class MatchRun {
     private List<MatchResult> results = new ArrayList<>();
     public MatchRun(Long requirementId, Long actorId, RequirementSnapshot snapshot) {
         this.requirementId = requirementId; createdBy = actorId; requirementSnapshot = snapshot;
-        algorithmVersion = "rule-v1";
+        algorithmVersion = "rule-v2";
     }
 }
