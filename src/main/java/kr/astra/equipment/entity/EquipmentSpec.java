@@ -51,6 +51,11 @@ public class EquipmentSpec {
     @Column(length = 30)
     private String unit;
 
+    @Column(name = "original_unit", length = 30)
+    private String originalUnit;
+
+    public void preserveOriginalUnit(String unit) { this.originalUnit = unit; }
+
     @Enumerated(EnumType.STRING)
     @Column(name = "source_type", nullable = false, length = 10)
     private SpecSourceType sourceType;

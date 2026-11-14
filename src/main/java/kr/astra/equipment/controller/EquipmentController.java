@@ -29,6 +29,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class EquipmentController {
 
     private final EquipmentService equipmentService;
+    private final kr.astra.equipment.service.SpecDefinitionService specDefinitions;
+
+    @Operation(summary = "사양 키·기준 단위·값 형식 사전")
+    @GetMapping("/spec-definitions")
+    public ApiResponse<List<kr.astra.equipment.service.SpecDefinitionService.Definition>> specDefinitions() {
+        return ApiResponse.ok(specDefinitions.list());
+    }
 
     @Operation(summary = "장비 통합 검색/목록", description = "활성 장비만. q 가 있으면 이름이 비슷한 순서가 먼저. "
             + "정렬은 externalId(기본)·infoUpdatedAt 만 가능. isMock=true 인 장비는 화면에 DEMO 표시")
@@ -47,9 +54,11 @@ public class EquipmentController {
             @RequestParam(defaultValue = "false") boolean externalOnly,
             @Parameter(description = "false 면 시연용 가상 데이터가 섞인 장비 제외 (기본 true)")
             @RequestParam(defaultValue = "true") boolean includeMock,
+            @Parameter(description = "유효한 공인시험만. testType이 있으면 해당 유형의 공인 여부")
+            @RequestParam(defaultValue = "false") boolean accreditedOnly,
             @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
         return ApiResponse.ok(equipmentService.search(new EquipmentSearchCondition(q, region, institutionId,
-                equipmentType, testType, availability, externalOnly, includeMock), pageable));
+                equipmentType, testType, availability, externalOnly, includeMock, accreditedOnly), pageable));
     }
 
     @Operation(summary = "장비 상세", description = "이용 조건·사양(REAL·MOCK 모두, 같은 키면 REAL 먼저)·출처·시뮬레이션. "

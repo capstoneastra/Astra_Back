@@ -16,8 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 장비 정보 갱신 알림 (api-spec §2-1 흐름 4, §13 EQUIPMENT_UPDATE_REQUIRED).
- * 매일 오전 9시(한국 시간)에 마지막 갱신이 막 90일을 넘긴 장비를 찾아 소속 기관의 활성 담당자에게 알립니다.
- * 하루 한 번 "90~91일 전 갱신" 장비만 보므로 장비마다 한 번만 알림이 갑니다.
+ * 매일 오전 9시(한국 시간)에 상태 확인이 90일을 넘긴 장비를 찾아 소속 기관의 활성 담당자에게 알립니다.
+ * 미확인 장비는 생성일부터 계산하며, 확인 주기별 알림 시각을 기록해 중복을 막고 중단 기간도 보충합니다.
  * 알림 저장은 BE-B 의 NotificationService 가 하므로 구현이 없으면 아무것도 하지 않습니다.
  * astra.equipment.update-reminder.enabled=false 로 끌 수 있습니다.
  */
@@ -35,6 +35,7 @@ public class EquipmentUpdateReminder {
     private final ObjectProvider<NotificationService> notificationService;
 
     @Scheduled(cron = "0 0 9 * * *", zone = "Asia/Seoul")
+    @Transactional
     public void scheduled() {
         int sent = remind();
         if (sent > 0) {
@@ -52,12 +53,14 @@ public class EquipmentUpdateReminder {
         List<ReminderRow> targets = jdbcRepository.findJustOutdated(DAYS);
         int sent = 0;
         for (ReminderRow e : targets) {
-            for (Long managerId : userService.findActiveManagerIds(e.institutionId())) {
+            List<Long> managers = userService.findActiveManagerIds(e.institutionId());
+            for (Long managerId : managers) {
                 notifier.notify(managerId, NotificationType.EQUIPMENT_UPDATE_REQUIRED,
-                        "장비 정보를 확인해 주세요: " + e.name() + " (마지막 갱신 " + DAYS + "일 경과)",
+                        "장비 가용 상태를 확인해 주세요: " + e.name() + " (상태 확인 " + DAYS + "일 경과)",
                         "/institutions/me/equipment", null);
                 sent++;
             }
+            if (!managers.isEmpty()) jdbcRepository.markAvailabilityReminded(e.equipmentId());
         }
         return sent;
     }

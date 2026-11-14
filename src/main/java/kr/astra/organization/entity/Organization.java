@@ -55,6 +55,14 @@ public class Organization extends BaseTimeEntity {
     @Column(name = "homepage_url", length = 500)
     private String homepageUrl;
 
+    @Column(name = "has_secure_facility") private Boolean hasSecureFacility;
+    @Column(name = "security_note", length = 1000) private String securityNote;
+
+    public void updateSecurity(Boolean facility, String note) {
+        if (facility != null) hasSecureFacility = facility;
+        if (note != null) securityNote = note;
+    }
+
     /** 가입으로 생긴 기업·신규 기관은 관리자가 회원 승인할 때 TRUE */
     @Column(name = "is_verified", nullable = false)
     private boolean verified;

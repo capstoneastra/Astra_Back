@@ -10,5 +10,12 @@ public record EquipmentCandidate(
         Long institutionId,
         String institutionName,
         String region,
-        boolean isMock) {
+        boolean isMock,
+        kr.astra.equipment.entity.Availability availability,
+        boolean availabilityNeedsConfirmation) {
+    public EquipmentCandidate(Long id, String externalId, String name, Long institutionId,
+                              String institutionName, String region, boolean isMock) {
+        this(id, externalId, name, institutionId, institutionName, region, isMock,
+                kr.astra.equipment.entity.Availability.UNKNOWN, true);
+    }
 }

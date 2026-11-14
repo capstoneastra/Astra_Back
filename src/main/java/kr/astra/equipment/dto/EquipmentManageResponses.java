@@ -51,7 +51,8 @@ public final class EquipmentManageResponses {
             OffsetDateTime infoUpdatedAt,
             long daysSinceUpdate,
             boolean needsUpdate,
-            List<UpdateReason> updateReasons) {
+            List<UpdateReason> updateReasons,
+            boolean availabilityNeedsConfirmation) {
     }
 
     /**
@@ -102,12 +103,15 @@ public final class EquipmentManageResponses {
         public record Usage(Long equipmentId, AccessScope accessScope, String feeText, Integer feeAmount,
                             FeeUnit feeUnit, String durationText, BigDecimal utilizationRate,
                             Availability availability, VerificationStatus verificationStatus,
-                            OffsetDateTime infoUpdatedAt, TestTypeEstimate testTypeEstimate) {
+                            OffsetDateTime infoUpdatedAt, TestTypeEstimate testTypeEstimate,
+                            Integer leadTimeDays, kr.astra.equipment.entity.OperationMode operationMode,
+                            boolean availabilityNeedsConfirmation) {
         }
 
         /** 그 시험의 예상 비용(원)·소요일 (equipment_test_types) */
         public record TestTypeEstimate(String code, boolean supported, Integer estCostMin, Integer estCostMax,
-                                       Integer estDurationDays) {
+                                       Integer estDurationDays, Boolean isAccredited, String accreditationNo,
+                                       java.time.LocalDate accreditationValidUntil) {
         }
 
         public record Row(String key, String label, List<Cell> values) {
@@ -116,7 +120,7 @@ public final class EquipmentManageResponses {
         /** 칸 하나: 같은 키에 REAL 이 있으면 REAL, 없으면 MOCK */
         @JsonInclude(JsonInclude.Include.NON_NULL)
         public record Cell(Long equipmentId, BigDecimal value, BigDecimal min, BigDecimal max, String valueText,
-                           String unit, SpecSourceType sourceType) {
+                           String unit, String originalUnit, SpecSourceType sourceType) {
         }
     }
 }

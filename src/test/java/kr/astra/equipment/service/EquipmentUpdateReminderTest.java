@@ -41,6 +41,18 @@ class EquipmentUpdateReminderTest {
         verify(notifier).notify(eq(3L), eq(NotificationType.EQUIPMENT_UPDATE_REQUIRED), anyString(),
                 eq("/institutions/me/equipment"), isNull());
         verify(notifier, times(2)).notify(any(), any(), anyString(), anyString(), isNull());
+        verify(jdbc).markAvailabilityReminded(48L);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void 담당자가_없으면_발송완료로_기록하지_않는다() {
+        ObjectProvider<NotificationService> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(mock(NotificationService.class));
+        when(jdbc.findJustOutdated(90)).thenReturn(List.of(new ReminderRow(48L,2L,"진동시험기")));
+        when(userService.findActiveManagerIds(2L)).thenReturn(List.of());
+        assertThat(new EquipmentUpdateReminder(jdbc,userService,provider).remind()).isZero();
+        verify(jdbc,never()).markAvailabilityReminded(any());
     }
 
     @Test

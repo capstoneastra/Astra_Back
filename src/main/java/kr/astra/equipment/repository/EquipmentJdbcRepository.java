@@ -83,6 +83,11 @@ public class EquipmentJdbcRepository {
             params.addValue("availability", c.availability().name());
             and.add("e.availability = :availability");
         }
+        if (c.accreditedOnly()) {
+            and.add("EXISTS (SELECT 1 FROM equipment_test_types a WHERE a.equipment_id = e.id AND a.is_accredited = TRUE "
+                    + "AND a.accreditation_valid_until >= (now() AT TIME ZONE 'Asia/Seoul')::date "
+                    + (StringUtils.hasText(c.testType()) ? "AND a.test_type_code = :testType " : "") + ")");
+        }
         if (c.externalOnly()) {
             and.add("e.access_scope = 'EXTERNAL_ALLOWED'");
         }
@@ -108,6 +113,7 @@ public class EquipmentJdbcRepository {
         return jdbc.queryForList("""
                 SELECT e.id FROM equipment e
                 WHERE e.is_active
+                  AND e.availability NOT IN ('UNAVAILABLE', 'MAINTENANCE')
                   AND EXISTS (SELECT 1 FROM equipment_test_types ett
                               WHERE ett.equipment_id = e.id AND ett.test_type_code = :testType)""" + regionFilter
                 + " ORDER BY e.external_id", params, Long.class);
@@ -297,17 +303,21 @@ public class EquipmentJdbcRepository {
     }
 
     /**
-     * 마지막 갱신이 정확히 days 일을 넘긴 지 하루가 안 된 활성 장비 (하루 한 번 돌면 장비마다 한 번만 걸림).
-     * 예: days=90 이면 info_updated_at 이 91일 전 ~ 90일 전 사이.
+     * 상태 확인(미확인 장비는 생성) 후 days 일이 지났고 이번 확인 주기에 알림을 보내지 않은 장비.
+     * 행 잠금 + SKIP LOCKED로 동시에 실행되는 작업끼리 같은 장비를 보내지 않는다.
      */
     public List<ReminderRow> findJustOutdated(int days) {
         return jdbc.query("""
                 SELECT id, institution_id, name FROM equipment
                 WHERE is_active
-                  AND info_updated_at <  now() - make_interval(days => :days)
-                  AND info_updated_at >= now() - make_interval(days => :days + 1)
-                ORDER BY external_id""", Map.of("days", days),
+                  AND COALESCE(availability_updated_at, created_at) < now() - make_interval(days => :days)
+                  AND availability_reminded_at IS NULL
+                ORDER BY external_id FOR UPDATE SKIP LOCKED""", Map.of("days", days),
                 (rs, i) -> new ReminderRow(rs.getLong("id"), rs.getLong("institution_id"), rs.getString("name")));
+    }
+
+    public void markAvailabilityReminded(Long equipmentId) {
+        jdbc.update("UPDATE equipment SET availability_reminded_at = now() WHERE id = :id", Map.of("id", equipmentId));
     }
 
     /**

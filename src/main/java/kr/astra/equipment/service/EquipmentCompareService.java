@@ -145,7 +145,7 @@ public class EquipmentCompareService {
                 entry.getValue(), equipmentIds.stream().map(id -> {
                     EquipmentSpec s = effective.get(id).get(entry.getKey());
                     return s == null ? null : new Comparison.Cell(id, s.getValueNum(), s.getMinNum(), s.getMaxNum(),
-                            s.getValueText(), s.getUnit(), s.getSourceType());
+                            s.getValueText(), s.getUnit(), s.getOriginalUnit(), s.getSourceType());
                 }).toList())).toList();
         Map<Long, EquipmentTestType> estimates = code == null ? Map.of()
                 : testTypeLinkRepository.findAllByEquipmentIdIn(equipmentIds).stream()
@@ -156,13 +156,15 @@ public class EquipmentCompareService {
             Comparison.TestTypeEstimate estimate = null;
             if (code != null) {
                 EquipmentTestType t = estimates.get(id);
-                estimate = t == null ? new Comparison.TestTypeEstimate(code, false, null, null, null)
+                estimate = t == null ? new Comparison.TestTypeEstimate(code, false, null, null, null, null, null, null)
                         : new Comparison.TestTypeEstimate(code, true, t.getEstCostMin(), t.getEstCostMax(),
-                                t.getEstDurationDays());
+                                t.getEstDurationDays(), t.accreditedOn(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))),
+                                t.getAccreditationNo(), t.getAccreditationValidUntil());
             }
             return new Comparison.Usage(id, e.getAccessScope(), e.getFeeText(), e.getFeeAmount(), e.getFeeUnit(),
                     e.getDurationText(), e.getUtilizationRate(), e.getAvailability(), e.getVerificationStatus(),
-                    e.getInfoUpdatedAt(), estimate);
+                    e.getInfoUpdatedAt(), estimate, e.getLeadTimeDays(), e.getOperationMode(),
+                    e.availabilityNeedsConfirmation(java.time.OffsetDateTime.now()));
         }).toList();
         return new Comparison(equipment, rows, usage, code, usedMock);
     }

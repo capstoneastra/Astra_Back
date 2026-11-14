@@ -51,7 +51,8 @@ public record EquipmentDetailResponse(
                 testTypes, e.getAvailability(), e.getUtilizationRate(), e.getFeeText(), e.getVerificationStatus(),
                 e.isMock(), e.getInfoUpdatedAt(), e.getManufacturer(), e.getCategory(), e.getDescription(),
                 new Usage(e.getAccessScope(), e.getFeeText(), e.getFeeAmount(), e.getFeeUnit(), e.getDurationText(),
-                        e.getUtilizationRate(), e.getAvailability()),
+                        e.getUtilizationRate(), e.getAvailability(), e.getAvailabilityUpdatedAt(), e.getAvailabilityUpdatedBy(),
+                        e.getAvailabilityNote(), e.availabilityNeedsConfirmation(OffsetDateTime.now()), e.getLeadTimeDays(), e.getOperationMode()),
                 specs,
                 new Source(e.getSourceType(), e.getSourceUrl(), e.getSourceFile(), e.getSourcePage()),
                 new Simulation(e.getSimulationCapability(), presetIds));
@@ -59,7 +60,9 @@ public record EquipmentDetailResponse(
 
     /** 이용 조건 */
     public record Usage(AccessScope accessScope, String feeText, Integer feeAmount, FeeUnit feeUnit,
-                        String durationText, BigDecimal utilizationRate, Availability availability) {
+                        String durationText, BigDecimal utilizationRate, Availability availability,
+                        OffsetDateTime availabilityUpdatedAt, Long availabilityUpdatedBy, String availabilityNote,
+                        boolean availabilityNeedsConfirmation, Integer leadTimeDays, kr.astra.equipment.entity.OperationMode operationMode) {
     }
 
     /**
@@ -69,11 +72,11 @@ public record EquipmentDetailResponse(
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Spec(String key, String label, BigDecimal value, BigDecimal min, BigDecimal max, String valueText,
-                       String unit, SpecSourceType sourceType, UsageScope usageScope, String verificationStatus) {
+                       String unit, SpecSourceType sourceType, UsageScope usageScope, String verificationStatus, String originalUnit) {
 
         public static Spec from(EquipmentSpec s) {
             return new Spec(s.getSpecKey(), s.getLabel(), s.getValueNum(), s.getMinNum(), s.getMaxNum(),
-                    s.getValueText(), s.getUnit(), s.getSourceType(), s.getUsageScope(), s.getVerificationStatus());
+                    s.getValueText(), s.getUnit(), s.getSourceType(), s.getUsageScope(), s.getVerificationStatus(), s.getOriginalUnit());
         }
     }
 

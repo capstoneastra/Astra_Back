@@ -104,6 +104,11 @@ class EquipmentManageTest {
     @Test
     void 입력값이_잘못되면_필드별_400() throws Exception {
         assertThat(firstField(api.post("/api/v1/equipment", """
+                { "name": "유형 누락", "equipmentType": "TEST" }""", manager1)))
+                .isEqualTo("testTypes");
+        assertThat(firstField(api.send("PUT", "/api/v1/equipment/48/test-types", "{\"testTypes\":[]}", manager1)))
+                .isEqualTo("testTypes");
+        assertThat(firstField(api.post("/api/v1/equipment", """
                 { "name": "x", "equipmentType": "TEST", "specs": [ { "key": "a", "label": "값 없음" } ] }""", manager1)))
                 .isEqualTo("specs[0].value");
         assertThat(firstField(api.post("/api/v1/equipment", """
@@ -187,7 +192,7 @@ class EquipmentManageTest {
     }
 
     @Test
-    void 정보_확인을_누르면_기관_확인_상태가_되고_목록의_갱신_필요가_사라진다() throws Exception {
+    void 일반정보_확인과_가용상태_확인은_별개다() throws Exception {
         // 다른 테스트(사양 저장)가 먼저 돌아 확인 상태가 됐을 수 있으므로 seed 값으로 되돌리고 시작
         jdbc.update("UPDATE equipment SET verification_status = 'LISTING_CONFIRMED', info_updated_at = now() WHERE id = 48");
         JsonNode before = findById(myEquipment(manager1), 48);
@@ -198,7 +203,8 @@ class EquipmentManageTest {
         assertThat(confirmed.status()).isEqualTo(200);
         assertThat(confirmed.data().path("verificationStatus").asString()).isEqualTo("INSTITUTION_VERIFIED");
         JsonNode after = findById(myEquipment(manager1), 48);
-        assertThat(after.path("needsUpdate").asBoolean()).isFalse();
+        assertThat(after.path("needsUpdate").asBoolean()).isTrue();
+        assertThat(after.path("availabilityNeedsConfirmation").asBoolean()).isTrue();
         assertThat(after.path("daysSinceUpdate").asLong()).isZero();
 
         // 90일 넘게 갱신 안 하면 OUTDATED
@@ -207,6 +213,9 @@ class EquipmentManageTest {
         assertThat(outdated.path("updateReasons").toString()).isEqualTo("[\"OUTDATED\"]");
         assertThat(outdated.path("daysSinceUpdate").asLong()).isGreaterThanOrEqualTo(99);
         api.post("/api/v1/equipment/48/confirm", null, manager1);
+        api.send("PATCH", "/api/v1/equipment/48", "{\"usage\":{\"availability\":\"AVAILABLE\",\"availabilityNote\":\"기관 담당자 확인\"}}", manager1);
+        assertThat(findById(myEquipment(manager1),48).path("availabilityNeedsConfirmation").asBoolean()).isFalse();
+        jdbc.update("UPDATE equipment SET availability='UNKNOWN',availability_updated_at=NULL,availability_updated_by=NULL WHERE id=48");
     }
 
     @Test

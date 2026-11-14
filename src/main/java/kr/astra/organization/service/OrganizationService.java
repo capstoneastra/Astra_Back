@@ -42,6 +42,21 @@ public class OrganizationService {
 
     private final OrganizationRepository organizationRepository;
 
+    public record SecurityInfo(Boolean hasSecureFacility, String securityNote) {}
+    public SecurityInfo security(Long id) {
+        var org = findOrganization(id);
+        if (!org.isInstitution() || !org.isVerified()) throw new BusinessException(ErrorCode.NOT_FOUND);
+        return new SecurityInfo(org.getHasSecureFacility(), org.getSecurityNote());
+    }
+    @Transactional
+    public SecurityInfo updateSecurity(kr.astra.global.security.CurrentUser actor, Long id, Boolean facility, String note) {
+        kr.astra.global.security.AccessGuard.requireInstitution(actor,id);
+        var org = findOrganization(id);
+        if (!org.isInstitution()) throw new BusinessException(ErrorCode.NOT_FOUND);
+        org.updateSecurity(facility,note);
+        return new SecurityInfo(org.getHasSecureFacility(),org.getSecurityNote());
+    }
+
     /** 가입 화면용: 승인된 기관만, 이름순 */
     public List<InstitutionOptionResponse> listVerifiedInstitutions() {
         return organizationRepository.findAllByOrgTypeAndVerifiedTrue(OrgType.INSTITUTION).stream()

@@ -42,6 +42,9 @@ class EquipmentApiTest {
     @Autowired
     TestTypeService testTypeService;
 
+    @Autowired
+    org.springframework.jdbc.core.JdbcTemplate jdbc;
+
     private TestApi api;
     private String token;
 
@@ -54,6 +57,70 @@ class EquipmentApiTest {
     // ------------------------------------------------------------ GET /equipment
 
     @Test
+    void 사양사전과_RF_기준단위와_원문단위를_조회한다() throws Exception {
+        Res dictionary = api.get("/api/v1/equipment/spec-definitions",token);
+        assertThat(dictionary.status()).isEqualTo(200);
+        assertThat(dictionary.data().size()).isEqualTo(29);
+        var rf = api.get("/api/v1/equipment/37",token).data().path("specs").get(0);
+        assertThat(rf.path("unit").asString()).isEqualTo("Hz");
+        assertThat(rf.path("originalUnit").asString()).isEqualTo("GHz");
+        assertThat(rf.path("min").asLong()).isEqualTo(75_000_000_000L);
+        assertThat(rf.path("max").asLong()).isEqualTo(110_000_000_000L);
+    }
+
+    @Test
+    void 공인필터는_시험유형과_유효기간을_같이_확인한다() throws Exception {
+        assertThat(api.get("/api/v1/equipment?accreditedOnly=true",token).data().path("totalElements").asLong()).isZero();
+        try {
+            jdbc.update("UPDATE equipment_test_types SET is_accredited=true,accreditation_no='TEST-ONLY',"
+                    + "accreditation_valid_until=(now() AT TIME ZONE 'Asia/Seoul')::date WHERE equipment_id=48 AND test_type_code='VIBRATION'");
+            assertThat(externalIds(api.get("/api/v1/equipment?accreditedOnly=true&testType=VIBRATION",token)))
+                    .containsExactly("ASTRA-CAND-0048");
+            assertThat(api.get("/api/v1/equipment?accreditedOnly=true&testType=TEMPERATURE_HUMIDITY",token)
+                    .data().path("totalElements").asLong()).isZero();
+            jdbc.update("UPDATE equipment_test_types SET accreditation_valid_until=accreditation_valid_until-1 WHERE equipment_id=48");
+            assertThat(api.get("/api/v1/equipment?accreditedOnly=true",token).data().path("totalElements").asLong()).isZero();
+        } finally {
+            jdbc.update("UPDATE equipment_test_types SET is_accredited=NULL,accreditation_no=NULL,accreditation_valid_until=NULL WHERE equipment_id=48");
+        }
+    }
+
+    @Test
+    void 기관_정비일정이_공개_가용성에_반영되고_다른기관은_바꿀수없다() throws Exception {
+        String owner = jwtProvider.createAccessToken(3L,UserRole.INSTITUTION_MANAGER,2L);
+        String outsider = jwtProvider.createAccessToken(4L,UserRole.INSTITUTION_MANAGER,3L);
+        String url = "/api/v1/equipment/48/availability?from=2030-01-02&to=2030-01-02";
+        assertThat(api.get(url,token).data().path("available").asBoolean()).isFalse();
+        String body = """
+                {"startAt":"2030-01-02T10:00:00+09:00","endAt":"2030-01-02T12:00:00+09:00","reason":"통합 테스트 정비"}
+                """;
+        assertThat(api.post("/api/v1/equipment/48/downtimes",body,outsider).status()).isEqualTo(403);
+        Res added = api.post("/api/v1/equipment/48/downtimes",body,owner);
+        assertThat(added.status()).isEqualTo(201);
+        long downtimeId = added.data().path("id").asLong();
+        try {
+            var calendar = api.get(url,token).data();
+            assertThat(calendar.path("needsConfirmation").asBoolean()).isTrue();
+            assertThat(calendar.path("intervals").get(1).path("availability").asString()).isEqualTo("MAINTENANCE");
+            assertThat(calendar.toString()).doesNotContain("통합 테스트 정비", "requestId", "requesterId");
+            assertThat(api.send("DELETE","/api/v1/equipment/48/downtimes/"+downtimeId,null,outsider).status()).isEqualTo(403);
+            assertThat(api.send("DELETE","/api/v1/equipment/48/downtimes/"+downtimeId,null,owner).status()).isEqualTo(200);
+        } finally {
+            jdbc.update("DELETE FROM equipment_downtimes WHERE id=?",downtimeId);
+        }
+    }
+
+    @Test
+    void 정비와_이용불가_장비는_검색에는_남고_매칭후보에서_빠진다() throws Exception {
+        for (long id : List.of(50L,51L)) {
+            assertThat(api.get("/api/v1/equipment/"+id,token).status()).isEqualTo(200);
+            for (String code : jdbc.queryForList("SELECT test_type_code FROM equipment_test_types WHERE equipment_id=?",String.class,id)) {
+                assertThat(equipmentQueryService.findCandidates(code,null)).extracting(EquipmentCandidate::id).doesNotContain(id);
+            }
+        }
+    }
+
+    @Test
     void 장비_목록_항목은_api_spec_예시와_같은_형식이다() throws Exception {
         Res res = api.get("/api/v1/equipment?testType=VIBRATION", token);
         assertThat(res.status()).isEqualTo(200);
@@ -64,7 +131,7 @@ class EquipmentApiTest {
         JsonNode e = find(res.data().path("content"), "ASTRA-CAND-0048");
         assertThat(e.propertyNames()).containsExactlyInAnyOrder("id", "externalId", "name", "model", "institution",
                 "region", "equipmentType", "testTypes", "availability", "utilizationRate", "feeText",
-                "verificationStatus", "isMock", "infoUpdatedAt");
+                "verificationStatus", "isMock", "infoUpdatedAt", "availabilityNeedsConfirmation");
         assertThat(e.path("id").asLong()).isEqualTo(48);
         assertThat(e.path("name").asString()).isEqualTo("진동시험기");
         assertThat(e.path("model").asString()).isEqualTo("EDS5000LS4-445");
@@ -198,7 +265,7 @@ class EquipmentApiTest {
         JsonNode rules = res.data().path("conditionRules");
         List<String> keys = new ArrayList<>();
         rules.forEach(r -> keys.add(r.path("conditionKey").asString()));
-        assertThat(keys).containsExactly("sample_mass", "fixture_mass", "frequency", "excitation_axis");
+        assertThat(keys).containsExactly("sample_mass", "fixture_mass", "frequency", "excitation_axis", "accredited_required");
         JsonNode mass = rules.get(0);
         assertThat(mass.path("label").asString()).isEqualTo("시료 질량");
         assertThat(mass.path("valueType").asString()).isEqualTo("NUMBER");
@@ -363,7 +430,7 @@ class EquipmentApiTest {
         assertThat(specs).allMatch(s -> s.sourceType() == SpecSourceType.MOCK);
         assertThat(equipmentQueryService.getSpecs(999999L)).isEmpty();
 
-        assertThat(testTypeService.getConditionRules("VIBRATION")).hasSize(4);
+        assertThat(testTypeService.getConditionRules("VIBRATION")).hasSize(5);
     }
 
     // ------------------------------------------------------------ helpers

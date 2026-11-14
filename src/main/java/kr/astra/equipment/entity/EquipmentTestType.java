@@ -43,6 +43,22 @@ public class EquipmentTestType {
     @Column(length = 300)
     private String note;
 
+    @Column(name = "is_accredited") private Boolean accredited;
+    @Column(name = "accreditation_no", length = 100) private String accreditationNo;
+    @Column(name = "accreditation_valid_until") private java.time.LocalDate accreditationValidUntil;
+
+    public void accreditation(Boolean accredited, String number, java.time.LocalDate until) {
+        this.accredited = accredited;
+        this.accreditationNo = number;
+        this.accreditationValidUntil = until;
+    }
+
+    public Boolean accreditedOn(java.time.LocalDate date) {
+        if (accredited == null) return null;
+        return accredited && accreditationNo != null && accreditationValidUntil != null
+                && !accreditationValidUntil.isBefore(date);
+    }
+
     public static EquipmentTestType of(Long equipmentId, String testTypeCode, Integer estCostMin, Integer estCostMax,
                                        Integer estDurationDays, String note) {
         EquipmentTestType t = new EquipmentTestType();

@@ -28,13 +28,14 @@ public record EquipmentSummaryResponse(
         String feeText,
         VerificationStatus verificationStatus,
         boolean isMock,
-        OffsetDateTime infoUpdatedAt) {
+        OffsetDateTime infoUpdatedAt,
+        boolean availabilityNeedsConfirmation) {
 
     public static EquipmentSummaryResponse of(Equipment e, String institutionName, List<String> testTypes) {
         return new EquipmentSummaryResponse(e.getId(), e.getExternalId(), e.getName(), e.getModel(),
                 new InstitutionRef(e.getInstitutionId(), institutionName), e.getRegion(), e.getEquipmentType(),
                 testTypes, e.getAvailability(), e.getUtilizationRate(), e.getFeeText(), e.getVerificationStatus(),
-                e.isMock(), e.getInfoUpdatedAt());
+                e.isMock(), e.getInfoUpdatedAt(), e.availabilityNeedsConfirmation(OffsetDateTime.now()));
     }
 
     /** 소속 기관 (id·이름) */

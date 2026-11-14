@@ -53,6 +53,12 @@ public class EquipmentService {
     private final EquipmentJdbcRepository jdbcRepository;
     private final OrganizationService organizationService;
 
+    /** null은 기관 미확인, false는 불가 또는 인정 만료. */
+    public Boolean accredited(Long equipmentId, String testType) {
+        return testTypeLinkRepository.findById(new EquipmentTestType.Key(equipmentId, testType))
+                .map(t -> t.accreditedOn(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")))).orElse(null);
+    }
+
     /** GET /equipment. q 가 있으면 이름이 비슷한 순서가 먼저, 그다음 sort (기본 externalId) */
     public PageResponse<EquipmentSummaryResponse> search(EquipmentSearchCondition condition, Pageable pageable) {
         Page<Long> ids = jdbcRepository.search(condition, pageable, orderBy(pageable.getSort()));

@@ -25,6 +25,7 @@ import kr.astra.equipment.entity.EquipmentChangeAction;
 import kr.astra.equipment.entity.EquipmentChangeLog;
 import kr.astra.equipment.entity.EquipmentSpec;
 import kr.astra.equipment.entity.EquipmentTestType;
+import kr.astra.equipment.entity.EquipmentType;
 import kr.astra.equipment.entity.SpecSourceType;
 import kr.astra.equipment.entity.SpecVerificationStatus;
 import kr.astra.equipment.entity.VerificationStatus;
@@ -75,6 +76,7 @@ public class EquipmentCommandService {
     private final TestTypeService testTypeService;
     private final UserService userService;
     private final JsonMapper jsonMapper;
+    private final SpecDefinitionService specDefinitions;
 
     // ------------------------------------------------------------ 조회
 
@@ -119,10 +121,12 @@ public class EquipmentCommandService {
         List<TestTypeInput> testTypes = request.testTypes() == null ? List.of() : request.testTypes();
         validateSpecs(specs, "specs");
         validateTestTypes(testTypes, "testTypes");
+        requireTestType(request.equipmentType(), testTypes.isEmpty());
 
         OffsetDateTime now = OffsetDateTime.now();
         Equipment e = Equipment.registerByInstitution(institutionId, user.userId(), temporaryExternalId(),
                 request.fields(), now);
+        e.updateUsage(request.usage(), user.userId(), now);
         if (e.getRegion() == null) {
             e.apply(regionOnly(institution.region()));
         }
@@ -148,7 +152,12 @@ public class EquipmentCommandService {
     public EquipmentDetailResponse update(CurrentUser user, Long equipmentId, UpdateRequest request) {
         Equipment e = findOwned(user, equipmentId);
         Map<String, Object> before = snapshot(e);
+        if (request.equipmentType() != null) {
+            requireTestType(request.equipmentType(),
+                    testTypeLinkRepository.findAllByEquipmentIdOrderByTestTypeCodeAsc(equipmentId).isEmpty());
+        }
         e.apply(request.fields());
+        e.updateUsage(request.usage(), user.userId(), OffsetDateTime.now());
         e.markVerifiedByInstitution(user.userId(), OffsetDateTime.now());
         log(e.getId(), user.userId(), EquipmentChangeAction.UPDATE, diff(before, snapshot(e)));
         equipmentRepository.flush();
@@ -185,6 +194,7 @@ public class EquipmentCommandService {
     public EquipmentDetailResponse replaceTestTypes(CurrentUser user, Long equipmentId, List<TestTypeInput> testTypes) {
         Equipment e = findOwned(user, equipmentId);
         validateTestTypes(testTypes, "testTypes");
+        requireTestType(e.getEquipmentType(), testTypes.isEmpty());
         List<Map<String, Object>> before = testTypeSummaries(equipmentId);
         VerificationStatus beforeStatus = e.getVerificationStatus();
 
@@ -272,7 +282,7 @@ public class EquipmentCommandService {
 
     /** 활성 장비 + 소유 기관 확인 (없으면 404, 다른 기관이면 403) */
     private Equipment findOwned(CurrentUser user, Long equipmentId) {
-        Equipment e = equipmentRepository.findByIdAndActiveTrue(equipmentId)
+        Equipment e = equipmentRepository.lockActive(equipmentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EQUIPMENT_NOT_FOUND));
         AccessGuard.requireInstitution(user, e.getInstitutionId());
         return e;
@@ -289,7 +299,8 @@ public class EquipmentCommandService {
         long days = Math.max(0, Duration.between(e.getInfoUpdatedAt(), now).toDays());
         return new Managed(e.getId(), e.getExternalId(), e.getName(), e.getModel(), e.getEquipmentType(), testTypes,
                 e.getAvailability(), e.getVerificationStatus(), e.getSpecVerificationStatus(), e.isMock(),
-                e.getInfoUpdatedAt(), days, !reasons.isEmpty(), reasons);
+                e.getInfoUpdatedAt(), days, !reasons.isEmpty() || e.availabilityNeedsConfirmation(now), reasons,
+                e.availabilityNeedsConfirmation(now));
     }
 
     private void validateSpecs(List<SpecInput> specs, String path) {
@@ -307,6 +318,14 @@ public class EquipmentCommandService {
             if (!keys.add(s.key())) {
                 throw invalidField(at + ".key", "같은 사양 키가 두 번 있습니다: " + s.key());
             }
+            try { specDefinitions.normalize(s); }
+            catch (BusinessException ex) { throw invalidField(at + ".key", ex.getMessage()); }
+        }
+    }
+
+    private void requireTestType(EquipmentType type, boolean empty) {
+        if (empty && (type == EquipmentType.TEST || type == EquipmentType.MEASUREMENT)) {
+            throw invalidField("testTypes", "시험·측정 장비는 시험유형이 하나 이상 필요합니다.");
         }
     }
 
@@ -316,6 +335,10 @@ public class EquipmentCommandService {
         Set<String> seen = new HashSet<>();
         for (int i = 0; i < testTypes.size(); i++) {
             TestTypeInput t = testTypes.get(i);
+            if (Boolean.TRUE.equals(t.isAccredited()) && (t.accreditationNo() == null
+                    || t.accreditationNo().isBlank() || t.accreditationValidUntil() == null)) {
+                throw invalidField(path + "[" + i + "].isAccredited", "공인 여부에는 인정번호와 유효기간이 필요합니다.");
+            }
             String at = path + "[" + i + "]";
             if (!known.contains(t.code())) {
                 throw invalidField(at + ".code", "없는 시험유형 코드입니다: " + t.code());
@@ -331,16 +354,23 @@ public class EquipmentCommandService {
 
     private void saveSpecs(Equipment e, List<SpecInput> specs) {
         specRepository.saveAll(specs.stream()
-                .map(s -> EquipmentSpec.real(e.getId(), s.key(), s.label().trim(), s.value(), s.min(), s.max(),
-                        s.valueText(), s.unit()))
+                .map(input -> {
+                    SpecInput s = specDefinitions.normalize(input);
+                    EquipmentSpec spec = EquipmentSpec.real(e.getId(), s.key(), s.label(), s.value(), s.min(), s.max(), s.valueText(), s.unit());
+                    spec.preserveOriginalUnit(input.unit());
+                    return spec;
+                })
                 .toList());
         specRepository.flush();
     }
 
     private void saveTestTypes(Long equipmentId, List<TestTypeInput> testTypes) {
         testTypeLinkRepository.saveAll(testTypes.stream()
-                .map(t -> EquipmentTestType.of(equipmentId, t.code(), t.estCostMin(), t.estCostMax(),
-                        t.estDurationDays(), t.note()))
+                .map(t -> {
+                    EquipmentTestType link = EquipmentTestType.of(equipmentId, t.code(), t.estCostMin(), t.estCostMax(), t.estDurationDays(), t.note());
+                    link.accreditation(t.isAccredited(), t.accreditationNo(), t.accreditationValidUntil());
+                    return link;
+                })
                 .toList());
         testTypeLinkRepository.flush();
     }
@@ -363,6 +393,11 @@ public class EquipmentCommandService {
         m.put("durationText", e.getDurationText());
         m.put("utilizationRate", e.getUtilizationRate());
         m.put("availability", name(e.getAvailability()));
+        m.put("availabilityUpdatedAt", e.getAvailabilityUpdatedAt());
+        m.put("availabilityUpdatedBy", e.getAvailabilityUpdatedBy());
+        m.put("availabilityNote", e.getAvailabilityNote());
+        m.put("leadTimeDays", e.getLeadTimeDays());
+        m.put("operationMode", name(e.getOperationMode()));
         m.put("verificationStatus", name(e.getVerificationStatus()));
         return m;
     }
@@ -409,6 +444,9 @@ public class EquipmentCommandService {
             m.put("estCostMin", t.getEstCostMin());
             m.put("estCostMax", t.getEstCostMax());
             m.put("estDurationDays", t.getEstDurationDays());
+            m.put("isAccredited", t.getAccredited());
+            m.put("accreditationNo", t.getAccreditationNo());
+            m.put("accreditationValidUntil", t.getAccreditationValidUntil());
             return m;
         }).toList();
     }

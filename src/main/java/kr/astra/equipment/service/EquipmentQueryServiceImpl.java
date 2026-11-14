@@ -40,7 +40,8 @@ public class EquipmentQueryServiceImpl implements EquipmentQueryService {
                 .map(Equipment::getInstitutionId).collect(Collectors.toSet()));
         return ids.stream().map(byId::get)
                 .map(e -> new EquipmentCandidate(e.getId(), e.getExternalId(), e.getName(), e.getInstitutionId(),
-                        names.get(e.getInstitutionId()), e.getRegion(), e.isMock()))
+                        names.get(e.getInstitutionId()), e.getRegion(), e.isMock(), e.getAvailability(),
+                        e.availabilityNeedsConfirmation(java.time.OffsetDateTime.now())))
                 .toList();
     }
 

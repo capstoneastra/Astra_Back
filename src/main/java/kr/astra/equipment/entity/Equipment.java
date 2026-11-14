@@ -86,6 +86,41 @@ public class Equipment extends BaseTimeEntity {
     @Column(nullable = false, length = 20)
     private Availability availability;
 
+    @Column(name = "availability_updated_at")
+    private OffsetDateTime availabilityUpdatedAt;
+    @Column(name = "availability_updated_by")
+    private Long availabilityUpdatedBy;
+    @Column(name = "availability_note", length = 500)
+    private String availabilityNote;
+    @Column(name = "availability_reminded_at")
+    private OffsetDateTime availabilityRemindedAt;
+    @Column(name = "lead_time_days")
+    private Integer leadTimeDays;
+    @Enumerated(EnumType.STRING) @Column(name = "operation_mode", nullable = false, length = 30)
+    private OperationMode operationMode = OperationMode.UNKNOWN;
+
+    public boolean availabilityNeedsConfirmation(OffsetDateTime now) {
+        return availability == Availability.UNKNOWN || availabilityUpdatedAt == null
+                || availabilityUpdatedAt.plusDays(90).isBefore(now) || availabilityUpdatedBy == null;
+    }
+
+    public void updateUsage(kr.astra.equipment.dto.EquipmentInputs.UsageInput input, Long actor, OffsetDateTime now) {
+        if (input == null) return;
+        if (input.availability() != null) {
+            availability = input.availability();
+            availabilityUpdatedAt = now;
+            availabilityUpdatedBy = actor;
+            availabilityNote = input.availabilityNote();
+            availabilityRemindedAt = null;
+        } else if (input.availabilityNote() != null) {
+            availabilityNote = input.availabilityNote();
+        }
+        if (input.leadTimeDays() != null) leadTimeDays = input.leadTimeDays();
+        if (input.operationMode() != null) operationMode = input.operationMode();
+    }
+
+    public void markAvailabilityReminded(OffsetDateTime now) { availabilityRemindedAt = now; }
+
     // 출처 / 검증
     @Enumerated(EnumType.STRING)
     @Column(name = "source_type", length = 20)

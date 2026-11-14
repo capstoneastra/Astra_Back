@@ -32,11 +32,18 @@ public final class EquipmentInputs {
             FeeUnit feeUnit,
             @Size(max = 200) String durationText,
             @DecimalMin("0") @DecimalMax("100") BigDecimal utilizationRate,
-            Availability availability) {
+            Availability availability,
+            @Size(max = 500) String availabilityNote,
+            @Min(0) Integer leadTimeDays,
+            kr.astra.equipment.entity.OperationMode operationMode) {
+        public UsageInput(AccessScope scope, String text, Integer amount, FeeUnit unit, String duration,
+                          BigDecimal rate, Availability availability) {
+            this(scope, text, amount, unit, duration, rate, availability, null, null, null);
+        }
     }
 
     /**
-     * 실제 사양 한 줄. 단일값 value, 범위 min/max, 숫자가 아니면 valueText 중 하나 이상
+     * 실제 사양 한 줄. 사전 형식에 따라 단일값 value, 범위 min/max, valueText 중 정확히 하나
      *
      * @param key 단위 없는 snake_case (frequency, max_payload …). 조건 규칙의 specKey 와 같은 키를 써야 매칭에 쓰임
      */
@@ -57,7 +64,13 @@ public final class EquipmentInputs {
             @Min(0) Integer estCostMin,
             @Min(0) Integer estCostMax,
             @Min(0) Integer estDurationDays,
-            @Size(max = 300) String note) {
+            @Size(max = 300) String note,
+            Boolean isAccredited,
+            @Size(max = 100) String accreditationNo,
+            java.time.LocalDate accreditationValidUntil) {
+        public TestTypeInput(String code, Integer min, Integer max, Integer days, String note) {
+            this(code, min, max, days, note, null, null, null);
+        }
     }
 
     /**

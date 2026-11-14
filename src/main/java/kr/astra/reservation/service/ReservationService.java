@@ -62,6 +62,7 @@ public class ReservationService {
     private final RequestWorkflow workflow;
     private final RequestViews views;
     private final EquipmentService equipmentService;
+    private final kr.astra.equipment.service.EquipmentScheduleService equipmentSchedule;
 
     /** POST /test-requests/{id}/reservations — 일정 제안 (SCHEDULING 에서, 기업·기관 모두) */
     public ReservationResult propose(CurrentUser actor, Long requestId, ReservationInputs.Propose input) {
@@ -250,6 +251,7 @@ public class ReservationService {
 
     /** 1차 방어: 같은 장비의 확정 예약과 겹치면 409 RESERVATION_OVERLAP + 겹치는 구간 */
     private void requireNoOverlap(Long equipmentId, OffsetDateTime startAt, OffsetDateTime endAt, Long excludeId) {
+        equipmentSchedule.requireReservable(equipmentId, startAt, endAt);
         List<Reservation> conflicts = reservationRepository.findOverlaps(equipmentId, ReservationStatus.CONFIRMED,
                 startAt, endAt, excludeId);
         if (!conflicts.isEmpty()) {

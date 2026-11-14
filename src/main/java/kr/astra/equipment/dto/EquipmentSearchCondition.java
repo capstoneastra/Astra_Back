@@ -20,5 +20,10 @@ public record EquipmentSearchCondition(
         String testType,
         Availability availability,
         boolean externalOnly,
-        boolean includeMock) {
+        boolean includeMock,
+        boolean accreditedOnly) {
+    public EquipmentSearchCondition(String q, List<String> regions, Long institutionId, EquipmentType equipmentType,
+                                    String testType, Availability availability, boolean externalOnly, boolean includeMock) {
+        this(q, regions, institutionId, equipmentType, testType, availability, externalOnly, includeMock, false);
+    }
 }
