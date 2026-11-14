@@ -93,9 +93,21 @@ class DemoScenarioTest {
         assertThat(api.get("/api/v1/equipment/48/similar", company).data().get(0).path("reasons").toString())
                 .contains("같은 시험유형: 진동시험");
 
-        // 9. 시험 정보 안내: 입력할 조건 4개, 가능 기관 3곳
-        JsonNode testType = api.get("/api/v1/test-types/VIBRATION", company).data();
-        assertThat(testType.path("conditionRules").size()).isEqualTo(4);
+        // 9. 시험 정보 안내: V6 공인 요구를 포함한 조건 키와 필수/선택 구분, 가능 기관 3곳
+        Res testTypeResponse = api.get("/api/v1/test-types/VIBRATION", company);
+        assertThat(testTypeResponse.status()).isEqualTo(200);
+        JsonNode testType = testTypeResponse.data();
+        List<String> conditionKeys = new ArrayList<>();
+        List<String> requiredKeys = new ArrayList<>();
+        testType.path("conditionRules").forEach(rule -> {
+            conditionKeys.add(rule.path("conditionKey").asString());
+            if (rule.path("isRequired").asBoolean()) {
+                requiredKeys.add(rule.path("conditionKey").asString());
+            }
+        });
+        assertThat(conditionKeys).containsExactly("sample_mass", "fixture_mass", "frequency",
+                "excitation_axis", "accredited_required");
+        assertThat(requiredKeys).containsExactly("sample_mass", "fixture_mass", "frequency");
         assertThat(testType.path("institutions").size()).isEqualTo(3);
 
         // 12. 기관 담당자(manager1): 대시보드 → 우리 기관 장비 → 장비 48 확인

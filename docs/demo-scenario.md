@@ -37,7 +37,7 @@
 | 6 | 조건 정리·누락 보완 | BE-C | company | `POST /chat/sessions/{id}/requirement`, `POST /requirements/{id}/analyze`, `PUT /requirements/{id}/conditions` | `missing: fixture_mass` → 사용자가 2kg 입력 → `readyForMatching: true` | ⚠️ 2026-11-09 대화 → 시험조건(`POST /chat/sessions/{id}/requirement`)이 계속 502 (BE-C 확인 필요). 조건 직접 입력(`POST /requirements`) → 분석(누락 fixture_mass + 질문) → 보완 → `readyForMatching: true` 는 ✅ |
 | 7 | 장비 매칭 | BE-C | company | `POST /requirements/{id}/match-runs`, `GET /match-runs/{id}` | 0045(5~2200Hz)·0047(5~2000Hz)·0048(10~3000Hz) 모두 SUITABLE 100점, 0044 는 주파수 상한 1800Hz < 2000Hz 로 NOT_MET → UNSUITABLE. 조건별 근거 표·추천 이유 문장, `usedMockData=true` (DEMO) | ✅ 2026-11-09 (조건 직접 입력 경로로 확인) |
 | 8 | 장비 상세·비교 | BE-A | company | `GET /equipment/48`, `POST /equipment/compare {48,44}`, `GET /equipment/48/similar` | 사양이 MOCK·DEMO 로 표시, 비교표에서 주파수 10~3000 vs 5~1800 확인, 유사 장비에 같은 진동시험 장비 | ✅ 2026-11-08 |
-| 9 | 시험 정보 안내 | BE-A | company | `GET /test-types/VIBRATION` | 입력할 조건 4개(시료 질량·고정구 질량·주파수·가진 축), 가능 기관 3곳 | ✅ 2026-11-08 |
+| 9 | 시험 정보 안내 | BE-A | company | `GET /test-types/VIBRATION` | V6 기준 조건 5개: 필수 3개(시료 질량·고정구 질량·주파수), 선택 2개(가진 축·공인성적서 필요 여부). 가능 기관 3곳 | V6 기대값 갱신(2026-11-14), 자동 검증은 아래 CI 결과 참조 |
 | 10 | AI 의뢰서 초안 | BE-C (+BE-B) | company | `POST /test-requests/ai-draft {requirementId, equipmentId: 48, matchResultId}` | `DRAFT` 의뢰 + 1번 제출본(`isAiGenerated=true`), 자동 제출 안 함 | ⏳ `/test-requests/ai-draft` API 없음 (의뢰 저장은 BE-B `TestRequestService` 구현 필요) |
 | 11 | 의뢰서 수정·제출 | BE-B | company | `PUT /test-requests/{id}/draft`, `POST /test-requests/{id}/submit` | `DRAFT → SUBMITTED`, 기관 담당자에게 알림 | ⏳ |
 | 12 | 기관 담당자 대시보드·장비 확인 | BE-A (+BE-B) | manager1 | `GET /dashboard/summary`, `GET /institutions/me/equipment`, `POST /equipment/48/confirm` | 소속 기관·갱신 필요 장비 수 표시, 장비 48 확인 → `INSTITUTION_VERIFIED`. 검토 대기 칸은 BE-B 연결 후 | ✅ 2026-11-08 (검토 대기 칸 ⏳) |
@@ -54,7 +54,7 @@
 
 | 범위 | 방법 | 결과 |
 |---|---|---|
-| BE-A 단계 (1·2·3·4·8·9·12·18) | `DemoScenarioTest` (`./gradlew test`, CI 에서도 실행) | ✅ |
+| BE-A 단계 (1·2·3·4·8·9·12·18) | `DemoScenarioTest` (`./gradlew test`, CI 에서도 실행) | V6 조건 키 5개와 필수 조건 3개 검증. 최신 결과는 해당 커밋의 CI 확인 |
 | BE-A 전체 API 45개 | 서버를 띄워 실제 HTTP 로 확인 (Gmail 실제 메일 수신 포함) | ✅ 2026-11-08 45/45 |
 | 운영용 실행 | `compose.prod.yaml` 로컬 실행: prod 프로필, Flyway V1~V5, 헬스체크 UP, 401·Swagger·CORS | ✅ 2026-11-08 |
 | BE-C 단계 실제 서버 (2026-11-09) | 상담 JSON·SSE ✅, 조건 직접 입력 → 분석 → 매칭 ✅, 대시보드 최근 상담 ✅ / 대화 → 시험조건·자동 추진 분석 ⚠️ | 🚧 |
