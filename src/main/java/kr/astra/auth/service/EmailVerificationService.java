@@ -22,7 +22,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 회원가입 이메일 인증 (api-spec §1).
@@ -47,6 +50,7 @@ public class EmailVerificationService {
     private final Duration resendInterval;
     private final int maxAttempts;
     private final boolean logCode;
+    private final TransactionTemplate transactions;
 
     public EmailVerificationService(EmailVerificationRepository repository, UserService userService,
                                     EmailSender emailSender,
@@ -54,7 +58,8 @@ public class EmailVerificationService {
                                     @Value("${astra.email-verification.token-validity-seconds}") long tokenValiditySeconds,
                                     @Value("${astra.email-verification.resend-interval-seconds}") long resendIntervalSeconds,
                                     @Value("${astra.email-verification.max-attempts}") int maxAttempts,
-                                    @Value("${astra.mail.log-code:false}") boolean logCode) {
+                                    @Value("${astra.mail.log-code:false}") boolean logCode,
+                                    PlatformTransactionManager transactionManager) {
         this.repository = repository;
         this.userService = userService;
         this.emailSender = emailSender;
@@ -63,27 +68,29 @@ public class EmailVerificationService {
         this.resendInterval = Duration.ofSeconds(resendIntervalSeconds);
         this.maxAttempts = maxAttempts;
         this.logCode = logCode;
+        this.transactions = new TransactionTemplate(transactionManager);
     }
 
     /**
      * 인증 코드 발송. 이미 가입된 이메일이면 409 EMAIL_ALREADY_EXISTS,
      * 60초 안에 다시 요청하면 429 TOO_MANY_REQUESTS (details.retryAfter 초).
      */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public EmailVerificationSentResponse sendCode(String rawEmail) {
         String email = UserService.normalizeEmail(rawEmail);
-        userService.checkEmailAvailable(email);
-
-        OffsetDateTime now = OffsetDateTime.now();
-        repository.findFirstByEmailOrderByIdDesc(email).ifPresent(last -> {
-            long wait = Duration.between(now, last.getCreatedAt().plus(resendInterval)).toSeconds();
-            if (wait > 0) {
-                throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS,
-                        "인증 코드는 %d초 후에 다시 받을 수 있습니다.".formatted(wait), Map.of("retryAfter", wait));
-            }
-        });
-
         String code = "%06d".formatted(RANDOM.nextInt(1_000_000));
-        repository.save(new EmailVerification(email, sha256(code), now.plus(codeValidity)));
+        EmailVerification verification = transactions.execute(status -> {
+            userService.checkEmailAvailable(email);
+            OffsetDateTime now = OffsetDateTime.now();
+            repository.findFirstByEmailOrderByIdDesc(email).ifPresent(last -> {
+                long wait = Duration.between(now, last.getCreatedAt().plus(resendInterval)).toSeconds();
+                if (wait > 0) {
+                    throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS,
+                            "인증 코드는 %d초 후에 다시 받을 수 있습니다.".formatted(wait), Map.of("retryAfter", wait));
+                }
+            });
+            return repository.saveAndFlush(new EmailVerification(email, sha256(code), now.plus(codeValidity)));
+        });
         try {
             emailSender.send(email, "[ASTRA] 회원가입 인증 코드", """
                     ASTRA 회원가입 인증 코드: %s
@@ -93,6 +100,11 @@ public class EmailVerificationService {
                     """.formatted(code, codeValidity.toMinutes()));
         } catch (MailException e) {
             log.error("인증 메일 발송 실패: {}", email, e);
+            try {
+                transactions.executeWithoutResult(status -> repository.deleteById(verification.getId()));
+            } catch (RuntimeException cleanupError) {
+                log.error("발송 실패한 인증 코드 정리 실패: {}", email, cleanupError);
+            }
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "인증 메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.", null);
         }
         if (logCode) {

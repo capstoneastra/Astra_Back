@@ -17,6 +17,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 /** MAIL_LOG_CODE(astra.mail.log-code): 켜져 있을 때만 메일 발송 후 서버 로그에 인증 코드를 남김 */
 @ExtendWith(OutputCaptureExtension.class)
@@ -40,11 +42,13 @@ class EmailVerificationLogCodeTest {
     private static String sendWith(boolean logCode, String email) {
         EmailVerificationRepository repository = mock(EmailVerificationRepository.class);
         when(repository.findFirstByEmailOrderByIdDesc(any())).thenReturn(Optional.empty());
-        when(repository.save(any())).thenAnswer(inv -> inv.<EmailVerification>getArgument(0));
+        when(repository.saveAndFlush(any())).thenAnswer(inv -> inv.<EmailVerification>getArgument(0));
+        PlatformTransactionManager transactions = mock(PlatformTransactionManager.class);
+        when(transactions.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         AtomicReference<String> body = new AtomicReference<>();
         EmailSender sender = (to, subject, text) -> body.set(text);
 
-        new EmailVerificationService(repository, mock(UserService.class), sender, 600, 1800, 60, 5, logCode)
+        new EmailVerificationService(repository, mock(UserService.class), sender, 600, 1800, 60, 5, logCode, transactions)
                 .sendCode(email);
 
         Matcher m = CODE.matcher(body.get());
