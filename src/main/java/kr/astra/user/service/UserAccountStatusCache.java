@@ -7,6 +7,7 @@ import kr.astra.global.security.AccountStatusChecker;
 import kr.astra.user.entity.UserStatus;
 import kr.astra.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -43,6 +44,13 @@ public class UserAccountStatusCache implements AccountStatusChecker {
                 .orElse(Status.NOT_FOUND);
         cache.put(userId, new Entry(status, now + TTL.toNanos()));
         return status;
+    }
+
+    /** 조회되지 않는 계정의 만료 항목도 메모리에 계속 남지 않도록 정리합니다. */
+    @Scheduled(fixedDelay = 60_000)
+    public void evictExpired() {
+        long now = System.nanoTime();
+        cache.entrySet().removeIf(entry -> now - entry.getValue().expiresAtNanos() >= 0);
     }
 
     /**
