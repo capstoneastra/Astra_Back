@@ -198,14 +198,17 @@ public class EquipmentJdbcRepository {
                        (e.category IS NOT NULL AND e.category = me.category
                         AND e.equipment_type = me.equipment_type) AS same_category,
                        similarity(e.name, me.name) AS sim,
-                       EXISTS (SELECT 1 FROM equipment_test_types a JOIN equipment_test_types b
-                                 ON a.test_type_code = b.test_type_code
-                               WHERE a.equipment_id = e.id AND b.equipment_id = me.id) AS shared_test_type
-                FROM equipment e, equipment me
-                WHERE me.id = :id AND e.is_active AND e.id <> me.id
-                  AND (EXISTS (SELECT 1 FROM equipment_test_types a JOIN equipment_test_types b
-                                 ON a.test_type_code = b.test_type_code
-                               WHERE a.equipment_id = e.id AND b.equipment_id = me.id)
+                       (shared.has_shared_type IS NOT NULL) AS shared_test_type
+                FROM equipment e JOIN equipment me ON me.id = :id
+                LEFT JOIN LATERAL (
+                    SELECT true AS has_shared_type
+                    FROM equipment_test_types mine
+                    JOIN equipment_test_types candidate ON candidate.test_type_code = mine.test_type_code
+                    WHERE mine.equipment_id = me.id AND candidate.equipment_id = e.id
+                    LIMIT 1
+                ) shared ON true
+                WHERE e.is_active AND e.id <> me.id
+                  AND (shared.has_shared_type IS NOT NULL
                        OR (e.category IS NOT NULL AND e.category = me.category
                            AND e.equipment_type = me.equipment_type)
                        OR similarity(e.name, me.name) >= 0.3)
