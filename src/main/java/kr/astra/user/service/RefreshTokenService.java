@@ -34,7 +34,7 @@ public class RefreshTokenService {
      */
     public Optional<Long> consume(String rawToken) {
         OffsetDateTime now = OffsetDateTime.now();
-        return refreshTokenRepository.findByTokenHash(hash(rawToken))
+        return refreshTokenRepository.findByTokenHashForUpdate(hash(rawToken))
                 .filter(token -> token.isUsable(now))
                 .map(token -> {
                     token.revoke(now);

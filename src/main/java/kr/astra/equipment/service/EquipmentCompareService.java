@@ -131,9 +131,12 @@ public class EquipmentCompareService {
         // 장비 id → (사양 키 → 쓸 사양: REAL 우선)
         Map<Long, Map<String, EquipmentSpec>> effective = new LinkedHashMap<>();
         equipmentIds.forEach(id -> effective.put(id, new LinkedHashMap<>()));
+        Map<Long, List<EquipmentSpec>> specsByEquipment = specRepository
+                .findAllByEquipmentIdInOrderByIdAsc(equipmentIds).stream()
+                .collect(Collectors.groupingBy(EquipmentSpec::getEquipmentId));
         Map<String, String> labels = new LinkedHashMap<>();
         for (Long id : equipmentIds) {
-            for (EquipmentSpec s : specRepository.findAllByEquipmentIdOrderByIdAsc(id)) {
+            for (EquipmentSpec s : specsByEquipment.getOrDefault(id, List.of())) {
                 labels.putIfAbsent(s.getSpecKey(), s.getLabel());
                 effective.get(id).merge(s.getSpecKey(), s,
                         (old, now) -> old.getSourceType() == SpecSourceType.REAL ? old : now);

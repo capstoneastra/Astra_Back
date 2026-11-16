@@ -1,12 +1,12 @@
 package kr.astra.user.service;
 
 import java.time.Duration;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import kr.astra.global.security.AccountStatusChecker;
 import kr.astra.user.entity.UserStatus;
 import kr.astra.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -23,7 +23,7 @@ public class UserAccountStatusCache implements AccountStatusChecker {
     static final Duration TTL = Duration.ofSeconds(30);
 
     private final UserRepository userRepository;
-    private final Map<Long, Entry> cache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Long, Entry> cache = new ConcurrentHashMap<>();
 
     private record Entry(Status status, long expiresAtNanos) {
     }
@@ -33,24 +33,30 @@ public class UserAccountStatusCache implements AccountStatusChecker {
         if (userId == null) {
             return Status.NOT_FOUND;
         }
+        return cache.compute(userId, (id, entry) -> {
+            long now = System.nanoTime();
+            if (entry != null && now - entry.expiresAtNanos() < 0) {
+                return entry;
+            }
+            Status status = userRepository.findStatusById(id)
+                    .map(s -> s == UserStatus.ACTIVE ? Status.ACTIVE : Status.NOT_ACTIVE)
+                    .orElse(Status.NOT_FOUND);
+            return new Entry(status, System.nanoTime() + TTL.toNanos());
+        }).status();
+    }
+
+    /** 조회되지 않는 계정의 만료 항목도 메모리에 계속 남지 않도록 정리합니다. */
+    @Scheduled(fixedDelay = 60_000)
+    public void evictExpired() {
         long now = System.nanoTime();
-        Entry entry = cache.get(userId);
-        if (entry != null && now - entry.expiresAtNanos() < 0) {
-            return entry.status();
-        }
-        Status status = userRepository.findStatusById(userId)
-                .map(s -> s == UserStatus.ACTIVE ? Status.ACTIVE : Status.NOT_ACTIVE)
-                .orElse(Status.NOT_FOUND);
-        cache.put(userId, new Entry(status, now + TTL.toNanos()));
-        return status;
+        cache.entrySet().removeIf(entry -> now - entry.getValue().expiresAtNanos() >= 0);
     }
 
     /**
-     * 상태가 바뀐 계정의 캐시를 지웁니다. 트랜잭션 안이면 커밋이 끝난 뒤에 지움
-     * (커밋 전에 지우면 그 사이 다른 요청이 옛 상태를 다시 30초 동안 기억할 수 있음).
+     * 상태가 바뀐 계정의 캐시를 지웁니다. 트랜잭션 안이면 커밋 후에 지워
+     * 커밋 전 조회가 늦게 끝나더라도 이전 상태가 캐시에 남지 않게 합니다.
      */
     public void evictAfterCommit(Long userId) {
-        cache.remove(userId);
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
@@ -58,6 +64,8 @@ public class UserAccountStatusCache implements AccountStatusChecker {
                     cache.remove(userId);
                 }
             });
+        } else {
+            cache.remove(userId);
         }
     }
 }
