@@ -22,17 +22,14 @@ public class EquipmentScheduleService {
                            List<AvailabilityCalculator.Interval> intervals) {}
     public Calendar availability(Long id, LocalDate from, LocalDate to) {
         Equipment e = find(id);
-        LocalDate start = from == null ? LocalDate.now(KST) : from;
-        LocalDate end = to == null ? start.plusDays(60) : to;
-        if (end.isBefore(start) || java.time.temporal.ChronoUnit.DAYS.between(start,end)>=366)
-            throw new BusinessException(ErrorCode.VALIDATION_FAILED,"조회 기간은 from ≤ to, 최대 366일입니다.",null);
-        OffsetDateTime a=start.atStartOfDay(KST).toOffsetDateTime(), b=end.plusDays(1).atStartOfDay(KST).toOffsetDateTime();
+        Period period = period(from, to);
+        OffsetDateTime a = period.startAt(), b = period.endAt();
         List<AvailabilityCalculator.Interval> blocks = new ArrayList<>();
         reservations.confirmed(id,a,b).forEach(r -> blocks.add(new AvailabilityCalculator.Interval(r.startAt(),r.endAt(),Availability.BUSY)));
         downtimes.overlapping(id,a,b).forEach(d -> blocks.add(new AvailabilityCalculator.Interval(d.startAt(),d.endAt(),Availability.MAINTENANCE)));
         boolean needs=e.availabilityNeedsConfirmation(OffsetDateTime.now());
         var intervals=AvailabilityCalculator.calculate(a,b,e.getAvailability(),needs,blocks);
-        return new Calendar(id,start,end,e.getAvailability(),intervals.stream().allMatch(i -> i.availability()==Availability.AVAILABLE),
+        return new Calendar(id,period.from(),period.to(),e.getAvailability(),intervals.stream().allMatch(i -> i.availability()==Availability.AVAILABLE),
                 needs,e.getLeadTimeDays(),intervals);
     }
     @Transactional
@@ -44,9 +41,8 @@ public class EquipmentScheduleService {
     }
     public List<EquipmentDowntimeRepository.Downtime> downtimes(CurrentUser actor, Long id, LocalDate from, LocalDate to) {
         Equipment e=find(id); AccessGuard.requireInstitution(actor,e.getInstitutionId());
-        var calendar=availability(id,from,to);
-        return downtimes.overlapping(id,calendar.from().atStartOfDay(KST).toOffsetDateTime(),
-                calendar.to().plusDays(1).atStartOfDay(KST).toOffsetDateTime());
+        Period period = period(from, to);
+        return downtimes.overlapping(id, period.startAt(), period.endAt());
     }
     @Transactional
     public void deleteDowntime(CurrentUser actor, Long id, Long downtimeId) {
@@ -63,4 +59,15 @@ public class EquipmentScheduleService {
     }
     private Equipment find(Long id) { return equipment.findByIdAndActiveTrue(id).orElseThrow(() -> new BusinessException(ErrorCode.EQUIPMENT_NOT_FOUND)); }
     private Equipment lock(Long id) { return equipment.lockActive(id).orElseThrow(() -> new BusinessException(ErrorCode.EQUIPMENT_NOT_FOUND)); }
+
+    private record Period(LocalDate from, LocalDate to, OffsetDateTime startAt, OffsetDateTime endAt) {}
+
+    private static Period period(LocalDate from, LocalDate to) {
+        LocalDate start = from == null ? LocalDate.now(KST) : from;
+        LocalDate end = to == null ? start.plusDays(60) : to;
+        if (end.isBefore(start) || java.time.temporal.ChronoUnit.DAYS.between(start, end) >= 366)
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED, "조회 기간은 from ≤ to, 최대 366일입니다.", null);
+        return new Period(start, end, start.atStartOfDay(KST).toOffsetDateTime(),
+                end.plusDays(1).atStartOfDay(KST).toOffsetDateTime());
+    }
 }
