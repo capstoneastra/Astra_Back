@@ -125,10 +125,10 @@ public class EmailVerificationService {
     @Transactional(noRollbackFor = BusinessException.class)
     public EmailVerificationConfirmResponse confirm(String rawEmail, String code) {
         String email = UserService.normalizeEmail(rawEmail);
-        OffsetDateTime now = OffsetDateTime.now();
         EmailVerification verification = repository.findFirstByEmailOrderByIdDesc(email)
                 .filter(v -> !v.isVerified())
                 .orElseThrow(() -> new BusinessException(ErrorCode.VERIFICATION_CODE_EXPIRED));
+        OffsetDateTime now = OffsetDateTime.now();
         if (verification.isCodeExpired(now) || verification.getAttemptCount() >= maxAttempts) {
             throw new BusinessException(ErrorCode.VERIFICATION_CODE_EXPIRED);
         }
