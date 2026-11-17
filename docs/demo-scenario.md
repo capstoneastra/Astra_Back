@@ -48,6 +48,17 @@
 | 17 | (선택) AI 자동 추진 | BE-C | company | `POST /ai/auto-runs` | 조건 분석 → 검색 → 매칭 → 초안까지 단계별 진행, 누락 시 `WAITING_USER` | ⚠️ 2026-11-09 시작(202)은 되지만 ANALYZE 단계가 3초 만에 FAILED (6번과 같은 원인으로 보임, BE-C 확인 필요) |
 | 18 | 관리자 대시보드 | BE-A (+BE-B) | admin | `GET /dashboard/summary`, `GET /dashboard/equipment-stats` | 승인 대기 회원·기관 수, 기관별 장비 확인 비율. 전체 의뢰 칸은 BE-B 연결 후 | ✅ 2026-11-08 (의뢰 칸 ⏳) |
 
+### 1-1. 조직 간 장비 공유 (기업·기관·대학 누구나 빌려주고 빌림)
+
+| # | 단계 | 계정 | API | 기대 결과 | 확인 |
+|---|---|---|---|---|---|
+| S1 | 대학이 기업 장비에 의뢰 | univ1 | `POST /test-requests {equipmentId: 미르항공정밀 장비}` → `.../submit` | 201 → `SUBMITTED`, company2 에게 `REQUEST_SUBMITTED` 알림 | ✅ 자동 점검 |
+| S2 | 기업이 받은 의뢰 검토·통과 | company2 | `GET /test-requests?box=RECEIVED`, `POST .../review/start`, `POST .../accept` | 받은 의뢰 목록에 보이고 `SCHEDULING` | ✅ 자동 점검 |
+| S3 | 기업이 대학 장비에 의뢰 | company2 | `POST /test-requests {equipmentId: 늘해랑대학교 장비}` → `.../submit` | univ1 의 받은 의뢰(기본 목록)에 보임 | ✅ 자동 점검 |
+| S4 | 보낸·받은 의뢰 전환 | univ1, company2 | `GET /test-requests?box=SENT`, `GET /dashboard/summary?view=REQUESTER\|PROVIDER` | 한 계정에서 두 목록·두 대시보드가 따로 보임 | ✅ 자동 점검 |
+| S5 | 자기 조직 장비 의뢰 차단 | univ1 | `POST /test-requests {equipmentId: 자기 조직 장비}` | 400 `VALIDATION_FAILED` (`details.field=equipmentId`). 매칭 추천에서도 빠짐 | ✅ 자동 점검 |
+| S6 | 기업이 장비 등록 | company | `POST /equipment` | 201, `GET /institutions`에 기업이 `orgType=COMPANY`로 나옴 | ✅ 자동 점검 |
+
 ---
 
 ## 2. 자동 점검
@@ -59,6 +70,7 @@
 | 운영용 실행 | `compose.prod.yaml` 로컬 실행: prod 프로필, Flyway V1~V5, 헬스체크 UP, 401·Swagger·CORS | ✅ 2026-11-08 |
 | BE-C 단계 실제 서버 (2026-11-09) | 상담 JSON·SSE ✅, 조건 직접 입력 → 분석 → 매칭 ✅, 대시보드 최근 상담 ✅ / 대화 → 시험조건·자동 추진 분석 ⚠️ | 🚧 |
 | BE-B 단계 | 의뢰·보완·예약 구현 후 | ⏳ |
+| 조직 간 공유 (1-1) | `RequestWorkflowTest`(대학↔기업, 기관→기업 끝까지), `EquipmentManageTest`(기업 장비 등록), `MatchingServiceTest`(자기 조직 추천 제외) | `./gradlew test` |
 
 ---
 

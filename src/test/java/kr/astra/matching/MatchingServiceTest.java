@@ -45,6 +45,16 @@ class MatchingServiceTest {
         assertThat(result.results()).allSatisfy(r -> { assertThat(r.usedMockData()).isTrue(); assertThat(r.checks()).hasSize(1); });
         verify(runs).saveAndFlush(argThat(r -> r.getRequirementSnapshot().equals(snapshot) && r.getAlgorithmVersion().equals("rule-v2")));
     }
+    @Test void ownOrganizationEquipmentIsNotRecommended() {
+        // 장비 보유 조직(기관 2) 소속 회원이 매칭하면 자기 조직 장비는 의뢰할 수 없으므로 후보에서 빠짐
+        var member=new CurrentUser(1L,UserRole.INSTITUTION_MANAGER,2L);
+        when(requirements.snapshot(member,7L)).thenReturn(snapshot);
+        when(equipment.findCandidates("TEST",null)).thenReturn(List.of(candidate(9L),
+                new EquipmentCandidate(2L,"E2","장비",5L,"다른 조직",null,false)));
+        when(equipment.getSpecs(anyLong())).thenReturn(List.of(new EquipmentSpecView("payload","하중",BigDecimal.TEN,null,null,null,"kg",SpecSourceType.REAL)));
+        var result=service.run(member,7L,null,5);
+        assertThat(result.results()).extracting(r -> r.equipment().id()).containsExactly(2L);
+    }
     @Test void linkedResultChecksOwnerBeforeRelationshipAndRejectsStaleSnapshot() {
         var run=new MatchRun(8L,2L,snapshot);
         var result=new MatchResult(run,48L,1,BigDecimal.TEN,MatchVerdict.SUITABLE,false,"reason",List.of());

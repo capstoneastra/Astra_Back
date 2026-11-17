@@ -286,6 +286,67 @@ class RequestWorkflowTest {
         }
     }
 
+    @Test
+    void 대학과_기업이_시연_계정으로_서로의_장비를_빌린다() throws Exception {
+        // V8 시연 계정: univ1 = 늘해랑대학교(대학), company2 = 미르항공정밀(장비 보유 기업)
+        String univ1 = token("univ1@astra.demo", UserRole.INSTITUTION_MANAGER);
+        String company2 = token("company2@astra.demo", UserRole.COMPANY_USER);
+        long univEquipment = usableEquipmentOf("univ1@astra.demo");
+        long companyEquipment = usableEquipmentOf("company2@astra.demo");
+
+        // 대학 → 기업 장비
+        long toCompany = submit(univ1, companyEquipment);
+        assertThat(unread("company2@astra.demo", "REQUEST_SUBMITTED", toCompany)).isEqualTo(1);
+        assertThat(ids(api.get("/api/v1/test-requests?box=RECEIVED&size=100", company2))).contains(toCompany);
+        assertThat(api.post("/api/v1/test-requests/" + toCompany + "/review/start", null, company2).data()
+                .path("status").asString()).isEqualTo("UNDER_REVIEW");
+        assertThat(api.post("/api/v1/test-requests/" + toCompany + "/accept", null, company2).data()
+                .path("status").asString()).isEqualTo("SCHEDULING");
+
+        // 기업 → 대학 장비
+        long toUniversity = submit(company2, univEquipment);
+        assertThat(unread("univ1@astra.demo", "REQUEST_SUBMITTED", toUniversity)).isEqualTo(1);
+        assertThat(ids(api.get("/api/v1/test-requests?size=100", univ1))).contains(toUniversity); // 대학 기본값 = 받은 의뢰
+        assertThat(api.post("/api/v1/test-requests/" + toUniversity + "/review/start", null, univ1).data()
+                .path("status").asString()).isEqualTo("UNDER_REVIEW");
+
+        // 한 계정이 보낸 의뢰와 받은 의뢰를 동시에 가짐
+        assertThat(ids(api.get("/api/v1/test-requests?box=SENT&size=100", univ1))).contains(toCompany)
+                .doesNotContain(toUniversity);
+        assertThat(ids(api.get("/api/v1/test-requests?box=SENT&size=100", company2))).contains(toUniversity)
+                .doesNotContain(toCompany);
+        assertThat(api.get("/api/v1/dashboard/summary?view=REQUESTER", univ1).data().path("requestCounts")
+                .path("SCHEDULING").asLong()).isGreaterThanOrEqualTo(1);
+        assertThat(api.get("/api/v1/dashboard/summary?view=PROVIDER", company2).data().path("requestCounts")
+                .path("SCHEDULING").asLong()).isGreaterThanOrEqualTo(1);
+
+        // 자기 조직 장비에는 의뢰할 수 없음
+        assertThat(api.post("/api/v1/test-requests", "{ \"equipmentId\": " + univEquipment + " }", univ1).code())
+                .isEqualTo("VALIDATION_FAILED");
+        assertThat(api.post("/api/v1/test-requests", "{ \"equipmentId\": " + companyEquipment + " }", company2).code())
+                .isEqualTo("VALIDATION_FAILED");
+        // 의뢰와 관계없는 조직은 볼 수 없음
+        assertThat(api.get("/api/v1/test-requests/" + toUniversity, manager2).status()).isEqualTo(403);
+    }
+
+    /** 의뢰를 만들고 제출 → 의뢰 id */
+    private long submit(String requester, long equipmentId) throws Exception {
+        Res created = api.post("/api/v1/test-requests", "{ \"equipmentId\": " + equipmentId + " }", requester);
+        assertThat(created.status()).as(created.body().toString()).isEqualTo(201);
+        long id = created.data().path("id").asLong();
+        Res submitted = api.post("/api/v1/test-requests/" + id + "/submit", null, requester);
+        assertThat(submitted.status()).as(submitted.body().toString()).isEqualTo(200);
+        return id;
+    }
+
+    /** 그 회원 소속 조직의 이용 가능한 활성 장비 하나 */
+    private long usableEquipmentOf(String email) {
+        return jdbc.queryForObject("""
+                SELECT min(e.id) FROM equipment e JOIN users u ON u.organization_id = e.institution_id
+                WHERE u.email = ? AND e.is_active AND e.availability NOT IN ('MAINTENANCE', 'UNAVAILABLE')
+                """, Long.class, email);
+    }
+
     private static java.util.List<Long> ids(Res page) {
         java.util.List<Long> list = new java.util.ArrayList<>();
         page.data().path("content").forEach(n -> list.add(n.path("id").asLong()));
