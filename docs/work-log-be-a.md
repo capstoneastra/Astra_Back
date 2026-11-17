@@ -16,12 +16,12 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 | 6주차 | 배포, 통합 테스트, 시연 시나리오 확인 | 🔶 진행 중 | 배포는 VM 정해지면. BE-B 구현은 PR #13 (2026-11-10) 병합됨 |
 | 안정화 | 인증·토큰·메일·장비 조회의 동시성·성능 수정 9건 (윤준수, 2026-11-16) | ✅ | PR #14 (2026-11-16) |
 | 7 | 기업·기관·대학 간 장비 공유로 확장 (교수님 피드백) + 가상 조직·시연 장비 268대 (윤준수, 2026-11-17) | ✅ | PR #15 · PR #16 (2026-11-17) |
-| 8 | 시연 계정 비밀번호 재설정 (V9, 모두 `12345678`), 2026-11-17 | ✅ | 커밋 전 |
-| 통합 2차 | V8·V9 이후 시연 시나리오 전체를 실제 서버에서 재점검, 2026-11-18 | ✅ (BE-C 3건 전달) | 커밋 전 (문서만) |
+| 8 | 시연 계정 비밀번호 재설정 (V9, 모두 `12345678`), 2026-11-17 | ✅ | `957db90` |
+| 통합 2차 | V8·V9 이후 시연 시나리오 전체를 실제 서버에서 재점검, 2026-11-18 | ✅ | `d3198ce` |
 | 9 | 통합 2차에서 찾은 AI 초안·매칭·상담 문제 수정 (BE-C 코드, 윤준수가 수정), 2026-11-18 | ✅ | 41e12c0 |
-| 10 | 전체 코드 점검 후 과부하·오류 위험 수정 (BE-A·B·C 전 영역), 2026-11-18 | ✅ | 커밋 전 |
+| 10 | 전체 코드 점검 후 과부하·오류 위험 수정 (BE-A·B·C 전 영역), 2026-11-18 | ✅ | `9eea6e3`~`acb47d5` (push, PR 전) |
 
-**지금 남은 것** (2026-11-17 기준)
+**지금 남은 것** (2026-11-18 기준)
 - 7번에서 고친 be-b(의뢰·검토·예약)·be-c(상담·매칭·AI) 코드는 해당 담당자에게 확인 요청
 - AI: Gemini 무료 키 할당량(429)·과부하(503) → API 결제 연결 필요. 연결 후 `ConditionMappingEvaluationTest` 정식 모델로 재측정 (아래 8번 참고)
 - BE-C 전달: 조건 추출 검증이 단위 환산(GHz→Hz 등) 응답을 통째로 거부, 실패 원인 로그 없음, AI 상담 답변에 DB 장비 정보 미포함
@@ -62,11 +62,22 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 - 새 DB 실제 서버: 1~18번·S1~S6 다시 통과, 상담 JSON·SSE 첫 시도 성공, AI 초안 201, 매칭 면책 문구 1번. Google 503·429 는 로그에 상태 코드가 남고 429 로 응답하는 것 확인
 
 **주의**
-- Flyway V10(`users.version`)·V11(`reservations.version`) 추가. V9 는 아직 커밋 전
+- Flyway V10(`users.version`)·V11(`reservations.version`) 추가
 - 테스트용 `src/test/resources/application.properties` 에서 IP 제한을 크게 풀어 둠(테스트는 모두 같은 IP)
 - 시연 때 여러 명이 한 공유기(같은 IP)로 접속해 로그인을 반복하면 IP당 분당 20회 제한에 걸릴 수 있음. 필요하면 `.env` 에 `astra.rate-limit.login-per-ip-per-minute=100` 처럼 적어 올리기 (`.env` 는 속성 파일로 읽히므로 이 이름 그대로)
 
-**바뀐 파일 (커밋 전)**: `git status` 참고 (main 약 60개, 테스트 약 35개, 마이그레이션 2개, `application.yml`, `docs/api-spec.md`, 이 파일)
+**커밋** (`feature/be-a` push 완료, PR 전): `9eea6e3` 설정 · `43bb3ac` 인증·회원·공통 · `a5c29eb` 장비·대시보드 · `28dbdab` 의뢰·예약·시뮬레이션 · `5c413c7` AI·상담·매칭 · `acb47d5` 문서
+
+**바뀐 파일: BE-A (내 담당)**
+- 설정: `src/main/resources/application.yml`, 테스트 `PageSizeLimitTest`
+- 인증·회원·관리자·공통: `auth/controller/AuthController`, `auth/dto/SignupRequest`, `auth/repository/EmailVerificationRepository`, `auth/service/AuthService`·`EmailVerificationService`·`AuthRateLimiter`(새), `user/entity/User`, `user/repository/UserRepository`, `user/service/UserService`·`RefreshTokenService`, `admin/service/AdminOrganizationService`, `global/config/SecurityConfig`, `global/exception/BusinessException`·`GlobalExceptionHandler`, `global/security/JwtAuthenticationFilter`·`FilterErrorWriter`(새)·`Hashes`(새)·`TokenBucketRateLimiter`(새), `global/validation/PasswordPolicy`(새)·`BcryptPassword`(새), `db/migration/V10__user_version.sql`(새)
+- 장비·대시보드·시험유형: `equipment/entity/Equipment`, `equipment/dto/EquipmentInputs`, `equipment/repository/EquipmentJdbcRepository`, `equipment/service/EquipmentCommandService`·`EquipmentUpdateReminder`·`SearchService`·`SpecDefinitionService`, `testtype/service/TestTypeService`, `dashboard/service/DashboardService`, `dashboard/dto/DashboardResponses`
+- 테스트: `AuthHardeningTest`, `UserConcurrencyTest`, `auth/service/AuthRateLimiterTest`, `global/exception/GlobalExceptionHandlerTest`, `global/security/HashesTest`·`JwtAuthenticationFilterTest`·`TokenBucketRateLimiterTest`, `user/service/UserServiceAuthenticateTest`, `EquipmentManageTest`, `equipment/service/EquipmentUpdateReminderTest`·`SearchServiceTransactionTest`·`SpecDefinitionServiceTest`, `testtype/service/TestTypeServiceCacheTest`, `dashboard/service/DashboardServiceTest`, `src/test/resources/application.properties`(새)
+
+**바뀐 파일: 다른 담당 영역 (담당자 확인 필요)**
+- BE-A 파일이지만 BE-C 매칭용으로 추가: `equipment/service/EquipmentQueryService`·`EquipmentQueryServiceImpl`·`EquipmentService`(일괄 조회 메서드), `EquipmentJdbcRepository.countCandidates`
+- BE-B: `request/`(`RequestViews`, `RequestCommandService`, `RequestQueryService`, `TestRequestServiceImpl`, `TestRequestRevisionRepository`), `review/`(`ReviewService`, `ReviewInputs`, `SupplementRequestRepository`), `reservation/`(`Reservation`, `ReservationRepository`, `ReservationService`), `simulation/`(`SimulationEngine`, `SimulationService`), `V11__reservation_version.sql`
+- BE-C: `llm/`(`AiTaskExecutor`, `LlmConcurrencyLimiter`(새), `GeminiLlmClient`, `AnthropicLlmClient`, `PromptLoader`, `AiDraftService`, `AiFallback`(새), `ConditionExtractionService`, `RequirementAnalysisService`, `StructuredJson`), `chat/`(`ChatService`, `ChatPersistence`), `aipipeline/`(`PipelineRun`, `PipelineService`, `PipelineWorker`), `matching/MatchingService`, `requirement/`(`ConditionValidator`, `UnitConverter`)
 
 ---
 
@@ -86,7 +97,7 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 - 전체 테스트 235개 통과(실제 AI 평가 1개는 기본 건너뜀)
 - 새 DB 실제 서버(`gemini-3.5-flash-lite`): 매칭 200·면책 문구 1번, AI 초안 201 `DRAFT`·`isAiGenerated=true` → 제출하면 manager1 접수함에 보임, AI 실패(502) 요청은 의뢰를 남기지 않음, 상담 응답에 `promptInput`·`rawResponse` 없음
 
-**바뀐 파일 (커밋 전)**: `src/main/java/kr/astra/llm/service/AiDraftService.java`, `src/main/java/kr/astra/llm/controller/AiDraftController.java`, `src/main/java/kr/astra/matching/service/MatchingService.java`, `src/main/java/kr/astra/chat/dto/ChatResponse.java`, `src/test/java/kr/astra/llm/AiDraftServiceTest.java`, `src/test/java/kr/astra/matching/MatchingServiceTest.java`, `src/test/java/kr/astra/chat/ChatMessageResponseTest.java`(새), `docs/demo-scenario.md`, 이 파일
+**바뀐 파일 (`41e12c0`)**: `src/main/java/kr/astra/llm/service/AiDraftService.java`, `src/main/java/kr/astra/llm/controller/AiDraftController.java`, `src/main/java/kr/astra/matching/service/MatchingService.java`, `src/main/java/kr/astra/chat/dto/ChatResponse.java`, `src/test/java/kr/astra/llm/AiDraftServiceTest.java`, `src/test/java/kr/astra/matching/MatchingServiceTest.java`, `src/test/java/kr/astra/chat/ChatMessageResponseTest.java`(새), `docs/demo-scenario.md`, 이 파일
 
 ---
 
@@ -119,7 +130,7 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 - `POST /requirements` 조건마다 `status` 가 필수 (없으면 400). FE 공지가 필요할 수 있음
 - `POST /ai/auto-runs` 본문 필드는 `inputText` 또는 `chatSessionId`
 
-**바뀐 파일 (커밋 전)**: `docs/demo-scenario.md`, 이 파일
+**바뀐 파일 (`d3198ce`)**: `docs/demo-scenario.md`, 이 파일
 
 ---
 
@@ -140,7 +151,7 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 
 **주의**: 운영 서버에 그대로 배포하면 관리자 계정도 `12345678` 로 로그인됨. 외부 공개 전에 관리자 비밀번호는 바꾸는 것을 권장
 
-**바뀐 파일 (커밋 전)**: `src/main/resources/db/migration/V9__demo_account_password.sql`(새), `src/test/java/kr/astra/AuthFlowTest.java`, `README.md`, `docs/api-spec.md`, `docs/demo-scenario.md`, 이 파일
+**바뀐 파일 (`957db90`, 문서는 `d3198ce`)**: `src/main/resources/db/migration/V9__demo_account_password.sql`(새), `src/test/java/kr/astra/AuthFlowTest.java`, `README.md`, `docs/api-spec.md`, `docs/demo-scenario.md`, 이 파일
 
 ---
 
