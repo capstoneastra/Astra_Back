@@ -1,6 +1,6 @@
 # 백엔드 보완 확인 및 인계
 
-확인 기준: 로컬 `main`의 `d50fe2d`, Flyway V1~V5와 기준 문서 및 현재 Java 코드. 배포 DB를 조회한 수치는 아니다. `docs/tME.md`는 저장소에 없어서 역할·협업 기준은 `docs/team-guide.md`로 확인했다.
+확인 기준: 로컬 `main`의 `d50fe2d`, Flyway V1~V5, 기준 문서, 현재 Java 코드. 배포 DB를 조회한 수치는 아니다. `docs/tME.md`는 저장소에 없어서 역할·협업 기준은 `docs/team-guide.md`로 확인했다.
 
 ## 변경 전 확인
 
@@ -51,8 +51,8 @@ BE-A/B/C와 FE에 아래 계약을 전달해야 한다. 이 작업에서 팀 채
 
 ## 이번 실행 결과 (2026-11-14)
 
-- Java 21에서 전체 테스트 소스 컴파일 성공. 장비 서비스·매칭·LLM·의뢰 부가요건·조건 검증의 17개 테스트 클래스, 74개 항목 중 **73개 통과, 실패 0개, 실제 LLM 평가 1개 비활성화**. 요약은 로컬 `build/reports/backend-hardening-unit-summary.json`에 보관한다.
-- PostgreSQL 파서로 V1~V6, schema.sql, seed.sql 문법 검증을 통과했다. 마이그레이션을 누적한 구조와 설계 문서의 **31개 테이블·319개 컬럼 이름/자료형**이 일치한다. ERD도 다시 생성했다.
+- Java 21에서 전체 테스트 소스 컴파일 성공. 장비 서비스·매칭·LLM·의뢰 부가요건·조건 검증의 17개 테스트 클래스, 74개 항목 중 73개 통과, 실패 0개, 실제 LLM 평가 1개 비활성화. 요약은 로컬 `build/reports/backend-hardening-unit-summary.json`에 보관한다.
+- PostgreSQL 파서로 V1~V6, schema.sql, seed.sql 문법 검증을 통과했다. 마이그레이션을 누적한 구조와 설계 문서의 31개 테이블·319개 컬럼 이름/자료형이 일치한다. ERD도 다시 생성했다.
 - seed INSERT를 메모리 SQLite로 읽어 기관 9·장비 71·사양 117·시험유형 15·연결 48을 재확인했다. 117개 사양의 수치·출처·표시명 보존과 GHz→Hz 정확 환산, 25개 평가 문장의 정답 키가 DB 규칙에 속하는지 확인했다. 이는 PostgreSQL 제약 실행이나 실제 LLM 정확도 검증을 대신하지 않는다.
 - V2의 실제 행을 생성기 입력으로 복원해 새 json_to_seed.py가 만든 사전·사양·조건 규칙·동의어·시험유형 연결이 설계 seed와 일치함을 확인했다. 사양 사전 29·동의어 6·조건 규칙 47이며 시연 상태는 UNKNOWN 67, 나머지 네 상태 각 1대다.
 - **DatabaseSchemaTest는 Docker 환경을 찾지 못해 초기화 단계에서 실패했다**(`Could not find a valid Docker environment`). Flyway 실행, Hibernate validate, DB 트리거·동시성, HTTP 통합 검증은 Docker가 있는 환경에서 위 명령으로 실행해야 한다. 현재 결과를 DB 통합 테스트 통과로 보고하지 않는다.
