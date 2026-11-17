@@ -464,7 +464,7 @@ availability를 보내면 서버가 availabilityUpdatedAt/By를 기록하고 알
 > 설계 원칙(PPT 12p): AI 추출값은 `source=AI_EXTRACTED`, 불확실하면 `UNCONFIRMED`로 저장하고 사용자가 직접 수정 가능해야 함.
 > `missing`은 그 시험유형의 `test_condition_rules` 중 `is_required=true`인데 값이 없는 조건입니다. AI는 정해진 조건 키 목록 안에서만 추출합니다.
 
-structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 시험의 test_condition_rules에서 동적으로 만듭니다. 프롬프트에 spec_definitions와 condition_aliases를 함께 전달합니다. 예: 무게·중량→VIBRATION의 sample_mass, 가진→test_types.keywords의 VIBRATION. 모르는 유형·키·단위, 근거 없는 값은 서버에서 `AI_UPSTREAM_ERROR`로 거부하며 잘못된 응답을 성공 결과로 저장하지 않습니다. 허용된 값 중 불확실한 조건은 UNCONFIRMED로 남깁니다. chat_messages.metadata와 match_condition_checks에 추출·조건별 판정 근거를 보관합니다.
+structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 시험의 test_condition_rules에서 동적으로 만듭니다. 프롬프트에 spec_definitions와 condition_aliases를 함께 전달합니다. 예: 무게·중량→VIBRATION의 sample_mass, 가진→test_types.keywords의 VIBRATION. 조건은 항목마다 따로 검사합니다. 모르는 키·단위나 원문에 없는 숫자는 그 항목만 버리고, 근거 문장이 원문과 정확히 일치하지 않으면 UNCONFIRMED 로 낮춥니다(℃·도·%·배 같은 단위 표기와 "2,400" 같은 숫자는 기준 단위로 맞춤). 응답 구조 자체가 깨졌을 때만 `AI_UPSTREAM_ERROR`이고, 잘못된 응답을 성공 결과로 저장하지 않습니다. 허용된 값 중 불확실한 조건은 UNCONFIRMED로 남깁니다. chat_messages.metadata와 match_condition_checks에 추출·조건별 판정 근거를 보관합니다.
 
 ---
 
@@ -711,7 +711,7 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
   "pendingReview": [ /* actionRequired 와 같은 형식 (SUBMITTED·RESUBMITTED) */ ],
   "upcomingReservations": [ { "reservationId": 4, "requestId": 15, "requestNo": "REQ-20261105-0001", "equipmentId": 48,
                               "equipmentName": "진동시험기", "startAt": "2026-11-20T09:00:00+09:00", "endAt": "..." } ],
-  "equipmentNeedsUpdate": { "total": 13, "notConfirmed": 13, "outdated": 0 },  // 기관 확인 전 / 마지막 갱신 90일 경과
+  "equipmentNeedsUpdate": { "total": 13, "notConfirmed": 13, "outdated": 0 },  // total = 장비 목록 needsUpdate 수 (기관 확인 전·정보 90일 경과·가용 상태 확인 필요 중 하나). notConfirmed·outdated 는 사유별 수라 합이 total 과 다를 수 있음
   "equipmentStats": { "total": 339, "byRegion": { ... } },
   "dataAvailable": { "requests": false } }
 
