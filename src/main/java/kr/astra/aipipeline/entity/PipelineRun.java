@@ -47,7 +47,14 @@ public class PipelineRun {
     }
     public void searched(int count) { next(PipelineStep.MATCH,"후보 장비 " + count + "대"); }
     public void matched(Long matchRunId) { this.matchRunId=matchRunId; next(PipelineStep.DRAFT,"매칭 결과 저장 완료"); }
-    public void draftAwaitingReceipt(Long id, String reason) { this.draftRequestId=id; fail(reason); }
+    /** BE-B 저장 결과(DRAFT + AI 1번 제출본)를 확인한 뒤에만 호출. 자동 제출은 하지 않음 */
+    public void drafted(Long id) {
+        if (!active()) return;
+        this.draftRequestId=id;
+        next(PipelineStep.DONE,"의뢰서 초안 저장 완료 (제출 전 사용자 확인 필요)");
+        status=PipelineStatus.SUCCEEDED;
+        finishedAt=OffsetDateTime.now();
+    }
     public void resume() {
         if (status != PipelineStatus.WAITING_USER) throw new BusinessException(ErrorCode.REQUEST_INVALID_STATUS);
         status=PipelineStatus.PENDING;

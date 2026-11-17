@@ -25,7 +25,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 class ChatActivityTest {
     private final ChatSessionRepository sessions = mock(ChatSessionRepository.class);
     private final ChatMessageRepository messages = mock(ChatMessageRepository.class);
-    private final ChatPersistence persistence = new ChatPersistence(sessions, messages, mock(RequirementApplicationService.class));
+    private final RequirementApplicationService requirements = mock(RequirementApplicationService.class);
+    private final ChatPersistence persistence = new ChatPersistence(sessions, messages, requirements);
     private final CurrentUser user = new CurrentUser(7L, UserRole.COMPANY_USER, null);
     private final ChatSession session = new ChatSession(7L, "진동시험");
     private ChatMessage original;
@@ -69,6 +70,33 @@ class ChatActivityTest {
         assertThatThrownBy(() -> persistence.begin(user, 3L, "중복 전송")).isInstanceOf(BusinessException.class);
         verify(sessions, never()).recordActivity(any(), any());
         verify(messages, never()).saveAndFlush(any());
+    }
+
+    @Test void transcriptExcludesFailedUserMessagesSoRetriesAreNotDuplicated() {
+        // 응답을 못 받은(FAILED) 질문을 다시 보내면 같은 문장이 두 번 추출·상담 입력에 들어가던 문제
+        when(sessions.findById(3L)).thenReturn(Optional.of(session));
+        var failed = new ChatMessage(3L, ChatRole.USER, "시료 15kg", Map.of("state", "FAILED"));
+        ReflectionTestUtils.setField(failed, "id", 9L);
+        var retried = new ChatMessage(3L, ChatRole.USER, "시료 15kg", Map.of("state", "PENDING"));
+        ReflectionTestUtils.setField(retried, "id", 10L);
+        when(messages.findTop101BySessionIdOrderByIdDesc(3L)).thenReturn(List.of(retried, failed));
+        var transcript = persistence.transcript(user, 3L);
+        assertThat(transcript.messages()).extracting(ChatResponse.Message::id).containsExactly(10L);
+        assertThat(transcript.userText()).isEqualTo("시료 15kg");
+        assertThat(transcript.lastMessageId()).isEqualTo(10L);
+    }
+
+    @Test void knownTestTypePrefersExistingRequirementThenLastSuggestedType() {
+        // 시험유형을 이미 알면 매 턴 유형 판별 LLM 호출을 건너뛰고, 기존 시험조건과 다른 유형이 나와 저장이 막히지 않게 함
+        when(sessions.findById(3L)).thenReturn(Optional.of(session));
+        var assistant = new ChatMessage(3L, ChatRole.ASSISTANT, "질량을 알려 주세요", Map.of("suggestedTestType", "VIBRATION"));
+        ReflectionTestUtils.setField(assistant, "id", 10L);
+        when(messages.findTop101BySessionIdOrderByIdDesc(3L)).thenReturn(List.of(original, assistant));
+        assertThat(persistence.transcript(user, 3L).knownTestType()).isEqualTo("VIBRATION");
+        var requirement = mock(kr.astra.requirement.dto.RequirementResponse.class);
+        when(requirement.testTypeCode()).thenReturn("TENSILE");
+        when(requirements.forSession(user, 3L)).thenReturn(Optional.of(requirement));
+        assertThat(persistence.transcript(user, 3L).knownTestType()).isEqualTo("TENSILE");
     }
 
     @Test void deniedOwnerNeverUpdatesActivityOrReadsMessages() {

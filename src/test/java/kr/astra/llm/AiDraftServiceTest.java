@@ -95,6 +95,19 @@ class AiDraftServiceTest {
             assertThat(c).doesNotContainKeys("min","max");
         });
     }
+    @Test void receiptMustBeAiGeneratedDraftOrIsRejected() {
+        // 자동 추진도 같은 확인을 거쳐 성공 처리: DRAFT 상태 + AI 1번 제출본이 아니면 성공으로 기록하지 않음
+        when(requests.getDraftReceipt(15L)).thenReturn(new kr.astra.request.dto.DraftReceipt(15L,"REQ-1",
+                kr.astra.request.entity.RequestStatus.DRAFT,1,1,true,Map.of()));
+        assertThat(drafts.confirmReceipt(15L).requestNo()).isEqualTo("REQ-1");
+        when(requests.getDraftReceipt(16L)).thenReturn(new kr.astra.request.dto.DraftReceipt(16L,"REQ-2",
+                kr.astra.request.entity.RequestStatus.DRAFT,1,1,false,Map.of()));
+        assertThatThrownBy(() -> drafts.confirmReceipt(16L)).isInstanceOfSatisfying(BusinessException.class,
+                e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.INTERNAL_ERROR));
+        when(requests.getDraftReceipt(17L)).thenReturn(new kr.astra.request.dto.DraftReceipt(17L,"REQ-3",
+                kr.astra.request.entity.RequestStatus.SUBMITTED,1,1,true,Map.of()));
+        assertThatThrownBy(() -> drafts.confirmReceipt(17L)).isInstanceOf(BusinessException.class);
+    }
     @Test void finalApiWritesNothingWhenAiFails() {
         when(llm.complete(any())).thenThrow(new BusinessException(ErrorCode.AI_UPSTREAM_ERROR));
         assertThatThrownBy(() -> drafts.createForApi(user,input)).isInstanceOfSatisfying(BusinessException.class,

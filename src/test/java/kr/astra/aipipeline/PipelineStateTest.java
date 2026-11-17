@@ -45,14 +45,18 @@ class PipelineStateTest {
         assertThatThrownBy(() -> store.resume(user,9L)).isInstanceOf(BusinessException.class);
         store.cancel(user,9L); // idempotent cancellation
     }
-    @Test void idAloneNeverMarksDraftAsSucceededAndCannotRepeatCreation() {
+    @Test void confirmedDraftSucceedsOnceAndCannotRepeatCreation() {
         run.analyzed(7L,true); run.searched(2); run.matched(3L);
         AtomicInteger drafts=new AtomicInteger();
-        store.advance(user,9L,PipelineStep.DRAFT,r -> { drafts.incrementAndGet(); r.draftAwaitingReceipt(15L,"receipt pending"); });
+        store.advance(user,9L,PipelineStep.DRAFT,r -> { drafts.incrementAndGet(); r.drafted(15L); });
         store.advance(user,9L,PipelineStep.DRAFT,r -> drafts.incrementAndGet());
         assertThat(drafts).hasValue(1);
         assertThat(run.getDraftRequestId()).isEqualTo(15L);
-        assertThat(run.getStatus()).isEqualTo(PipelineStatus.FAILED);
+        assertThat(run.getStatus()).isEqualTo(PipelineStatus.SUCCEEDED);
+        assertThat(run.getCurrentStep()).isEqualTo(PipelineStep.DONE);
+        assertThat(run.getFinishedAt()).isNotNull();
+        assertThat(run.response().steps()).allSatisfy(s -> assertThat(s.status()).isEqualTo("DONE"));
+        assertThatThrownBy(() -> store.cancel(user,9L)).isInstanceOf(BusinessException.class);
     }
     @Test void otherOwnersDeniedWhateverTheirRoleAndAdminAllowed() {
         assertThatThrownBy(() -> store.get(new CurrentUser(2L,UserRole.COMPANY_USER,null),9L)).isInstanceOf(BusinessException.class);

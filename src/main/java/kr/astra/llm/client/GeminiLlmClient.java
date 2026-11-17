@@ -13,6 +13,7 @@ import java.util.function.Consumer;
 import kr.astra.global.exception.BusinessException;
 import kr.astra.global.exception.ErrorCode;
 import kr.astra.llm.service.StructuredJson;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 
 /** 임시 Gemini Developer API 어댑터. 기존 서비스의 JSON 검증과 SSE 계약은 그대로 사용합니다. */
+@Slf4j
 @Component
 @ConditionalOnProperty(name = "astra.ai.provider", havingValue = "gemini")
 public class GeminiLlmClient implements LlmClient {
@@ -29,21 +31,35 @@ public class GeminiLlmClient implements LlmClient {
     private final URI baseUri;
     private final Duration timeout;
     private final StructuredJson json;
+    private final LlmConcurrencyLimiter limiter;
     private final ScheduledExecutorService deadlines = Executors.newSingleThreadScheduledExecutor(
             Thread.ofPlatform().daemon().name("gemini-deadline").factory());
 
     @Autowired
     public GeminiLlmClient(@Value("${astra.ai.gemini-api-key:}") String key,
-            @Value("${astra.ai.gemini-model:gemini-3.8-flash}") String model, StructuredJson json) {
+            @Value("${astra.ai.gemini-model:gemini-3.8-flash}") String model, StructuredJson json,
+            @Value("${astra.ai.max-concurrent-calls:8}") int maxConcurrentCalls,
+            @Value("${astra.ai.concurrency-wait-seconds:20}") long concurrencyWaitSeconds) {
         this(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build(), key, model,
-                URI.create("https://generativelanguage.googleapis.com/v1beta/"), Duration.ofSeconds(45), json);
+                URI.create("https://generativelanguage.googleapis.com/v1beta/"), Duration.ofSeconds(45), json,
+                new LlmConcurrencyLimiter(maxConcurrentCalls, Duration.ofSeconds(concurrencyWaitSeconds)));
     }
 
     GeminiLlmClient(HttpClient http, String key, String model, URI baseUri, Duration timeout, StructuredJson json) {
+        this(http, key, model, baseUri, timeout, json, new LlmConcurrencyLimiter(8, Duration.ofSeconds(20)));
+    }
+
+    GeminiLlmClient(HttpClient http, String key, String model, URI baseUri, Duration timeout, StructuredJson json,
+            LlmConcurrencyLimiter limiter) {
         if (model == null || !model.matches("[a-zA-Z0-9][a-zA-Z0-9._-]*"))
             throw new IllegalArgumentException("Gemini 모델 ID를 확인해 주세요.");
         this.http = http; this.key = key; this.model = model;
-        this.baseUri = baseUri; this.timeout = timeout; this.json = json;
+        this.baseUri = baseUri; this.timeout = timeout; this.json = json; this.limiter = limiter;
+    }
+
+    /** 503(과부하)만 표시하는 내부 신호. 비스트리밍 호출에서 한 번만 재시도합니다. */
+    private static final class Overloaded extends RuntimeException {
+        Overloaded() { super(null, null, false, false); }
     }
 
     @Override public Reply complete(Request request) { return execute(request, null); }
@@ -55,6 +71,26 @@ public class GeminiLlmClient implements LlmClient {
         if (key == null || key.isBlank())
             throw new BusinessException(ErrorCode.AI_UPSTREAM_ERROR, "Gemini API 키가 설정되지 않았습니다.", null);
         if (Thread.currentThread().isInterrupted()) throw failure();
+        return limiter.call(() -> {
+            long started = System.nanoTime();
+            for (int attempt = 0; ; attempt++) {
+                Duration budget = timeout.minusNanos(System.nanoTime() - started);
+                try { return attempt(request, onText, budget); }
+                catch (Overloaded e) {
+                    // 스트리밍은 이미 일부 토큰을 보냈을 수 있으므로 재시도하지 않음
+                    long backoff = ThreadLocalRandom.current().nextLong(200, 800);
+                    Duration left = timeout.minusNanos(System.nanoTime() - started);
+                    if (onText != null || attempt > 0 || left.toMillis() < backoff + 1000) throw failure();
+                    log.info("Gemini 과부하(503), {}ms 후 한 번 재시도합니다", backoff);
+                    try { Thread.sleep(backoff); }
+                    catch (InterruptedException ie) { Thread.currentThread().interrupt(); throw failure(); }
+                }
+            }
+        });
+    }
+
+    private Reply attempt(Request request, Consumer<String> onText, Duration timeout) {
+        if (timeout.isNegative() || timeout.isZero()) throw failure();
         boolean streaming = onText != null;
         var endpoint = baseUri.resolve("models/" + model
                 + (streaming ? ":streamGenerateContent?alt=sse" : ":generateContent"));
@@ -67,7 +103,14 @@ public class GeminiLlmClient implements LlmClient {
         try {
             var response = pending.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
             try (InputStream body = response.body()) {
-                if (response.statusCode() != 200) throw failure();
+                if (response.statusCode() != 200) {
+                    int status = response.statusCode();
+                    log.warn("Gemini 응답 오류 status={} message={}", status, errorSnippet(body));
+                    if (status == 429) throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS,
+                            "AI 요청 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.", null);
+                    if (status == 503) throw new Overloaded();
+                    throw failure();
+                }
                 String contentType = response.headers().firstValue("Content-Type").orElse("");
                 if (!contentType.toLowerCase(Locale.ROOT).startsWith(streaming ? "text/event-stream" : "application/json"))
                     throw failure();
@@ -98,13 +141,31 @@ public class GeminiLlmClient implements LlmClient {
             }
         } catch (InterruptedException e) {
             pending.cancel(true); Thread.currentThread().interrupt(); throw failure();
-        } catch (BusinessException e) { throw e; }
-        catch (Exception e) { throw failure(); }
+        } catch (BusinessException | Overloaded e) { throw e; }
+        catch (Exception e) {
+            log.warn("Gemini 호출 실패: {}", e.getClass().getSimpleName());
+            throw failure();
+        }
         finally {
             // Cancellation may race with headers arriving; close a body delivered at that boundary too.
             pending.thenAccept(response -> { try { response.body().close(); } catch (IOException ignored) { } });
             if (!pending.isDone()) pending.cancel(true);
         }
+    }
+
+    /** 오류 응답의 앞부분만 진단용으로 남김. API 키가 섞여 있으면 가림 */
+    private String errorSnippet(InputStream body) {
+        try {
+            String raw = new String(body.readNBytes(4096), StandardCharsets.UTF_8);
+            String message = raw;
+            if (raw.strip().startsWith("{")) try {
+                var node = json.parse(raw).path("error").path("message");
+                if (node.isString()) message = node.asString();
+            } catch (BusinessException ignored) { /* 잘린 JSON 이면 원문 앞부분 */ }
+            if (key != null && !key.isBlank()) message = message.replace(key, "***");
+            message = message.replaceAll("\\s+", " ").strip();
+            return message.length() > 200 ? message.substring(0, 200) + "..." : message;
+        } catch (IOException e) { return "(본문 없음)"; }
     }
 
     private String payload(Request request) {

@@ -26,6 +26,8 @@ class GeminiLlmClientTest {
     String body;
     String contentType = "application/json";
     int status = 200;
+    final Deque<Integer> statuses = new ConcurrentLinkedDeque<>();
+    final java.util.concurrent.atomic.AtomicInteger requests = new java.util.concurrent.atomic.AtomicInteger();
     int stallAfterHeaders;
     final AtomicReference<String> request = new AtomicReference<>();
     final AtomicReference<String> key = new AtomicReference<>();
@@ -37,11 +39,14 @@ class GeminiLlmClientTest {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/v1beta/models/", exchange -> {
             request.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            requests.incrementAndGet();
+            Integer next = statuses.poll();
+            int code = next == null ? status : next;
             key.set(exchange.getRequestHeaders().getFirst("x-goog-api-key"));
             path.set(exchange.getRequestURI().toString());
             anthropicHeader.set(exchange.getRequestHeaders().getFirst("anthropic-beta"));
             exchange.getResponseHeaders().set("Content-Type", contentType);
-            exchange.sendResponseHeaders(status, 0);
+            exchange.sendResponseHeaders(code, 0);
             headersSent.countDown();
             try (var out = exchange.getResponseBody()) {
                 if (stallAfterHeaders > 0) {
@@ -111,6 +116,44 @@ class GeminiLlmClientTest {
         status = 429; body = "provider details and local-test-key";
         assertThatThrownBy(() -> client.complete(input())).isInstanceOfSatisfying(BusinessException.class,
                 e -> assertThat(e.getMessage()).doesNotContain(body, "local-test-key"));
+    }
+
+    @Test void rateLimitIsTooManyRequestsWithoutLeakingProviderBodyOrKey() {
+        status = 429; body = "{\"error\":{\"code\":429,\"message\":\"Quota exceeded for local-test-key\"}}";
+        assertThatThrownBy(() -> client.complete(input())).isInstanceOfSatisfying(BusinessException.class, e -> {
+            assertThat(e.getErrorCode()).isEqualTo(ErrorCode.TOO_MANY_REQUESTS);
+            assertThat(e.getMessage()).contains("잠시 후 다시 시도").doesNotContain("Quota", "local-test-key");
+        });
+        assertThat(requests.get()).isEqualTo(1);
+    }
+
+    @Test void globalConcurrencyLimitRejectsBeforeSendingRequest() {
+        client.close();
+        client = new GeminiLlmClient(HttpClient.newHttpClient(), "local-test-key", "gemini-test-model",
+                URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/v1beta/"), Duration.ofSeconds(3), json,
+                new LlmConcurrencyLimiter(0, Duration.ofMillis(50)));
+        assertThatThrownBy(() -> client.complete(input())).isInstanceOfSatisfying(BusinessException.class,
+                e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.TOO_MANY_REQUESTS));
+        assertThat(requests.get()).isZero();
+    }
+
+    @Test void overloaded503IsRetriedOnceForNonStreamingCalls() {
+        statuses.add(503);
+        assertThat(client.complete(input()).text()).isEqualTo("정상 응답");
+        assertThat(requests.get()).isEqualTo(2);
+        statuses.add(503); statuses.add(503); requests.set(0);
+        assertFailure(() -> client.complete(input()));
+        assertThat(requests.get()).isEqualTo(2);
+    }
+
+    @Test void streamingAndOtherErrorsAreNeverRetried() {
+        contentType = "text/event-stream";
+        statuses.add(503); body = event(response("STOP", "ok"));
+        assertFailure(() -> client.stream(input(), t -> {}));
+        assertThat(requests.get()).isEqualTo(1);
+        contentType = "application/json"; status = 500; body = "{}"; requests.set(0);
+        assertFailure(() -> client.complete(input()));
+        assertThat(requests.get()).isEqualTo(1);
     }
 
     @Test void streamRequiresStopAndCompleteFrameAndPropagatesDisconnect() {

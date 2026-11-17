@@ -20,8 +20,6 @@ import org.springframework.transaction.support.TransactionOperations;
 
 @Service @RequiredArgsConstructor
 public class AiDraftService {
-    /** 자동 추진(PipelineWorker) 초안 단계가 아직 쓰는 사유. POST /test-requests/ai-draft 는 getDraftReceipt 로 응답 */
-    public static final String RECEIPT_PENDING = "BE-B 초안 저장 결과 조회 계약이 없어 DRAFT 및 AI revision을 확인할 수 없습니다.";
     private final RequirementApplicationService requirements;
     private final MatchingService matching;
     private final EquipmentService equipment;
@@ -115,10 +113,22 @@ public class AiDraftService {
         var prepared = prepare(actor,input);
         return tx.execute(status -> {
             Long id = create(actor,input,prepared);
-            var receipt = requests.getObject().getDraftReceipt(id);
+            var receipt = confirmReceipt(id);
             return new AiDraftResponse(receipt.requestId(),receipt.requestNo(),receipt.status(),
                     new AiDraftResponse.Revision(receipt.revisionNo(),receipt.aiGenerated(),receipt.content()),prepared.aiNotes());
         });
+    }
+
+    /**
+     * 방금 만든 초안이 DRAFT 상태이고 1번 제출본이 AI 생성인지 BE-B 저장 결과로 확인합니다.
+     * 저장 트랜잭션 안에서 불러, 확인에 실패하면 초안도 함께 롤백됩니다 (API·자동 추진 공통).
+     */
+    public kr.astra.request.dto.DraftReceipt confirmReceipt(Long draftId) {
+        var receipt = requests.getObject().getDraftReceipt(draftId);
+        if (receipt == null || !Objects.equals(receipt.requestId(),draftId)
+                || receipt.status() != kr.astra.request.entity.RequestStatus.DRAFT || !receipt.aiGenerated())
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR,"BE-B 초안 저장 결과(DRAFT·AI 제출본)를 확인할 수 없습니다.",null);
+        return receipt;
     }
 
     private Map<String,Object> fields(Object... pairs) {

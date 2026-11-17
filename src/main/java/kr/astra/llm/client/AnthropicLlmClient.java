@@ -11,26 +11,38 @@ import kr.astra.global.exception.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import jakarta.annotation.PreDestroy;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 // @Component // 기존: Claude 클라이언트를 항상 등록. 임시 Gemini 전환을 위해 아래 조건부 등록으로 대체.
 @Component
 @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "astra.ai.provider", havingValue = "anthropic", matchIfMissing = true)
 public class AnthropicLlmClient implements LlmClient {
     private final AnthropicClient client;
     private final String model;
+    private final LlmConcurrencyLimiter limiter;
 
     @org.springframework.beans.factory.annotation.Autowired
     public AnthropicLlmClient(@Value("${astra.ai.anthropic-api-key:}") String key,
-            @Value("${astra.ai.model}") String model) {
+            @Value("${astra.ai.model}") String model,
+            @Value("${astra.ai.max-concurrent-calls:8}") int maxConcurrentCalls,
+            @Value("${astra.ai.concurrency-wait-seconds:20}") long concurrencyWaitSeconds) {
         this.model = model;
         client = key == null || key.isBlank() ? null : AnthropicOkHttpClient.builder()
                 .apiKey(key).timeout(Duration.ofSeconds(45)).maxRetries(0).build();
+        limiter = new LlmConcurrencyLimiter(maxConcurrentCalls, Duration.ofSeconds(concurrencyWaitSeconds));
     }
 
-    AnthropicLlmClient(AnthropicClient client, String model) { this.client = client; this.model = model; }
+    public AnthropicLlmClient(String key, String model) { this(key, model, 8, 20); }
+
+    AnthropicLlmClient(AnthropicClient client, String model) {
+        this.client = client; this.model = model; this.limiter = new LlmConcurrencyLimiter(8, Duration.ofSeconds(20));
+    }
 
     @Override
-    public Reply complete(Request request) {
+    public Reply complete(Request request) { return limiter.call(() -> doComplete(request)); }
+
+    private Reply doComplete(Request request) {
         try {
             Message message = requiredClient().messages().create(params(request));
             if (!message.stopReason().filter(StopReason.END_TURN::equals).isPresent()) throw failure();
@@ -39,11 +51,13 @@ public class AnthropicLlmClient implements LlmClient {
             if (text.isBlank()) throw failure();
             return new Reply(text, message.model().asString(), message.id(), message.usage().inputTokens(), message.usage().outputTokens());
         } catch (BusinessException e) { throw e; }
-        catch (Exception e) { throw failure(); }
+        catch (Exception e) { throw failure(e); }
     }
 
     @Override
-    public Reply stream(Request request, Consumer<String> onText) {
+    public Reply stream(Request request, Consumer<String> onText) { return limiter.call(() -> doStream(request, onText)); }
+
+    private Reply doStream(Request request, Consumer<String> onText) {
         StringBuilder text = new StringBuilder();
         AtomicBoolean stopped = new AtomicBoolean();
         AtomicBoolean ended = new AtomicBoolean();
@@ -72,7 +86,7 @@ public class AnthropicLlmClient implements LlmClient {
             if (!stopped.get() || !ended.get() || text.isEmpty()) throw failure();
             return new Reply(text.toString(), actualModel.get(), requestId.get(), input.get(), output.get());
         } catch (BusinessException e) { throw e; }
-        catch (Exception e) { throw failure(); }
+        catch (Exception e) { throw failure(e); }
     }
 
     private MessageCreateParams params(Request request) {
@@ -92,5 +106,15 @@ public class AnthropicLlmClient implements LlmClient {
         return client;
     }
     private BusinessException failure() { return new BusinessException(ErrorCode.AI_UPSTREAM_ERROR); }
+    /** 상태 코드와 오류 종류만 기록 (키·본문 원문 제외). 429 는 한도 초과로 알려 줌 */
+    private BusinessException failure(Exception e) {
+        if (e instanceof com.anthropic.errors.AnthropicServiceException service) {
+            log.warn("Anthropic 응답 오류 status={} type={}", service.statusCode(),
+                    service.errorType().map(Object::toString).orElse("?"));
+            if (service.statusCode() == 429) return new BusinessException(ErrorCode.TOO_MANY_REQUESTS,
+                    "AI 요청 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.", null);
+        } else log.warn("Anthropic 호출 실패: {}", e.getClass().getSimpleName());
+        return failure();
+    }
     @PreDestroy public void close() { if (client != null) client.close(); }
 }
