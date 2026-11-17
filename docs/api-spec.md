@@ -681,7 +681,7 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 
 | Method | URL | 권한 | 설명 |
 |---|---|---|---|
-| GET | `/dashboard/summary` | 로그인 | 역할별 요약 (아래) |
+| GET | `/dashboard/summary` | 로그인 | 요약 (아래). `?view=REQUESTER` 의뢰자 화면 / `?view=PROVIDER` 장비 보유 조직 화면. 안 보내면 `INSTITUTION_MANAGER`는 PROVIDER, `COMPANY_USER`는 REQUESTER. 관리자는 항상 관리자 요약 |
 | GET | `/dashboard/equipment-stats` | 로그인 | 지역/유형별 장비 수, 기관별 보유 현황 |
 | GET | `/notifications` | 로그인 | 알림 목록 `?unreadOnly=true` |
 | GET | `/notifications/unread-count` | 로그인 | 헤더 배지용 |
@@ -691,9 +691,11 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 > 의뢰·예약 칸은 BE-B 의 `RequestDashboardQuery`, 최근 상담은 BE-C 의 `ChatSessionQuery` 구현이 있을 때만 채워집니다.
 > 구현 전에는 0·빈 목록이고 `dataAvailable` 이 `false` → 프론트는 그 칸을 "준비 중"으로 표시합니다. 목록 칸은 최대 5개.
 
+> 응답 형식은 `role`이 아니라 `view`로 구분합니다. 기업 회원도 `?view=PROVIDER`로 자기 조직이 받은 의뢰를, 기관·대학 회원도 `?view=REQUESTER`로 자기가 보낸 의뢰를 볼 수 있습니다.
+
 ```json
-// GET /dashboard/summary (COMPANY_USER)
-{ "role": "COMPANY_USER",
+// GET /dashboard/summary?view=REQUESTER (의뢰자 화면. COMPANY_USER 의 기본값)
+{ "role": "COMPANY_USER", "view": "REQUESTER",
   "requestCounts": { "DRAFT": 1, "SUBMITTED": 0, "UNDER_REVIEW": 2, "SUPPLEMENT_REQUESTED": 1, "RESUBMITTED": 0,
                      "SCHEDULING": 0, "CONFIRMED": 3, "COMPLETED": 0, "REJECTED": 0, "CANCELED": 0 },  // 10개 상태 항상 포함
   "actionRequired": [ { "requestId": 15, "requestNo": "REQ-20261105-0001", "title": "위성 전장품 진동시험",
@@ -702,8 +704,8 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
   "equipmentStats": { "total": 71, "byRegion": { "경남": 1, "광주": 1, "대전": 32, "원주": 1, "진주": 36 } },
   "dataAvailable": { "requests": true, "chats": true } }
 
-// GET /dashboard/summary (INSTITUTION_MANAGER, manager1 — seed 실제 값)
-{ "role": "INSTITUTION_MANAGER",
+// GET /dashboard/summary?view=PROVIDER (장비 보유 조직 화면. INSTITUTION_MANAGER 의 기본값, manager1 — seed 실제 값)
+{ "role": "INSTITUTION_MANAGER", "view": "PROVIDER",
   "institution": { "id": 2, "name": "대전테크노파크 우주·양자산업센터" },
   "requestCounts": { ... 10개 상태 ... },                       // 우리 기관 접수함
   "pendingReview": [ /* actionRequired 와 같은 형식 (SUBMITTED·RESUBMITTED) */ ],
@@ -714,7 +716,7 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
   "dataAvailable": { "requests": false } }
 
 // GET /dashboard/summary (ADMIN)
-{ "role": "ADMIN", "pendingUsers": 1, "pendingInstitutions": 0,
+{ "role": "ADMIN", "view": "ADMIN", "pendingUsers": 1, "pendingInstitutions": 0,
   "requestCounts": { ... 10개 상태 (전체) ... },
   "institutionVerification": [ /* equipment-stats 의 institutions 와 같은 형식 */ ],
   "equipmentStats": { "total": 71, "byRegion": { ... } },

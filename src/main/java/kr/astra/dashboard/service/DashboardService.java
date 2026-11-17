@@ -21,6 +21,7 @@ import kr.astra.dashboard.dto.DashboardResponses.InstitutionSummary;
 import kr.astra.dashboard.dto.DashboardResponses.NeedsUpdate;
 import kr.astra.dashboard.dto.DashboardResponses.Summary;
 import kr.astra.dashboard.dto.DashboardResponses.TestTypeCount;
+import kr.astra.dashboard.dto.DashboardView;
 import kr.astra.equipment.repository.EquipmentJdbcRepository.InstitutionVerificationRow;
 import kr.astra.equipment.repository.EquipmentJdbcRepository.NeedsUpdateRow;
 import kr.astra.equipment.service.EquipmentService;
@@ -75,20 +76,25 @@ public class DashboardService {
                 institutionStats());
     }
 
-    /** GET /dashboard/summary: 로그인한 사용자의 역할에 맞는 요약 */
-    public Summary summary(CurrentUser user) {
+    /**
+     * GET /dashboard/summary?view=. 관리자는 항상 관리자 요약.
+     * 그 외 회원은 view 로 의뢰자 화면(REQUESTER)과 장비 보유 조직 화면(PROVIDER)을 고르고,
+     * 안 보내면 가입 유형에 맞는 기본 화면 (INSTITUTION_MANAGER 는 PROVIDER, COMPANY_USER 는 REQUESTER).
+     */
+    public Summary summary(CurrentUser user, DashboardView view) {
         CurrentUser u = AccessGuard.requireLogin(user);
-        return switch (u.role()) {
-            case COMPANY_USER -> companySummary(u);
-            case INSTITUTION_MANAGER -> institutionSummary(u);
-            case ADMIN -> adminSummary();
-        };
+        if (u.isAdmin()) {
+            return adminSummary();
+        }
+        DashboardView resolved = view != null && view != DashboardView.ADMIN ? view
+                : u.role() == UserRole.INSTITUTION_MANAGER ? DashboardView.PROVIDER : DashboardView.REQUESTER;
+        return resolved == DashboardView.PROVIDER ? institutionSummary(u) : companySummary(u);
     }
 
     private CompanySummary companySummary(CurrentUser u) {
         RequestDashboardQuery requests = requestQuery.getIfAvailable();
         ChatSessionQuery chats = chatQuery.getIfAvailable();
-        return new CompanySummary(u.role(),
+        return new CompanySummary(u.role(), DashboardView.REQUESTER,
                 counts(requests == null ? null : () -> requests.countByRequester(u.userId())),
                 requests == null ? List.<RequestActionItem>of() : requests.findActionRequired(u.userId(), LIST_LIMIT),
                 chats == null ? List.<ChatSessionSummary>of() : chats.findRecent(u.userId(), LIST_LIMIT),
@@ -102,7 +108,7 @@ public class DashboardService {
                 : organizationService.findSummary(institutionId).orElse(null);
         NeedsUpdateRow needs = institutionId == null ? new NeedsUpdateRow(0, 0, 0)
                 : equipmentService.countNeedsUpdate(institutionId, UPDATE_INTERVAL_DAYS);
-        return new InstitutionSummary(u.role(),
+        return new InstitutionSummary(u.role(), DashboardView.PROVIDER,
                 org == null ? null : new InstitutionRef(org.id(), org.name()),
                 counts(requests == null ? null : () -> requests.countByInstitution(institutionId)),
                 requests == null ? List.<RequestActionItem>of() : requests.findPendingReview(institutionId, LIST_LIMIT),
@@ -114,7 +120,7 @@ public class DashboardService {
 
     private AdminSummary adminSummary() {
         RequestDashboardQuery requests = requestQuery.getIfAvailable();
-        return new AdminSummary(UserRole.ADMIN,
+        return new AdminSummary(UserRole.ADMIN, DashboardView.ADMIN,
                 userService.countByStatus(UserStatus.PENDING),
                 organizationService.countUnverifiedInstitutions(),
                 counts(requests == null ? null : requests::countAll),

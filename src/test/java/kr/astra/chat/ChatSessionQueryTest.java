@@ -95,13 +95,13 @@ class ChatSessionQueryTest {
             context.refresh();
             assertThat(context.getBeansOfType(ChatSessionQuery.class)).hasSize(1);
             var dashboard = context.getBean(DashboardService.class);
-            var empty = (CompanySummary) dashboard.summary(owner);
+            var empty = (CompanySummary) dashboard.summary(owner, null);
             assertThat(empty.dataAvailable().chats()).isTrue();
             assertThat(empty.recentChats()).isEmpty();
 
             var summary = new ChatSessionSummary(11L, "진동시험", OffsetDateTime.now());
             when(sessions.findRecentSummaries(eq(7L), any())).thenReturn(List.of(summary));
-            var populated = (CompanySummary) dashboard.summary(owner);
+            var populated = (CompanySummary) dashboard.summary(owner, null);
             assertThat(populated.recentChats()).containsExactly(summary);
             assertThat(populated.dataAvailable().chats()).isTrue();
             verify(sessions, times(2)).findRecentSummaries(eq(7L), argThat(p -> p.getPageSize() == 5));

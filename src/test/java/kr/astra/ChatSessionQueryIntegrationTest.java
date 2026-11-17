@@ -63,7 +63,7 @@ class ChatSessionQueryIntegrationTest {
         chats.create(new CurrentUser(otherId, UserRole.ADMIN, null), "다른 사용자 상담");
         entityManager.clear();
 
-        var summary = (CompanySummary) dashboard.summary(owner);
+        var summary = (CompanySummary) dashboard.summary(owner, null);
         assertThat(summary.dataAvailable().chats()).isTrue();
         assertThat(summary.recentChats()).extracting(ChatSessionSummary::id)
                 .containsExactly(ids.get(0), ids.get(6), ids.get(5), ids.get(4), ids.get(3));

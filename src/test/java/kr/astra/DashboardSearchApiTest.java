@@ -85,6 +85,42 @@ class DashboardSearchApiTest {
     }
 
     @Test
+    void view_로_의뢰자_화면과_장비_보유_조직_화면을_고른다() throws Exception {
+        String company = token("company@astra.demo", UserRole.COMPANY_USER);
+        String manager1 = token("manager1@astra.demo", UserRole.INSTITUTION_MANAGER);
+
+        // 안 보내면 가입 유형 기본 화면
+        assertThat(api.get("/api/v1/dashboard/summary", company).data().path("view").asString()).isEqualTo("REQUESTER");
+        assertThat(api.get("/api/v1/dashboard/summary", manager1).data().path("view").asString()).isEqualTo("PROVIDER");
+
+        // 기업도 장비 보유 조직 화면을 본다 (등록한 장비가 없으면 0)
+        JsonNode provider = api.get("/api/v1/dashboard/summary?view=PROVIDER", company).data();
+        assertThat(provider.path("role").asString()).isEqualTo("COMPANY_USER");
+        assertThat(provider.path("view").asString()).isEqualTo("PROVIDER");
+        assertThat(provider.path("institution").path("name").asString()).isEqualTo("가상 A기업");
+        assertThat(provider.path("requestCounts").size()).isEqualTo(10);
+        assertThat(provider.path("equipmentNeedsUpdate").path("total").asLong()).isZero();
+        assertThat(provider.has("pendingReview")).isTrue();
+        assertThat(provider.has("recentChats")).isFalse();
+
+        // 기관·대학 회원도 의뢰자 화면을 본다
+        JsonNode requester = api.get("/api/v1/dashboard/summary?view=REQUESTER", manager1).data();
+        assertThat(requester.path("role").asString()).isEqualTo("INSTITUTION_MANAGER");
+        assertThat(requester.path("view").asString()).isEqualTo("REQUESTER");
+        assertThat(requester.path("requestCounts").size()).isEqualTo(10);
+        assertThat(requester.has("actionRequired")).isTrue();
+        assertThat(requester.has("recentChats")).isTrue();
+        assertThat(requester.has("institution")).isFalse();
+
+        // 관리자는 view 와 무관하게 관리자 요약
+        JsonNode admin = api.get("/api/v1/dashboard/summary?view=REQUESTER", token("admin@astra.demo", UserRole.ADMIN))
+                .data();
+        assertThat(admin.path("view").asString()).isEqualTo("ADMIN");
+        assertThat(admin.has("pendingUsers")).isTrue();
+        assertThat(api.get("/api/v1/dashboard/summary?view=NOPE", company).status()).isEqualTo(400);
+    }
+
+    @Test
     void 기관_요약은_소속_기관과_갱신_필요_장비_수를_준다() throws Exception {
         JsonNode d = api.get("/api/v1/dashboard/summary", token("manager1@astra.demo", UserRole.INSTITUTION_MANAGER))
                 .data();
