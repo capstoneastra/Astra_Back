@@ -123,6 +123,19 @@ class AuthFlowTest {
     }
 
     @Test
+    void 시연_계정은_V9_비밀번호로_로그인되고_승인_대기_계정은_403() throws Exception {
+        for (String email : new String[] {"admin@astra.demo", "company@astra.demo", "company2@astra.demo",
+                "manager1@astra.demo", "manager2@astra.demo", "univ1@astra.demo"}) {
+            Res login = api.post("/api/v1/auth/login",
+                    "{ \"email\": \"%s\", \"password\": \"12345678\" }".formatted(email), null);
+            assertThat(login.status()).as(email + " " + login.body()).isEqualTo(200);
+        }
+        Res pending = api.post("/api/v1/auth/login",
+                "{ \"email\": \"pending@astra.demo\", \"password\": \"12345678\" }", null);
+        assertThat(pending.code()).isEqualTo("ACCOUNT_NOT_ACTIVE");
+    }
+
+    @Test
     void 이미_가입된_이메일은_인증_코드도_보내지_않고_409_EMAIL_ALREADY_EXISTS() throws Exception {
         Res res = api.post("/api/v1/auth/email-verifications", "{ \"email\": \"COMPANY@astra.demo\" }", null);
         assertThat(res.status()).isEqualTo(409);
