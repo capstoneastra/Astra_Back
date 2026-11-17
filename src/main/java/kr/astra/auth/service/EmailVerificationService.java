@@ -2,13 +2,10 @@ package kr.astra.auth.service;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Base64;
-import java.util.HexFormat;
-import java.util.List;
 import java.util.Map;
 import kr.astra.auth.dto.EmailVerificationConfirmResponse;
 import kr.astra.auth.dto.EmailVerificationSentResponse;
@@ -17,6 +14,7 @@ import kr.astra.auth.repository.EmailVerificationRepository;
 import kr.astra.global.exception.BusinessException;
 import kr.astra.global.exception.ErrorCode;
 import kr.astra.global.mail.EmailSender;
+import kr.astra.global.security.Hashes;
 import kr.astra.user.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -80,6 +78,7 @@ public class EmailVerificationService {
         String email = UserService.normalizeEmail(rawEmail);
         String code = "%06d".formatted(RANDOM.nextInt(1_000_000));
         EmailVerification verification = transactions.execute(status -> {
+            repository.lockEmail(email); // 같은 이메일 동시 요청은 여기서 줄 세움 → 뒤 요청은 60초 제한에 걸림
             userService.checkEmailAvailable(email);
             OffsetDateTime now = OffsetDateTime.now();
             repository.findFirstByEmailOrderByIdDesc(email).ifPresent(last -> {
@@ -89,7 +88,7 @@ public class EmailVerificationService {
                             "인증 코드는 %d초 후에 다시 받을 수 있습니다.".formatted(wait), Map.of("retryAfter", wait));
                 }
             });
-            return repository.saveAndFlush(new EmailVerification(email, sha256(code), now.plus(codeValidity)));
+            return repository.saveAndFlush(new EmailVerification(email, Hashes.sha256(code), now.plus(codeValidity)));
         });
         try {
             emailSender.send(email, "[ASTRA] 회원가입 인증 코드", """
@@ -133,7 +132,7 @@ public class EmailVerificationService {
             throw new BusinessException(ErrorCode.VERIFICATION_CODE_EXPIRED);
         }
         if (!MessageDigest.isEqual(verification.getCodeHash().getBytes(StandardCharsets.US_ASCII),
-                sha256(code).getBytes(StandardCharsets.US_ASCII))) {
+                Hashes.sha256(code).getBytes(StandardCharsets.US_ASCII))) {
             int remaining = Math.max(0, maxAttempts - verification.recordFailedAttempt());
             throw new BusinessException(ErrorCode.VERIFICATION_CODE_INVALID,
                     ErrorCode.VERIFICATION_CODE_INVALID.defaultMessage(), Map.of("remainingAttempts", remaining));
@@ -141,7 +140,7 @@ public class EmailVerificationService {
         byte[] tokenBytes = new byte[32];
         RANDOM.nextBytes(tokenBytes);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
-        verification.markVerified(now, sha256(token), now.plus(tokenValidity));
+        verification.markVerified(now, Hashes.sha256(token), now.plus(tokenValidity));
         return new EmailVerificationConfirmResponse(token, tokenValidity.toSeconds());
     }
 
@@ -152,21 +151,10 @@ public class EmailVerificationService {
     public void consumeToken(String rawEmail, String token) {
         String email = UserService.normalizeEmail(rawEmail);
         OffsetDateTime now = OffsetDateTime.now();
-        EmailVerification verification = repository.findByTokenHash(sha256(token))
+        EmailVerification verification = repository.findByTokenHash(Hashes.sha256(token))
                 .filter(v -> v.isTokenUsable(email, now))
-                .orElseThrow(() -> new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED,
-                        ErrorCode.EMAIL_NOT_VERIFIED.defaultMessage(),
-                        Map.of("fields", List.of(Map.of("field", "verificationToken",
-                                "reason", "인증되지 않았거나 만료된 토큰입니다. 이메일 인증을 다시 해 주세요.")))));
+                .orElseThrow(() -> BusinessException.invalidField(ErrorCode.EMAIL_NOT_VERIFIED, "verificationToken",
+                        "인증되지 않았거나 만료된 토큰입니다. 이메일 인증을 다시 해 주세요."));
         verification.markUsed(now);
-    }
-
-    private static String sha256(String value) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 을 사용할 수 없습니다.", e);
-        }
     }
 }

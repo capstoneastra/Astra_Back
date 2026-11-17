@@ -2,18 +2,15 @@ package kr.astra.global.config;
 
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import kr.astra.global.exception.ErrorCode;
 import kr.astra.global.security.AccountStatusChecker;
+import kr.astra.global.security.FilterErrorWriter;
 import kr.astra.global.security.JwtAuthenticationFilter;
 import kr.astra.global.security.JwtProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
 import org.springframework.security.config.Customizer;
@@ -80,8 +77,8 @@ public class SecurityConfig {
                     }
                 })
                 .exceptionHandling(e -> e
-                        .authenticationEntryPoint((req, res, ex) -> writeError(res, authErrorOf(req)))
-                        .accessDeniedHandler((req, res, ex) -> writeError(res, ErrorCode.FORBIDDEN)));
+                        .authenticationEntryPoint((req, res, ex) -> FilterErrorWriter.write(res, authErrorOf(req)))
+                        .accessDeniedHandler((req, res, ex) -> FilterErrorWriter.write(res, ErrorCode.FORBIDDEN)));
         return http.build();
     }
 
@@ -117,14 +114,5 @@ public class SecurityConfig {
     private static ErrorCode authErrorOf(HttpServletRequest req) {
         return req.getAttribute(JwtAuthenticationFilter.AUTH_ERROR_ATTRIBUTE) instanceof ErrorCode code
                 ? code : ErrorCode.AUTH_REQUIRED;
-    }
-
-    /** 필터 단계 에러는 컨트롤러 밖이라 GlobalExceptionHandler 가 못 잡으므로 같은 형식으로 직접 씁니다. */
-    private static void writeError(HttpServletResponse res, ErrorCode code) throws IOException {
-        res.setStatus(code.status().value());
-        res.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        res.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        res.getWriter().write("{\"success\":false,\"error\":{\"code\":\"" + code.name()
-                + "\",\"message\":\"" + code.defaultMessage() + "\",\"details\":null}}");
     }
 }

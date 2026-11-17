@@ -16,6 +16,13 @@ public interface EmailVerificationRepository extends JpaRepository<EmailVerifica
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<EmailVerification> findFirstByEmailOrderByIdDesc(String email);
 
+    /**
+     * 이메일별 트랜잭션 잠금 (커밋·롤백 시 자동 해제). 아직 행이 없는 첫 요청끼리도 직렬화해
+     * 동시에 두 번 보내 둘 다 저장·발송되는 것을 막습니다.
+     */
+    @Query(value = "SELECT 1 FROM pg_advisory_xact_lock(hashtext(:email))", nativeQuery = true)
+    Integer lockEmail(@Param("email") String email);
+
     Optional<EmailVerification> findByTokenHash(String tokenHash);
 
     /** 코드 확인 전에는 코드 만료, 확인 후에는 가입용 토큰 만료를 기준으로 정리합니다. */

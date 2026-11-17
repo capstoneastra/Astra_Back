@@ -10,6 +10,8 @@ import java.io.IOException;
 import java.util.List;
 import kr.astra.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -27,6 +29,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * 계정이 없으면 401 AUTH_REQUIRED. 관리자가 정지하면 남은 토큰 유효 시간과 상관없이 다음 요청부터 막힙니다.
  * 가입·로그인 같은 공개 경로는 그대로 쓸 수 있습니다.
  */
+@Slf4j
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
@@ -59,6 +62,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 request.setAttribute(AUTH_ERROR_ATTRIBUTE, ErrorCode.TOKEN_EXPIRED);
             } catch (JwtException | IllegalArgumentException e) {
                 request.setAttribute(AUTH_ERROR_ATTRIBUTE, ErrorCode.AUTH_REQUIRED);
+            } catch (DataAccessException e) {
+                // 계정 상태 조회 실패(DB 지연·커넥션 부족): 통과시키지 않고 같은 응답 형식의 500
+                log.error("계정 상태 확인 실패", e);
+                FilterErrorWriter.write(response, ErrorCode.INTERNAL_ERROR);
+                return;
             }
         }
         chain.doFilter(request, response);

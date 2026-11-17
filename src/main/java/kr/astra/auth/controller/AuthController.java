@@ -2,6 +2,7 @@ package kr.astra.auth.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
 import kr.astra.auth.dto.EmailVerificationConfirmRequest;
@@ -13,6 +14,7 @@ import kr.astra.auth.dto.RefreshTokenRequest;
 import kr.astra.auth.dto.SignupRequest;
 import kr.astra.auth.dto.SignupResponse;
 import kr.astra.auth.dto.TokenResponse;
+import kr.astra.auth.service.AuthRateLimiter;
 import kr.astra.auth.service.AuthService;
 import kr.astra.auth.service.EmailVerificationService;
 import kr.astra.global.response.ApiResponse;
@@ -37,13 +39,15 @@ public class AuthController {
 
     private final AuthService authService;
     private final EmailVerificationService emailVerificationService;
+    private final AuthRateLimiter rateLimiter;
 
     @Operation(summary = "이메일 인증 코드 발송", description = "6자리 코드를 메일로 보냄(10분 유효). "
             + "이미 가입된 이메일은 409 EMAIL_ALREADY_EXISTS, 60초 안에 다시 요청하면 429 TOO_MANY_REQUESTS. "
             + "MAIL_HOST 가 없는 로컬·시연 서버는 메일 대신 서버 로그에 코드를 출력")
     @PostMapping("/email-verifications")
     public ApiResponse<EmailVerificationSentResponse> sendVerificationCode(
-            @Valid @RequestBody EmailVerificationRequest request) {
+            @Valid @RequestBody EmailVerificationRequest request, HttpServletRequest http) {
+        rateLimiter.checkEmailVerification(http.getRemoteAddr());
         return ApiResponse.ok(emailVerificationService.sendCode(request.email()));
     }
 
@@ -66,7 +70,8 @@ public class AuthController {
     @Operation(summary = "로그인", description = "access 토큰(1시간)과 refresh 토큰(14일) 발급. "
             + "틀리면 401 INVALID_CREDENTIALS, 승인 대기·정지 계정은 403 ACCOUNT_NOT_ACTIVE")
     @PostMapping("/login")
-    public ApiResponse<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
+    public ApiResponse<TokenResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
+        rateLimiter.checkLogin(http.getRemoteAddr());
         return ApiResponse.ok(authService.login(request));
     }
 
