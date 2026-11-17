@@ -124,9 +124,9 @@ class EquipmentApiTest {
     void 장비_목록_항목은_api_spec_예시와_같은_형식이다() throws Exception {
         Res res = api.get("/api/v1/equipment?testType=VIBRATION", token);
         assertThat(res.status()).isEqualTo(200);
-        assertThat(res.data().path("totalElements").asLong()).isEqualTo(4);
-        assertThat(externalIds(res)).containsExactly("ASTRA-CAND-0044", "ASTRA-CAND-0045", "ASTRA-CAND-0047",
-                "ASTRA-CAND-0048");
+        assertThat(res.data().path("totalElements").asLong()).isEqualTo(activeWithTestType("VIBRATION"));
+        assertThat(externalIds(res).subList(0, 4)).containsExactly("ASTRA-CAND-0044", "ASTRA-CAND-0045",
+                "ASTRA-CAND-0047", "ASTRA-CAND-0048");
 
         JsonNode e = find(res.data().path("content"), "ASTRA-CAND-0048");
         assertThat(e.propertyNames()).containsExactlyInAnyOrder("id", "externalId", "name", "model", "institution",
@@ -136,7 +136,7 @@ class EquipmentApiTest {
         assertThat(e.path("name").asString()).isEqualTo("진동시험기");
         assertThat(e.path("model").asString()).isEqualTo("EDS5000LS4-445");
         assertThat(e.path("institution").path("id").asLong()).isEqualTo(2);
-        assertThat(e.path("institution").path("name").asString()).isEqualTo("대전테크노파크 우주·양자산업센터");
+        assertThat(e.path("institution").path("name").asString()).isEqualTo("미리내우주환경시험센터");
         assertThat(e.path("region").asString()).isEqualTo("대전");
         assertThat(e.path("equipmentType").asString()).isEqualTo("TEST");
         assertThat(e.path("testTypes").toString()).isEqualTo("[\"VIBRATION\"]");
@@ -149,15 +149,17 @@ class EquipmentApiTest {
     }
 
     @Test
-    void 기본_목록은_활성_장비_71대를_외부_id_순으로_20개씩_준다() throws Exception {
+    void 기본_목록은_활성_장비를_외부_id_순으로_20개씩_준다() throws Exception {
+        long total = jdbc.queryForObject("SELECT count(*) FROM equipment WHERE is_active", Long.class);
         Res res = api.get("/api/v1/equipment", token);
-        assertThat(res.data().path("totalElements").asLong()).isEqualTo(71);
+        assertThat(res.data().path("totalElements").asLong()).isEqualTo(total);
         assertThat(res.data().path("size").asInt()).isEqualTo(20);
-        assertThat(res.data().path("totalPages").asInt()).isEqualTo(4);
+        assertThat(res.data().path("totalPages").asInt()).isEqualTo((int) ((total + 19) / 20));
         assertThat(externalIds(res).getFirst()).isEqualTo("ASTRA-CAND-0001");
 
-        Res last = api.get("/api/v1/equipment?page=3", token);
-        assertThat(last.data().path("content").size()).isEqualTo(11);
+        int lastPage = (int) ((total + 19) / 20) - 1;
+        Res last = api.get("/api/v1/equipment?page=" + lastPage, token);
+        assertThat(last.data().path("content").size()).isEqualTo((int) (total - lastPage * 20L));
     }
 
     @Test
@@ -184,11 +186,15 @@ class EquipmentApiTest {
         assertThat(inst.data().path("totalElements").asLong()).isEqualTo(2);
 
         Res external = api.get("/api/v1/equipment?externalOnly=true", token);
-        assertThat(external.data().path("totalElements").asLong()).isEqualTo(3);
+        assertThat(external.data().path("totalElements").asLong()).isEqualTo(jdbc.queryForObject(
+                "SELECT count(*) FROM equipment WHERE is_active AND access_scope = 'EXTERNAL_ALLOWED'", Long.class))
+                .isPositive();
 
-        Res noMock = api.get("/api/v1/equipment?includeMock=false", token);
-        assertThat(externalIds(noMock)).containsExactly("ASTRA-CAND-0023", "ASTRA-CAND-0028", "ASTRA-CAND-0029",
-                "ASTRA-CAND-0030", "ASTRA-CAND-0031");
+        // seed 장비는 모두 시연용(V8). 회원이 직접 등록한 장비만 실제 데이터로 남음
+        Res noMock = api.get("/api/v1/equipment?includeMock=false&size=100", token);
+        assertThat(noMock.data().path("totalElements").asLong()).isEqualTo(jdbc.queryForObject(
+                "SELECT count(*) FROM equipment WHERE is_active AND NOT is_mock", Long.class));
+        assertThat(externalIds(noMock)).noneMatch(id -> id.startsWith("ASTRA-CAND-") || id.startsWith("ASTRA-DEMO-"));
     }
 
     @Test
@@ -254,7 +260,7 @@ class EquipmentApiTest {
         assertThat(list.get(0).path("code").asString()).isEqualTo("ACOUSTIC_NOISE");
         JsonNode vibration = findBy(list, "code", "VIBRATION");
         assertThat(vibration.path("nameKo").asString()).isEqualTo("진동시험");
-        assertThat(vibration.path("equipmentCount").asLong()).isEqualTo(4);
+        assertThat(vibration.path("equipmentCount").asLong()).isEqualTo(activeWithTestType("VIBRATION"));
         assertThat(vibration.path("keywords").toString()).contains("진동", "sine");
     }
 
@@ -278,13 +284,18 @@ class EquipmentApiTest {
 
         // 장비 수 많은 순, 같으면 가나다순
         JsonNode institutions = res.data().path("institutions");
-        assertThat(institutions.size()).isEqualTo(3);
-        assertThat(institutions.get(0).path("name").asString()).isEqualTo("한국신뢰성기술센터");
-        assertThat(institutions.get(0).path("equipmentCount").asLong()).isEqualTo(2);
-        assertThat(institutions.get(1).path("name").asString()).isEqualTo("기술지원센터");
-        assertThat(institutions.get(2).path("name").asString()).isEqualTo("대전테크노파크 우주·양자산업센터");
-        assertThat(institutions.get(0).path("accessScope").asString()).isEqualTo("UNKNOWN");
-        assertThat(institutions.get(0).path("estCostMin").isNull()).isTrue();
+        // 기관·대학·기업 모두 장비 보유 조직으로 나옴 (V8 시연 장비 포함 9곳)
+        assertThat(institutions.size()).isEqualTo(9);
+        assertThat(institutions.get(0).path("name").asString()).isEqualTo("늘해랑대학교 항공우주공동기기원");
+        assertThat(institutions.get(0).path("equipmentCount").asLong()).isEqualTo(6);
+        assertThat(institutions.get(1).path("name").asString()).isEqualTo("다솜대학교 공동실험실습관");
+        List<String> names = new ArrayList<>();
+        institutions.forEach(i -> names.add(i.path("name").asString()));
+        assertThat(names).contains("다온신뢰성시험센터", "마루기술지원센터", "미리내우주환경시험센터", "미르항공정밀");
+        JsonNode daon = findBy(institutions, "name", "다온신뢰성시험센터");
+        assertThat(daon.path("equipmentCount").asLong()).isEqualTo(2);
+        assertThat(daon.path("accessScope").asString()).isEqualTo("UNKNOWN");
+        assertThat(daon.path("estCostMin").isNull()).isTrue();
 
         assertThat(api.get("/api/v1/test-types/NOPE", token).code()).isEqualTo("NOT_FOUND");
     }
@@ -294,7 +305,8 @@ class EquipmentApiTest {
     @Test
     void 기관_목록은_승인된_기관을_가나다순으로_장비_수와_함께_준다() throws Exception {
         JsonNode list = api.get("/api/v1/institutions", token).data();
-        assertThat(list.size()).isEqualTo(9);
+        // 기관·대학 12곳 + 장비가 있는 기업 3곳 (V8). 테스트 중 장비를 등록한 기업이 있으면 더 늘 수 있음
+        assertThat(list.size()).isGreaterThanOrEqualTo(15);
         List<String> names = new ArrayList<>();
         long total = 0;
         for (JsonNode n : list) {
@@ -302,8 +314,10 @@ class EquipmentApiTest {
             total += n.path("equipmentCount").asLong();
         }
         assertThat(names).isSortedAccordingTo(Collator.getInstance(Locale.KOREAN));
-        assertThat(total).isEqualTo(71);
-        JsonNode jinju = findBy(list, "name", "한국생산기술연구원 진주뿌리기술지원센터");
+        assertThat(total).isEqualTo(jdbc.queryForObject("SELECT count(*) FROM equipment WHERE is_active", Long.class));
+        assertThat(findBy(list, "name", "미르항공정밀").path("orgType").asString()).isEqualTo("COMPANY");
+        assertThat(findBy(list, "name", "가온대학교 첨단소재분석센터").path("orgType").asString()).isEqualTo("UNIVERSITY");
+        JsonNode jinju = findBy(list, "name", "한빛뿌리기술지원센터");
         assertThat(jinju.path("region").asString()).isEqualTo("진주");
         assertThat(jinju.path("equipmentCount").asLong()).isEqualTo(31);
     }
@@ -311,7 +325,7 @@ class EquipmentApiTest {
     @Test
     void 기관_상세는_장비_유형별_수와_가능_시험유형을_준다() throws Exception {
         JsonNode d = api.get("/api/v1/institutions/2", token).data();
-        assertThat(d.path("name").asString()).isEqualTo("대전테크노파크 우주·양자산업센터");
+        assertThat(d.path("name").asString()).isEqualTo("미리내우주환경시험센터");
         assertThat(d.path("equipmentCount").asLong()).isEqualTo(13);
         assertThat(d.path("equipmentByType").path("MEASUREMENT").asLong()).isEqualTo(11);
         assertThat(d.path("equipmentByType").path("TEST").asLong()).isEqualTo(2);
@@ -333,7 +347,8 @@ class EquipmentApiTest {
         List<String> ids = new ArrayList<>();
         list.forEach(n -> ids.add(n.path("equipment").path("externalId").asString()));
         assertThat(ids).doesNotContain("ASTRA-CAND-0048");
-        assertThat(ids.subList(0, 3)).containsExactlyInAnyOrder("ASTRA-CAND-0044", "ASTRA-CAND-0045", "ASTRA-CAND-0047");
+        // 같은 시험유형(진동시험) 장비가 먼저 나옴
+        assertThat(ids.subList(0, 3)).allMatch(id -> hasTestType(id, "VIBRATION"));
         assertThat(list.get(0).path("reasons").toString()).contains("같은 시험유형: 진동시험");
         assertThat(api.get("/api/v1/equipment/999999/similar", token).code()).isEqualTo("EQUIPMENT_NOT_FOUND");
     }
@@ -417,10 +432,14 @@ class EquipmentApiTest {
     @Test
     void 매칭_후보와_사양을_조회한다() {
         List<EquipmentCandidate> all = equipmentQueryService.findCandidates("VIBRATION", null);
+        // 정비 중·이용 불가 장비는 후보에서 빠짐
+        assertThat(all).hasSize(jdbc.queryForObject("SELECT count(*) FROM equipment e JOIN equipment_test_types t "
+                + "ON t.equipment_id = e.id WHERE e.is_active AND t.test_type_code = 'VIBRATION' "
+                + "AND e.availability NOT IN ('UNAVAILABLE', 'MAINTENANCE')", Integer.class));
         assertThat(all).extracting(EquipmentCandidate::externalId)
-                .containsExactly("ASTRA-CAND-0044", "ASTRA-CAND-0045", "ASTRA-CAND-0047", "ASTRA-CAND-0048");
+                .startsWith("ASTRA-CAND-0044", "ASTRA-CAND-0045", "ASTRA-CAND-0047", "ASTRA-CAND-0048");
         EquipmentCandidate c48 = all.get(3);
-        assertThat(c48.institutionName()).isEqualTo("대전테크노파크 우주·양자산업센터");
+        assertThat(c48.institutionName()).isEqualTo("미리내우주환경시험센터");
         assertThat(c48.isMock()).isTrue();
         assertThat(equipmentQueryService.findCandidates("VIBRATION", "대전")).hasSize(3);
 
@@ -434,6 +453,17 @@ class EquipmentApiTest {
     }
 
     // ------------------------------------------------------------ helpers
+
+    /** 활성 장비 중 시험유형이 연결된 것 (seed 가 바뀌어도 DB 기준으로 비교) */
+    private long activeWithTestType(String code) {
+        return jdbc.queryForObject("SELECT count(*) FROM equipment e JOIN equipment_test_types t ON t.equipment_id = e.id "
+                + "WHERE e.is_active AND t.test_type_code = ?", Long.class, code);
+    }
+
+    private boolean hasTestType(String externalId, String code) {
+        return jdbc.queryForObject("SELECT count(*) FROM equipment e JOIN equipment_test_types t ON t.equipment_id = e.id "
+                + "WHERE e.external_id = ? AND t.test_type_code = ?", Long.class, externalId, code) > 0;
+    }
 
     private static String enc(String s) {
         return java.net.URLEncoder.encode(s, java.nio.charset.StandardCharsets.UTF_8);

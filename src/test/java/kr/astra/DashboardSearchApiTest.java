@@ -49,23 +49,26 @@ class DashboardSearchApiTest {
         Res res = api.get("/api/v1/dashboard/equipment-stats", token("company@astra.demo", UserRole.COMPANY_USER));
         assertThat(res.status()).isEqualTo(200);
         JsonNode d = res.data();
-        assertThat(d.path("total").asLong()).isEqualTo(71);
-        // 지역 가나다순, V5 로 진주 = 5 + 31
-        assertThat(d.path("byRegion").toString())
-                .isEqualTo("{\"경남\":1,\"광주\":1,\"대전\":32,\"원주\":1,\"진주\":36}");
+        assertThat(d.path("total").asLong()).isEqualTo(activeEquipment());
+        // 지역 가나다순. V5 로 진주 = 5 + 31, V8 시연 장비가 사천·창원·고흥에 추가
+        assertThat(d.path("byRegion").toString()).startsWith("{\"경남\":1,\"고흥\":40,\"광주\":1,\"대전\":32,");
+        assertThat(d.path("byRegion").path("진주").asLong()).isEqualTo(36);
+        assertThat(d.path("byRegion").path("사천").asLong()).isEqualTo(154);
+        assertThat(d.path("byRegion").path("창원").asLong()).isEqualTo(74);
         long byType = 0;
         for (JsonNode n : d.path("byEquipmentType")) {
             byType += n.asLong();
         }
-        assertThat(byType).isEqualTo(71);
+        assertThat(byType).isEqualTo(activeEquipment());
         assertThat(d.path("byTestType").size()).isEqualTo(15);
         assertThat(d.path("byTestType").get(0).path("code").asString()).isEqualTo("ACOUSTIC_NOISE");
         JsonNode first = d.path("institutions").get(0);
-        assertThat(first.path("name").asString()).isEqualTo("한국생산기술연구원 진주뿌리기술지원센터");
-        assertThat(first.path("equipmentCount").asLong()).isEqualTo(31);
+        // 장비 수 많은 순, 같으면 가나다순: 늘해랑대학교·온새미로 55대
+        assertThat(first.path("name").asString()).isEqualTo("늘해랑대학교 항공우주공동기기원");
+        assertThat(first.path("equipmentCount").asLong()).isEqualTo(55);
         assertThat(first.path("verifiedCount").asLong()).isZero();
         assertThat(first.path("verificationRate").asDouble()).isZero();
-        assertThat(d.path("institutions").size()).isEqualTo(9);
+        assertThat(d.path("institutions").size()).isEqualTo(equipmentOwners());
     }
 
     // ------------------------------------------------------------ GET /dashboard/summary
@@ -78,7 +81,7 @@ class DashboardSearchApiTest {
         assertThat(d.path("requestCounts").path("SUPPLEMENT_REQUESTED").asLong()).isZero();
         assertThat(d.path("actionRequired").size()).isZero();
         assertThat(d.path("recentChats").size()).isZero();
-        assertThat(d.path("equipmentStats").path("total").asLong()).isEqualTo(71);
+        assertThat(d.path("equipmentStats").path("total").asLong()).isEqualTo(activeEquipment());
         assertThat(d.path("equipmentStats").path("byRegion").path("진주").asLong()).isEqualTo(36);
         assertThat(d.path("dataAvailable").path("requests").asBoolean()).isTrue(); // BE-B RequestDashboardQuery 연결됨
         assertThat(d.path("dataAvailable").path("chats").asBoolean()).isTrue();
@@ -126,7 +129,7 @@ class DashboardSearchApiTest {
                 .data();
         assertThat(d.path("role").asString()).isEqualTo("INSTITUTION_MANAGER");
         assertThat(d.path("institution").path("id").asLong()).isEqualTo(2);
-        assertThat(d.path("institution").path("name").asString()).isEqualTo("대전테크노파크 우주·양자산업센터");
+        assertThat(d.path("institution").path("name").asString()).isEqualTo("미리내우주환경시험센터");
         // seed 장비 13대 모두 기관 확인 전
         assertThat(d.path("equipmentNeedsUpdate").path("total").asLong()).isEqualTo(13);
         assertThat(d.path("equipmentNeedsUpdate").path("notConfirmed").asLong()).isEqualTo(13);
@@ -143,9 +146,10 @@ class DashboardSearchApiTest {
         long pending = jdbc.queryForObject("SELECT count(*) FROM users WHERE status = 'PENDING'", Long.class);
         assertThat(d.path("pendingUsers").asLong()).isEqualTo(pending).isGreaterThanOrEqualTo(1); // pending@astra.demo
         assertThat(d.path("pendingInstitutions").asLong()).isEqualTo(jdbc.queryForObject(
-                "SELECT count(*) FROM organizations WHERE org_type = 'INSTITUTION' AND NOT is_verified", Long.class));
+                "SELECT count(*) FROM organizations WHERE org_type IN ('INSTITUTION', 'UNIVERSITY') AND NOT is_verified",
+                Long.class));
         assertThat(d.path("requestCounts").size()).isEqualTo(10);
-        assertThat(d.path("institutionVerification").size()).isEqualTo(9);
+        assertThat(d.path("institutionVerification").size()).isEqualTo(equipmentOwners());
         assertThat(api.get("/api/v1/dashboard/summary", null).code()).isEqualTo("AUTH_REQUIRED");
     }
 
@@ -163,8 +167,11 @@ class DashboardSearchApiTest {
                         + "{\"key\":\"frequency\",\"min\":20,\"max\":2000,\"unit\":\"Hz\"}]");
         assertThat(i.path("regions").size()).isZero();
         assertThat(res.data().path("testTypes").get(0).path("nameKo").asString()).isEqualTo("진동시험");
-        assertThat(externalIds(res)).containsExactly("ASTRA-CAND-0044", "ASTRA-CAND-0045", "ASTRA-CAND-0047",
+        // 외부 id 순: 기존 진동시험기 4대 다음에 V8 시연 진동시험기
+        List<String> ids = externalIds(res);
+        assertThat(ids.subList(0, 4)).containsExactly("ASTRA-CAND-0044", "ASTRA-CAND-0045", "ASTRA-CAND-0047",
                 "ASTRA-CAND-0048");
+        assertThat(ids).allMatch(id -> hasTestType(id, "VIBRATION"));
     }
 
     @Test
@@ -172,6 +179,7 @@ class DashboardSearchApiTest {
         Res res = search("대전 진동시험");
         assertThat(res.data().path("interpreted").path("regions").toString()).isEqualTo("[\"대전\"]");
         assertThat(externalIds(res)).containsExactly("ASTRA-CAND-0044", "ASTRA-CAND-0045", "ASTRA-CAND-0048");
+        // 다른 지역(사천·창원·고흥)의 시연 진동시험기는 나오지 않음
     }
 
     @Test
@@ -196,6 +204,20 @@ class DashboardSearchApiTest {
         var row = jdbc.queryForMap("SELECT id, organization_id FROM users WHERE email = ?", email);
         return jwtProvider.createAccessToken(((Number) row.get("id")).longValue(), role,
                 row.get("organization_id") == null ? null : ((Number) row.get("organization_id")).longValue());
+    }
+
+    private long activeEquipment() {
+        return jdbc.queryForObject("SELECT count(*) FROM equipment WHERE is_active", Long.class);
+    }
+
+    /** 활성 장비를 1대 이상 가진 조직 수 */
+    private long equipmentOwners() {
+        return jdbc.queryForObject("SELECT count(DISTINCT institution_id) FROM equipment WHERE is_active", Long.class);
+    }
+
+    private boolean hasTestType(String externalId, String code) {
+        return jdbc.queryForObject("SELECT count(*) FROM equipment e JOIN equipment_test_types t ON t.equipment_id = e.id "
+                + "WHERE e.external_id = ? AND t.test_type_code = ?", Long.class, externalId, code) > 0;
     }
 
     private static List<String> externalIds(Res res) {

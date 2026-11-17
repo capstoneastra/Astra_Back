@@ -21,7 +21,7 @@ import tools.jackson.databind.JsonNode;
 /**
  * 기관 장비 관리 (api-spec §2-1) + 관리자 장비 소속 변경 (§12).
  * 장비를 만들고 바꾸므로 장비 수를 검사하는 EquipmentApiTest 와 다른 DB(테스트 컨텍스트)를 씁니다.
- * 시연 계정: manager1 = 대전테크노파크 우주·양자산업센터(id 2, 장비 48 보유), manager2 = 한국신뢰성기술센터(id 6).
+ * 시연 계정: manager1 = 미리내우주환경시험센터(id 2, 장비 48 보유), manager2 = 다온신뢰성시험센터(id 6).
  */
 @Import({TestcontainersConfiguration.class, TestMailConfiguration.class})
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)

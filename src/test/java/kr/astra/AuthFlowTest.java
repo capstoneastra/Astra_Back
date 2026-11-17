@@ -241,7 +241,7 @@ class AuthFlowTest {
     @Test
     void 기관_담당자는_승인_전까지_PENDING_이고_로그인하면_403() throws Exception {
         String email = uniqueEmail();
-        Res signup = api.signupInstitutionManager(email, "\"organizationId\": " + institutionId("한국재료연구원"));
+        Res signup = api.signupInstitutionManager(email, "\"organizationId\": " + institutionId("가람재료시험연구원"));
         assertThat(signup.status()).isEqualTo(201);
         assertThat(signup.data().path("status").asString()).isEqualTo("PENDING");
 
@@ -322,26 +322,30 @@ class AuthFlowTest {
         JsonNode first = res.data().get(0);
         assertThat(first.propertyNames()).containsExactlyInAnyOrder("id", "orgType", "name", "region");
         assertThat(res.data().size()).isGreaterThanOrEqualTo(9);
-        // 가나다순: 경상국립대학교 … 한국재료연구원
+        // 가나다순: 가람재료시험연구원 … 한빛뿌리기술지원센터 (기관·대학)
         List<String> names = new ArrayList<>();
         res.data().forEach(n -> names.add(n.path("name").asString()));
         assertThat(names).isSortedAccordingTo(Collator.getInstance(Locale.KOREAN));
-        assertThat(names.getFirst()).isEqualTo("경상국립대학교 첨단소재분석지원센터");
+        assertThat(names.getFirst()).isEqualTo("가람재료시험연구원");
+        assertThat(names).contains("가온대학교 첨단소재분석센터", "늘해랑대학교 항공우주공동기기원")
+                .doesNotContain("미르항공정밀"); // 기업은 가입용 기관 목록에 없음
     }
 
     // ------------------------------------------------------------ V3 시연 계정
 
     @Test
     void 시연_계정과_기관_승인이_seed_로_들어간다() {
-        // V2 로 들어간 기관(장비 보유 기관)은 모두 승인 상태
+        // 장비를 가진 조직(V2 기관, V8 기관·대학·기업)은 모두 승인 상태
         assertThat(jdbc.queryForObject("SELECT count(*) FROM organizations o WHERE NOT o.is_verified "
                 + "AND EXISTS (SELECT 1 FROM equipment e WHERE e.institution_id = o.id)", Long.class)).isZero();
         assertThat(jdbc.queryForList(
                 "SELECT role || ':' || status FROM users WHERE email LIKE '%@astra.demo' ORDER BY email", String.class))
-                .containsExactly("ADMIN:ACTIVE", "COMPANY_USER:ACTIVE", "INSTITUTION_MANAGER:ACTIVE",
-                        "INSTITUTION_MANAGER:ACTIVE", "INSTITUTION_MANAGER:PENDING");
+                // admin, company, company2(V8 장비 보유 기업), manager1, manager2, pending, univ1(V8 대학)
+                .containsExactly("ADMIN:ACTIVE", "COMPANY_USER:ACTIVE", "COMPANY_USER:ACTIVE",
+                        "INSTITUTION_MANAGER:ACTIVE", "INSTITUTION_MANAGER:ACTIVE", "INSTITUTION_MANAGER:PENDING",
+                        "INSTITUTION_MANAGER:ACTIVE");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM users WHERE email LIKE '%@astra.demo' "
-                + "AND password_hash LIKE '$2a$10$%'", Long.class)).isEqualTo(5);
+                + "AND password_hash LIKE '$2a$10$%'", Long.class)).isEqualTo(7);
     }
 
     // ------------------------------------------------------------ helpers

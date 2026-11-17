@@ -22,7 +22,7 @@ import tools.jackson.databind.JsonNode;
 /**
  * BE-B 의뢰 워크플로우 (api-spec §5·§6·§7·§9·§10, 상태 전이 §11) — 시연 시나리오 11~16단계.
  * 의뢰를 만들고 상태를 바꾸므로 의뢰 0건을 가정하는 DashboardSearchApiTest 와 다른 DB(테스트 컨텍스트)를 씁니다.
- * 시연 계정: company(가상 A기업), manager1 = 대전테크노파크 우주·양자산업센터(장비 48 진동시험기 보유), manager2 = 다른 기관.
+ * 시연 계정: company(가상 A기업), manager1 = 미리내우주환경시험센터(장비 48 진동시험기 보유), manager2 = 다른 기관.
  */
 @Import({TestcontainersConfiguration.class, TestMailConfiguration.class, RequestWorkflowTest.Isolated.class})
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)

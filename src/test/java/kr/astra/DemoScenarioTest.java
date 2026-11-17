@@ -108,11 +108,12 @@ class DemoScenarioTest {
         assertThat(conditionKeys).containsExactly("sample_mass", "fixture_mass", "frequency",
                 "excitation_axis", "accredited_required");
         assertThat(requiredKeys).containsExactly("sample_mass", "fixture_mass", "frequency");
-        assertThat(testType.path("institutions").size()).isEqualTo(3);
+        // 진동시험 장비 보유 조직: 기존 기관 3곳 + V8 기관·대학·기업 6곳
+        assertThat(testType.path("institutions").size()).isEqualTo(9);
 
         // 12. 기관 담당자(manager1): 대시보드 → 우리 기관 장비 → 장비 48 확인
         JsonNode m1Summary = api.get("/api/v1/dashboard/summary", manager1).data();
-        assertThat(m1Summary.path("institution").path("name").asString()).isEqualTo("대전테크노파크 우주·양자산업센터");
+        assertThat(m1Summary.path("institution").path("name").asString()).isEqualTo("미리내우주환경시험센터");
         assertThat(api.get("/api/v1/institutions/me/equipment?size=100", manager1).data().toString())
                 .contains("ASTRA-CAND-0048");
         assertThat(api.post("/api/v1/equipment/48/confirm", null, manager1).data().path("verificationStatus").asString())

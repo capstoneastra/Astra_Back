@@ -146,12 +146,12 @@
 // POST /auth/logout { "refreshToken": "eyJ..." } → 200 { "success": true }
 
 // GET /auth/institutions → 200 (승인된 기관·대학만, 가나다순. orgType 은 INSTITUTION | UNIVERSITY)
-[ { "id": 5, "orgType": "INSTITUTION", "name": "경상국립대학교 첨단소재분석지원센터", "region": "진주" }, ... ]
+[ { "id": 5, "orgType": "INSTITUTION", "name": "가온대학교 첨단소재분석센터", "region": "진주" }, ... ]
 
 // GET /users/me → 200 (organization 은 소속이 없으면 null)
 { "id": 3, "email": "manager1@astra.demo", "name": "김담당", "phone": "042-000-0001",
   "role": "INSTITUTION_MANAGER", "status": "ACTIVE",
-  "organization": { "id": 2, "orgType": "INSTITUTION", "name": "대전테크노파크 우주·양자산업센터", "region": "대전", "isVerified": true },
+  "organization": { "id": 2, "orgType": "INSTITUTION", "name": "미리내우주환경시험센터", "region": "대전", "isVerified": true },
   "lastLoginAt": "2026-11-07T17:03:04+09:00", "createdAt": "2026-11-07T17:02:51+09:00" }
 
 // PATCH /users/me { "name"?: "김담당", "phone"?: "042-000-0009" } → 200 (GET 과 같은 형식, 보낸 값만 수정)
@@ -203,7 +203,7 @@
 ```json
 // GET /equipment?testType=VIBRATION → content[] 항목  (seed 실제 데이터 ASTRA-CAND-0048)
 { "id": 48, "externalId": "ASTRA-CAND-0048", "name": "진동시험기", "model": "EDS5000LS4-445",
-  "institution": { "id": 2, "name": "대전테크노파크 우주·양자산업센터" }, "region": "대전",
+  "institution": { "id": 2, "name": "미리내우주환경시험센터" }, "region": "대전",
   "equipmentType": "TEST", "testTypes": ["VIBRATION"],
   "availability": "UNKNOWN", "availabilityNeedsConfirmation": true, "utilizationRate": null, "feeText": null,
   "verificationStatus": "LISTING_CONFIRMED", "isMock": true, "infoUpdatedAt": "2026-11-07T11:52:01.241657+09:00" }
@@ -250,11 +250,11 @@
     { "conditionKey": "excitation_axis", "label": "가진 축",     "valueType": "TEXT",   "unit": null, "isRequired": false, "specKey": null,               "comparator": "NONE" },
     { "conditionKey": "accredited_required", "label": "공인성적서 필요 여부", "valueType": "TEXT", "unit": null, "isRequired": false, "specKey": null, "comparator": "NONE" } ],
   "institutions": [
-    { "id": 6, "name": "한국신뢰성기술센터", "region": "대전", "equipmentCount": 2,
+    { "id": 6, "name": "다온신뢰성시험센터", "region": "대전", "equipmentCount": 2,
       "estCostMin": null, "estCostMax": null, "estDurationDays": null, "accessScope": "UNKNOWN" },
-    { "id": 8, "name": "기술지원센터", "region": "원주", "equipmentCount": 1,
+    { "id": 8, "name": "마루기술지원센터", "region": "원주", "equipmentCount": 1,
       "estCostMin": null, "estCostMax": null, "estDurationDays": null, "accessScope": "UNKNOWN" },
-    { "id": 2, "name": "대전테크노파크 우주·양자산업센터", "region": "대전", "equipmentCount": 1,
+    { "id": 2, "name": "미리내우주환경시험센터", "region": "대전", "equipmentCount": 1,
       "estCostMin": null, "estCostMax": null, "estDurationDays": null, "accessScope": "UNKNOWN" } ] }
 // institutions: 장비 수 많은 순, 같으면 가나다순. 기관 장비가 여러 대면 estCostMin=최솟값, estCostMax=최댓값,
 //   estDurationDays=가장 짧은 값, accessScope=하나라도 외부 이용 가능이면 EXTERNAL_ALLOWED / 모두 내부 전용이면 INTERNAL_ONLY / 그 외 UNKNOWN
@@ -301,11 +301,11 @@
   { "code": "BATTERY_TEST", "nameKo": "배터리 시험", "description": null, "keywords": ["배터리", "충방전", "전지"], "equipmentCount": 2 }, ... ]
 
 // GET /institutions → 승인된 기관·대학 전체 + 장비가 있는 기업, 이름 가나다순 (페이지 없음). orgType 은 INSTITUTION | UNIVERSITY | COMPANY
-[ { "id": 5, "orgType": "INSTITUTION", "name": "경상국립대학교 첨단소재분석지원센터", "parentName": null, "region": "진주", "equipmentCount": 5 },
-  { "id": 8, "orgType": "INSTITUTION", "name": "기술지원센터", "parentName": null, "region": "원주", "equipmentCount": 1 }, ... ]
+[ { "id": 5, "orgType": "INSTITUTION", "name": "가온대학교 첨단소재분석센터", "parentName": null, "region": "진주", "equipmentCount": 5 },
+  { "id": 8, "orgType": "INSTITUTION", "name": "마루기술지원센터", "parentName": null, "region": "원주", "equipmentCount": 1 }, ... ]
 
 // GET /institutions/2 → 없거나 미승인이거나, 장비가 없는 기업이면 404 NOT_FOUND
-{ "id": 2, "orgType": "INSTITUTION", "name": "대전테크노파크 우주·양자산업센터", "parentName": null, "region": "대전",
+{ "id": 2, "orgType": "INSTITUTION", "name": "미리내우주환경시험센터", "parentName": null, "region": "대전",
   "address": null, "phone": null, "email": null, "homepageUrl": null,
   "equipmentCount": 13, "equipmentByType": { "MEASUREMENT": 11, "TEST": 2 },
   "testTypes": [ { "code": "ELECTRICAL_RF_ANALYSIS", "nameKo": "전기·RF 측정", "equipmentCount": 10 },
@@ -497,14 +497,14 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 { "id": 3, "requirementId": 7, "algorithmVersion": "rule-v2", "createdAt": "...",
   "results": [
     { "id": 31, "rank": 1, "score": 66.7, "verdict": "PARTIAL", "usedMockData": true,
-      "equipment": { "id": 48, "externalId": "ASTRA-CAND-0048", "name": "진동시험기", "institutionName": "대전테크노파크 우주·양자산업센터" },
+      "equipment": { "id": 48, "externalId": "ASTRA-CAND-0048", "name": "진동시험기", "institutionName": "미리내우주환경시험센터" },
       "reason": "주파수 범위와 시료 질량 조건을 충족합니다. 고정구 질량이 아직 정해지지 않아 기관 확인이 필요합니다.",
       "checks": [
         { "conditionKey": "frequency", "requiredText": "20~2000 Hz", "equipmentText": "10~3000 Hz", "result": "MET" },
         { "conditionKey": "sample_mass", "requiredText": "15 kg", "equipmentText": "최대 40 kg", "result": "MET" },
         { "conditionKey": "fixture_mass", "requiredText": "미정", "equipmentText": "최대 15 kg", "result": "UNKNOWN" } ] },
     { "id": 32, "rank": 2, "score": 33.3, "verdict": "UNSUITABLE", "usedMockData": true,
-      "equipment": { "id": 44, "externalId": "ASTRA-CAND-0044", "name": "진동시험기1", "institutionName": "한국신뢰성기술센터" },
+      "equipment": { "id": 44, "externalId": "ASTRA-CAND-0044", "name": "진동시험기1", "institutionName": "다온신뢰성시험센터" },
       "reason": "시료 질량은 충족하지만 요구 주파수 상한(2000 Hz)이 장비 범위(1800 Hz)를 넘습니다.",
       "checks": [
         { "conditionKey": "frequency", "requiredText": "20~2000 Hz", "equipmentText": "5~1800 Hz", "result": "NOT_MET" },
@@ -701,33 +701,33 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
   "actionRequired": [ { "requestId": 15, "requestNo": "REQ-20261105-0001", "title": "위성 전장품 진동시험",
                         "status": "SUPPLEMENT_REQUESTED", "dueDate": "2026-11-12", "submittedAt": "..." } ],
   "recentChats": [ { "id": 5, "title": "위성 부품 진동시험", "updatedAt": "..." } ],
-  "equipmentStats": { "total": 71, "byRegion": { "경남": 1, "광주": 1, "대전": 32, "원주": 1, "진주": 36 } },
+  "equipmentStats": { "total": 339, "byRegion": { "경남": 1, "고흥": 40, "광주": 1, "대전": 32, "사천": 154, "원주": 1, "진주": 36, "창원": 74 } },
   "dataAvailable": { "requests": true, "chats": true } }
 
 // GET /dashboard/summary?view=PROVIDER (장비 보유 조직 화면. INSTITUTION_MANAGER 의 기본값, manager1 — seed 실제 값)
 { "role": "INSTITUTION_MANAGER", "view": "PROVIDER",
-  "institution": { "id": 2, "name": "대전테크노파크 우주·양자산업센터" },
+  "institution": { "id": 2, "name": "미리내우주환경시험센터" },
   "requestCounts": { ... 10개 상태 ... },                       // 우리 기관 접수함
   "pendingReview": [ /* actionRequired 와 같은 형식 (SUBMITTED·RESUBMITTED) */ ],
   "upcomingReservations": [ { "reservationId": 4, "requestId": 15, "requestNo": "REQ-20261105-0001", "equipmentId": 48,
                               "equipmentName": "진동시험기", "startAt": "2026-11-20T09:00:00+09:00", "endAt": "..." } ],
   "equipmentNeedsUpdate": { "total": 13, "notConfirmed": 13, "outdated": 0 },  // 기관 확인 전 / 마지막 갱신 90일 경과
-  "equipmentStats": { "total": 71, "byRegion": { ... } },
+  "equipmentStats": { "total": 339, "byRegion": { ... } },
   "dataAvailable": { "requests": false } }
 
 // GET /dashboard/summary (ADMIN)
 { "role": "ADMIN", "view": "ADMIN", "pendingUsers": 1, "pendingInstitutions": 0,
   "requestCounts": { ... 10개 상태 (전체) ... },
   "institutionVerification": [ /* equipment-stats 의 institutions 와 같은 형식 */ ],
-  "equipmentStats": { "total": 71, "byRegion": { ... } },
+  "equipmentStats": { "total": 339, "byRegion": { ... } },
   "dataAvailable": { "requests": false } }
 
 // GET /dashboard/equipment-stats → 활성 장비 기준 (seed 실제 값)
-{ "total": 71,
+{ "total": 339,
   "byRegion": { "경남": 1, "광주": 1, "대전": 32, "원주": 1, "진주": 36 },               // 가나다순
   "byEquipmentType": { "MEASUREMENT": .., "MANUFACTURING": .., "TEST": .., "SOFTWARE": .., "SUPPORT": .. },
   "byTestType": [ { "code": "ACOUSTIC_NOISE", "nameKo": "음향·소음 시험", "equipmentCount": 1 }, ... ],  // 15개, 표시 순서
-  "institutions": [ { "id": 1, "name": "한국생산기술연구원 진주뿌리기술지원센터", "region": "진주",
+  "institutions": [ { "id": 1, "name": "한빛뿌리기술지원센터", "region": "진주",
                       "equipmentCount": 31, "verifiedCount": 0, "verificationRate": 0.0 }, ... ] }  // 장비 수 많은 순
 ```
 
@@ -783,7 +783,7 @@ UNDER_REVIEW ──reject──▶ REJECTED        (DRAFT~SCHEDULING 에서 기�
 { "content": [
     { "id": 5, "email": "pending@astra.demo", "name": "이대기", "phone": "055-000-0003",
       "role": "INSTITUTION_MANAGER", "status": "PENDING",
-      "organization": { "id": 4, "orgType": "INSTITUTION", "name": "한국재료연구원", "businessRegNo": null,
+      "organization": { "id": 4, "orgType": "INSTITUTION", "name": "가람재료시험연구원", "businessRegNo": null,
                         "region": "경남", "address": null, "phone": null, "isVerified": true },
       "rejectReason": null, "approvedAt": null, "lastLoginAt": null, "createdAt": "2026-11-07T17:02:51+09:00" } ],
   "page": 0, "size": 20, "totalElements": 1, "totalPages": 1 }

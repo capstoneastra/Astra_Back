@@ -113,7 +113,7 @@ class AdminOrganizationTest {
         assertThat(patched.data().path("homepageUrl").asString()).isEqualTo("https://lab.test.kr");
         assertThat(patched.data().path("region").asString()).isEqualTo("대전");
 
-        assertThat(api.send("PATCH", "/api/v1/admin/organizations/" + id, "{ \"name\": \"한국신뢰성기술센터\" }", admin)
+        assertThat(api.send("PATCH", "/api/v1/admin/organizations/" + id, "{ \"name\": \"다온신뢰성시험센터\" }", admin)
                 .code()).isEqualTo("ORGANIZATION_ALREADY_EXISTS");
     }
 
