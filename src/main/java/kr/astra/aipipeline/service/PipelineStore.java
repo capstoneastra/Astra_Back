@@ -6,7 +6,6 @@ import kr.astra.aipipeline.repository.PipelineRepository;
 import kr.astra.chat.service.ChatPersistence;
 import kr.astra.global.exception.*;
 import kr.astra.global.security.*;
-import kr.astra.user.entity.UserRole;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,7 +26,7 @@ public class PipelineStore {
     }
     @Transactional
     public PipelineResponse create(CurrentUser user,Long chatSessionId,String text) {
-        AccessGuard.requireRole(user,UserRole.COMPANY_USER);
+        AccessGuard.requireLogin(user);
         if ((chatSessionId == null) == (text == null || text.isBlank())) throw new BusinessException(ErrorCode.VALIDATION_FAILED,
                 "chatSessionId 또는 inputText 중 하나를 입력해 주세요.",null);
         if (chatSessionId != null) chats.ownerId(user,chatSessionId);
@@ -64,7 +63,7 @@ public class PipelineStore {
         if (r.at(expected)) r.fail(message);
     }
     private PipelineRun owned(CurrentUser user,Long id,boolean lock) {
-        AccessGuard.requireRole(user,UserRole.COMPANY_USER);
+        AccessGuard.requireLogin(user);
         var r=(lock ? repository.lockById(id) : repository.findById(id))
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         AccessGuard.requireOwner(user,r.getUserId()); return r;

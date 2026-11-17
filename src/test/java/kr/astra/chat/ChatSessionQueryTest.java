@@ -56,9 +56,15 @@ class ChatSessionQueryTest {
     @Test void anotherCompanyOrInstitutionCannotReadOwnersChats() {
         login(new CurrentUser(8L, UserRole.COMPANY_USER, null));
         assertError(() -> query.findRecent(7L, 5), ErrorCode.FORBIDDEN);
-        login(new CurrentUser(7L, UserRole.INSTITUTION_MANAGER, 2L));
+        login(new CurrentUser(9L, UserRole.INSTITUTION_MANAGER, 2L));
         assertError(() -> query.findRecent(7L, 5), ErrorCode.FORBIDDEN);
         verifyNoInteractions(sessions);
+    }
+
+    @Test void institutionMemberMayQueryOwnChats() {
+        login(new CurrentUser(7L, UserRole.INSTITUTION_MANAGER, 2L));
+        assertThat(query.findRecent(7L, 5)).isEmpty();
+        verify(sessions).findRecentSummaries(eq(7L), any());
     }
 
     @Test void adminMayQueryAnotherOwnersEmptyHistory() {

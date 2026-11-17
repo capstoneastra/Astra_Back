@@ -20,7 +20,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 의뢰 생성 (기업이 직접 / BE-C AI 초안·자동 추진 공용). TestRequestService 구현.
+ * 의뢰 생성 (회원이 직접 / BE-C AI 초안·자동 추진 공용). TestRequestService 구현.
+ * 기업·기관·대학 회원 모두 의뢰할 수 있지만, 자기 소속 조직이 보유한 장비에는 의뢰할 수 없습니다.
  */
 @Service
 @RequiredArgsConstructor
@@ -43,10 +44,14 @@ public class TestRequestServiceImpl implements TestRequestService {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED, "의뢰자와 장비는 필수입니다.", null);
         }
         UserAccount requester = userService.getActiveAccount(command.requesterId());
-        if (requester.role() != UserRole.COMPANY_USER) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "시험 의뢰는 기업 회원만 만들 수 있습니다.", null);
+        if (requester.role() == UserRole.ADMIN) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "플랫폼 관리자 계정으로는 시험 의뢰를 만들 수 없습니다.", null);
         }
         EquipmentDetailResponse equipment = equipmentService.getDetail(command.equipmentId());
+        if (equipment.institution().id().equals(requester.organizationId())) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED, "소속 조직이 보유한 장비에는 의뢰할 수 없습니다.",
+                    Map.of("field", "equipmentId"));
+        }
 
         Map<String, Object> body = command.content() == null ? Map.of() : command.content();
         content.validate(body);

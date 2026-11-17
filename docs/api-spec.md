@@ -2,7 +2,7 @@
 
 > 기준: REST + JSON, Base URL `/api/v1`, 인증 `Authorization: Bearer <accessToken>` (JWT)
 > DB 기준 문서: `schema.sql` / ERD: `erd.dbml`
-> 표기: 🔓 비로그인 허용(`/auth/**`만) · `로그인` 로그인한 모든 사용자 · 🏢 기업(COMPANY_USER) · 🏛 장비 보유 조직 구성원(그 장비·의뢰의 `institution_id`가 내 소속 조직인 회원. 기업·기관·대학 모두 해당) · 👑 플랫폼 관리자(ADMIN)
+> 표기: 🔓 비로그인 허용(`/auth/**`만) · `로그인` 로그인한 모든 사용자 · 🏢 의뢰자(본인 상담·시험조건·의뢰의 주인. 기업·기관·대학 회원 모두 해당) · 🏛 장비 보유 조직 구성원(그 장비·의뢰의 `institution_id`가 내 소속 조직인 회원. 기업·기관·대학 모두 해당) · 👑 플랫폼 관리자(ADMIN)
 > 👑 관리자는 **마스터 권한**이라 모든 API를 호출할 수 있습니다. 그래서 표에는 관리자 전용 API에만 👑를 표시합니다.
 
 ---
@@ -56,7 +56,7 @@
 | 역할 | 범위 |
 |---|---|
 | 비로그인 | `/auth/**` (이메일 인증·가입·로그인·토큰 재발급·가입용 기관 목록)만 허용. 나머지는 전부 `401 AUTH_REQUIRED`. 프론트는 로그인 페이지 외 모든 라우트에서 로그인 페이지로 이동 |
-| 🏢 기업 | 장비·시험정보 조회, 본인 상담/시험조건/의뢰/시뮬레이션만 조회·수정 |
+| 🏢 의뢰자 | 장비·시험정보 조회, 본인 상담/시험조건/의뢰/시뮬레이션만 조회·수정. 기업·기관·대학 회원 누구나 의뢰자가 될 수 있음. 단, **자기 소속 조직이 보유한 장비에는 의뢰할 수 없음** (`400 VALIDATION_FAILED`, `details.field=equipmentId`) — 매칭 추천에서도 자기 조직 장비는 빠짐 |
 | 🏛 장비 보유 조직 구성원 | 장비·시험정보 조회, **소속 조직 장비 등록·수정**, 소속 조직 장비로 들어온 의뢰 검토·보완요청·예약 확정. 기업·기관·대학 어느 유형이든 소속 조직 기준으로 판단 (역할 `COMPANY_USER`/`INSTITUTION_MANAGER`는 가입 유형 표시) |
 | 👑 플랫폼 관리자 | **전체(마스터)**. 모든 조회·수정, 회원·기관 승인, 초기 데이터 적재. 관리자가 대신 처리한 상태 변경도 `request_status_history.changed_by`에 관리자 id로 남음 |
 
@@ -519,7 +519,7 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 
 | Method | URL | 권한 | 설명 | 기능 |
 |---|---|---|---|---|
-| POST | `/test-requests` | 🏢 | 의뢰 생성(DRAFT) `{ equipmentId, requirementId?, matchResultId? }` | 9 |
+| POST | `/test-requests` | 🏢 | 의뢰 생성(DRAFT) `{ equipmentId, requirementId?, matchResultId? }`. 소속 조직 보유 장비면 `400 VALIDATION_FAILED` | 9 |
 | POST | `/test-requests/ai-draft` | 🏢 | AI 의뢰서 초안 생성 → DRAFT + revision(isAiGenerated) | 8 |
 | GET | `/test-requests` | 🏢 🏛 | 목록 — 기업: 내 의뢰 / 기관: 우리 기관 접수함. `?status=UNDER_REVIEW` | 9 |
 | GET | `/test-requests/{id}` | 🏢 🏛 | 상세 (현재 상태, 최신 revision, 열린 보완요청, 예약) | 9 |

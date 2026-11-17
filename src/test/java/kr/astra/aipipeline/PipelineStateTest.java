@@ -54,10 +54,14 @@ class PipelineStateTest {
         assertThat(run.getDraftRequestId()).isEqualTo(15L);
         assertThat(run.getStatus()).isEqualTo(PipelineStatus.FAILED);
     }
-    @Test void otherOwnerAndInstitutionDeniedAdminAllowed() {
+    @Test void otherOwnersDeniedWhateverTheirRoleAndAdminAllowed() {
         assertThatThrownBy(() -> store.get(new CurrentUser(2L,UserRole.COMPANY_USER,null),9L)).isInstanceOf(BusinessException.class);
-        assertThatThrownBy(() -> store.get(new CurrentUser(1L,UserRole.INSTITUTION_MANAGER,3L),9L)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> store.get(new CurrentUser(2L,UserRole.INSTITUTION_MANAGER,3L),9L)).isInstanceOf(BusinessException.class);
         assertThat(store.get(new CurrentUser(99L,UserRole.ADMIN,null),9L)).isNotNull();
+    }
+    @Test void ownerMayUseOwnRunWhateverTheRole() {
+        // 기관·대학 회원도 의뢰자로서 자기 자동 추진 실행을 다룰 수 있다 (역할이 아니라 본인 여부로 판단)
+        assertThat(store.get(new CurrentUser(user.userId(),UserRole.INSTITUTION_MANAGER,3L),9L)).isNotNull();
     }
     @Test void startValidatesExclusiveInputsAndSessionAccessBeforeSaving() {
         assertThatThrownBy(() -> store.create(user,null,null)).isInstanceOf(BusinessException.class);

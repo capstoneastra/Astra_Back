@@ -2,7 +2,6 @@ package kr.astra.aipipeline.service;
 
 import kr.astra.global.exception.BusinessException;
 import kr.astra.global.security.CurrentUser;
-import kr.astra.user.entity.UserRole;
 import kr.astra.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -27,10 +26,6 @@ public class PipelineRecovery {
                 CurrentUser actor;
                 try {
                     var account = users.getActiveAccount(run.userId());
-                    if (account.role() != UserRole.COMPANY_USER && account.role() != UserRole.ADMIN) {
-                        store.rejectRecovery(run.id());
-                        continue;
-                    }
                     actor = new CurrentUser(account.id(), account.role(), account.organizationId());
                 } catch (BusinessException e) {
                     store.rejectRecovery(run.id());

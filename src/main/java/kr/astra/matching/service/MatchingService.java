@@ -34,6 +34,8 @@ public class MatchingService {
         RequirementSnapshot snapshot = requirements.snapshot(user, requirementId);
         var rules = requirements.rules(snapshot.testTypeCode());
         List<Candidate> candidates = equipmentQuery.findCandidates(snapshot.testTypeCode(), region).stream()
+                // 자기 소속 조직 장비에는 의뢰할 수 없으므로 추천에서 뺌
+                .filter(e -> user.isAdmin() || !java.util.Objects.equals(e.institutionId(), user.organizationId()))
                 .map(e -> new Candidate(e, matcher.evaluate(rules, snapshot.conditions(), equipmentQuery.getSpecs(e.id()),
                         equipment.accredited(e.id(), snapshot.testTypeCode()))))
                 .sorted(Comparator.comparingInt((Candidate c) -> verdictOrder(c.evaluation.verdict()))

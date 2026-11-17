@@ -7,7 +7,6 @@ import kr.astra.global.exception.BusinessException;
 import kr.astra.global.exception.ErrorCode;
 import kr.astra.global.security.AccessGuard;
 import kr.astra.global.security.CurrentUser;
-import kr.astra.user.entity.UserRole;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -27,7 +26,7 @@ public class ChatSessionQueryService implements ChatSessionQuery {
         var authentication = SecurityContextHolder.getContext().getAuthentication();
         CurrentUser actor = authentication != null && authentication.isAuthenticated()
                 && authentication.getPrincipal() instanceof CurrentUser user ? user : null;
-        AccessGuard.requireRole(actor, UserRole.COMPANY_USER);
+        AccessGuard.requireLogin(actor);
         AccessGuard.requireOwner(actor, userId);
         if (userId == null || userId <= 0 || limit < 1 || limit > 100)
             throw new BusinessException(ErrorCode.VALIDATION_FAILED);

@@ -190,6 +190,38 @@ class RequestWorkflowTest {
     }
 
     @Test
+    void 기관_회원도_다른_조직_장비에_의뢰할_수_있고_자기_조직_장비에는_의뢰할_수_없다() throws Exception {
+        // manager1 소속 기관이 보유한 장비(48)에는 의뢰할 수 없다
+        Res own = api.post("/api/v1/test-requests", "{ \"equipmentId\": 48 }", manager1);
+        assertThat(own.code()).isEqualTo("VALIDATION_FAILED");
+        assertThat(own.details().path("field").asString()).isEqualTo("equipmentId");
+
+        // 다른 기관(manager2 소속) 장비에는 의뢰자로 의뢰를 만들 수 있다
+        long otherOrgId = jdbc.queryForObject(
+                "SELECT organization_id FROM users WHERE email = 'manager2@astra.demo'", Long.class);
+        long otherEquipment = jdbc.queryForObject(
+                "SELECT min(id) FROM equipment WHERE institution_id = ? AND is_active", Long.class, otherOrgId);
+        Res created = api.post("/api/v1/test-requests", "{ \"equipmentId\": " + otherEquipment + " }", manager1);
+        assertThat(created.status()).isEqualTo(201);
+        long id = created.data().path("id").asLong();
+
+        JsonNode detail = api.get("/api/v1/test-requests/" + id, manager1).data();
+        assertThat(detail.path("status").asString()).isEqualTo("DRAFT");
+        assertThat(detail.path("institution").path("id").asLong()).isEqualTo(otherOrgId);
+        assertThat(actions(detail)).contains("SUBMIT", "CANCEL");
+        // 제출 전에는 장비 보유 조직에도 보이지 않는다
+        assertThat(api.get("/api/v1/test-requests/" + id, manager2).code()).isEqualTo("FORBIDDEN");
+
+        // 상담·시험조건도 기업 전용이 아니다
+        assertThat(api.post("/api/v1/chat/sessions", "{ \"title\": \"기관 상담\" }", manager1).code())
+                .isNotEqualTo("FORBIDDEN");
+        assertThat(api.get("/api/v1/chat/sessions", manager1).status()).isEqualTo(200);
+
+        assertThat(api.post("/api/v1/test-requests/" + id + "/cancel", "{ \"reason\": \"테스트 정리\" }", manager1)
+                .data().path("status").asString()).isEqualTo("CANCELED");
+    }
+
+    @Test
     void 취소하면_열린_일정_제안이_함께_취소된다() throws Exception {
         long id = toScheduling();
         OffsetDateTime start = OffsetDateTime.now(ZoneOffset.ofHours(9)).plusDays(90).truncatedTo(ChronoUnit.HOURS);

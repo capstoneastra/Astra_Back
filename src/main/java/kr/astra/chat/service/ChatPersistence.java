@@ -11,7 +11,6 @@ import kr.astra.global.security.*;
 import kr.astra.requirement.dto.*;
 import kr.astra.requirement.service.RequirementApplicationService;
 import kr.astra.llm.service.ConditionExtractionService.Extraction;
-import kr.astra.user.entity.UserRole;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
@@ -27,11 +26,11 @@ public class ChatPersistence {
 
     @Transactional
     public ChatResponse.Session create(CurrentUser user, String title) {
-        AccessGuard.requireRole(user, UserRole.COMPANY_USER);
+        AccessGuard.requireLogin(user);
         return ChatResponse.Session.of(sessions.saveAndFlush(new ChatSession(user.userId(),title)));
     }
     public PageResponse<ChatResponse.Session> list(CurrentUser user, Pageable page) {
-        AccessGuard.requireRole(user, UserRole.COMPANY_USER);
+        AccessGuard.requireLogin(user);
         return PageResponse.from(sessions.findByUserId(user.userId(),page(page,"createdAt",Sort.Direction.DESC)), ChatResponse.Session::of);
     }
     public PageResponse<ChatResponse.Message> messages(CurrentUser user, Long sessionId, Pageable page) {
@@ -104,7 +103,7 @@ public class ChatPersistence {
     }
     public Long ownerId(CurrentUser user,Long id) { return owned(user,id,false).getUserId(); }
     private ChatSession owned(CurrentUser user,Long id,boolean lock) {
-        AccessGuard.requireRole(user,UserRole.COMPANY_USER);
+        AccessGuard.requireLogin(user);
         ChatSession s = (lock ? sessions.lockById(id) : sessions.findById(id))
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         AccessGuard.requireOwner(user,s.getUserId());
