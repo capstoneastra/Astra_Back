@@ -26,7 +26,6 @@ import kr.astra.review.dto.ReviewResponses.SupplementView;
 import kr.astra.review.entity.SupplementRequest;
 import kr.astra.review.entity.SupplementStatus;
 import kr.astra.review.repository.SupplementRequestRepository;
-import kr.astra.user.entity.UserRole;
 import kr.astra.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
@@ -60,11 +59,11 @@ public class ReviewService {
         TestRequest request = workflow.begin(requestId, RequestAction.START_REVIEW, actor,
                 input == null ? null : input.version());
         Long assigneeId = input == null ? null : input.assigneeId();
-        if (assigneeId == null && actor.role() == UserRole.INSTITUTION_MANAGER) {
-            assigneeId = actor.userId();
+        if (assigneeId == null && !actor.isAdmin()) {
+            assigneeId = actor.userId(); // 장비 보유 조직 구성원이 직접 시작하면 본인이 담당 (기업·기관·대학 공통)
         }
         if (assigneeId != null && !userService.findActiveManagerIds(request.getInstitutionId()).contains(assigneeId)) {
-            throw new BusinessException(ErrorCode.VALIDATION_FAILED, "담당자는 접수 기관의 활성 기관 담당자여야 합니다.",
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED, "담당자는 장비 보유 조직의 활성 구성원이어야 합니다.",
                     Map.of("field", "assigneeId"));
         }
         request.assign(assigneeId);
@@ -147,8 +146,7 @@ public class ReviewService {
     /** POST /test-requests/{id}/accept — 기술 검토 통과 UNDER_REVIEW → SCHEDULING */
     public ActionResult accept(CurrentUser actor, Long requestId, Integer version) {
         TestRequest request = workflow.begin(requestId, RequestAction.ACCEPT, actor, version);
-        request.assign(request.getAssigneeId() == null && actor.role() == UserRole.INSTITUTION_MANAGER
-                ? actor.userId() : null);
+        request.assign(request.getAssigneeId() == null && !actor.isAdmin() ? actor.userId() : null);
         workflow.transition(request, RequestAction.ACCEPT, actor, null);
         return RequestWorkflow.result(request);
     }

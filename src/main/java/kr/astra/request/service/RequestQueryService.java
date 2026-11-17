@@ -10,6 +10,7 @@ import kr.astra.global.exception.ErrorCode;
 import kr.astra.global.response.PageResponse;
 import kr.astra.global.security.AccessGuard;
 import kr.astra.global.security.CurrentUser;
+import kr.astra.request.dto.RequestBox;
 import kr.astra.request.dto.RequestResponses.Detail;
 import kr.astra.request.dto.RequestResponses.History;
 import kr.astra.request.dto.RequestResponses.Revision;
@@ -33,7 +34,10 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 의뢰 조회 (api-spec §5). 기업은 본인 의뢰, 기관 담당자는 소속 기관 접수함(제출된 것만), 관리자는 전체 */
+/**
+ * 의뢰 조회 (api-spec §5). 보낸 의뢰(SENT)는 본인이 만든 것, 받은 의뢰(RECEIVED)는 소속 조직 장비로 제출된 것, 관리자는 전체.
+ * 기업·기관·대학 회원 모두 두 목록을 가질 수 있습니다.
+ */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -52,8 +56,13 @@ public class RequestQueryService {
     private final ReviewService reviewService;
     private final ReservationService reservationService;
 
-    /** GET /test-requests?status= */
-    public PageResponse<Summary> list(CurrentUser actor, RequestStatus status, Pageable pageable) {
+    /**
+     * GET /test-requests?box=&status=
+     *
+     * @param box 보낸 의뢰(SENT) / 받은 의뢰(RECEIVED). 안 보내면 가입 유형에 맞는 기본 목록
+     *            (INSTITUTION_MANAGER 는 받은 의뢰, 그 외는 보낸 의뢰). 관리자는 box 와 무관하게 전체
+     */
+    public PageResponse<Summary> list(CurrentUser actor, RequestBox box, RequestStatus status, Pageable pageable) {
         AccessGuard.requireLogin(actor);
         for (Sort.Order order : pageable.getSort()) {
             if (!SORTABLE.contains(order.getProperty())) {
@@ -65,7 +74,7 @@ public class RequestQueryService {
         if (actor.isAdmin()) {
             page = status == null ? requestRepository.findAll(pageable)
                     : requestRepository.findAllByStatus(status, pageable);
-        } else if (actor.role() == UserRole.INSTITUTION_MANAGER) {
+        } else if (resolveBox(actor, box) == RequestBox.RECEIVED) {
             page = status == null
                     ? requestRepository.findAllByInstitutionIdAndSubmittedAtIsNotNull(actor.organizationId(), pageable)
                     : requestRepository.findAllByInstitutionIdAndStatusAndSubmittedAtIsNotNull(actor.organizationId(),
@@ -76,6 +85,13 @@ public class RequestQueryService {
         }
         RequestViews.Names names = views.names(page.getContent(), List.of());
         return PageResponse.from(page, r -> views.summary(r, names));
+    }
+
+    private static RequestBox resolveBox(CurrentUser actor, RequestBox box) {
+        if (box != null) {
+            return box;
+        }
+        return actor.role() == UserRole.INSTITUTION_MANAGER ? RequestBox.RECEIVED : RequestBox.SENT;
     }
 
     /** GET /test-requests/{id} — 현재 상태, 현재 제출본, 열린 보완 요청, 예약, 누를 수 있는 버튼 */

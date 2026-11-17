@@ -222,6 +222,77 @@ class RequestWorkflowTest {
     }
 
     @Test
+    void 기관이_의뢰자이고_기업이_장비_보유_조직인_의뢰도_끝까지_진행된다() throws Exception {
+        long companyUserId = jdbc.queryForObject("SELECT id FROM users WHERE email = 'company@astra.demo'", Long.class);
+        // 기업이 장비를 등록 (기업 = 장비 보유 조직)
+        Res equipment = api.post("/api/v1/equipment", """
+                { "name": "기업 보유 진동시험기 %s", "model": "C-200", "equipmentType": "TEST",
+                  "usage": { "accessScope": "EXTERNAL_ALLOWED", "availability": "AVAILABLE" },
+                  "specs": [ { "key": "max_payload", "label": "최대 시료 질량", "value": 80, "unit": "kg" } ],
+                  "testTypes": [ { "code": "VIBRATION" } ] }""".formatted(java.util.UUID.randomUUID()), company);
+        assertThat(equipment.status()).as(equipment.body().toString()).isEqualTo(201);
+        long equipmentId = equipment.data().path("id").asLong();
+        try {
+            // 기관 회원(manager1)이 의뢰자로 그 장비에 의뢰 → 제출
+            long id = api.post("/api/v1/test-requests", "{ \"equipmentId\": " + equipmentId + " }", manager1)
+                    .data().path("id").asLong();
+            assertThat(api.post("/api/v1/test-requests/" + id + "/submit", null, manager1).status()).isEqualTo(200);
+            assertThat(unread("company@astra.demo", "REQUEST_SUBMITTED", id)).isEqualTo(1);
+
+            // 보낸 의뢰 / 받은 의뢰는 box 로 나눠 본다
+            assertThat(ids(api.get("/api/v1/test-requests?box=SENT&size=100", manager1))).contains(id);
+            assertThat(ids(api.get("/api/v1/test-requests?box=RECEIVED&size=100", manager1))).doesNotContain(id);
+            assertThat(ids(api.get("/api/v1/test-requests?box=RECEIVED&size=100", company))).contains(id);
+            assertThat(ids(api.get("/api/v1/test-requests?box=SENT&size=100", company))).doesNotContain(id);
+            // box 를 안 보내면 가입 유형 기본값: 기관 담당자는 받은 의뢰, 기업은 보낸 의뢰
+            assertThat(ids(api.get("/api/v1/test-requests?size=100", manager1))).doesNotContain(id);
+            assertThat(ids(api.get("/api/v1/test-requests?size=100", company))).doesNotContain(id);
+            assertThat(api.get("/api/v1/test-requests?box=INBOX", company).status()).isEqualTo(400);
+
+            // 상세 버튼: 의뢰자는 의뢰자 쪽, 보유 기업은 검토 쪽
+            assertThat(actions(api.get("/api/v1/test-requests/" + id, manager1).data())).contains("CANCEL")
+                    .doesNotContain("START_REVIEW");
+            assertThat(actions(api.get("/api/v1/test-requests/" + id, company).data())).contains("START_REVIEW");
+            // 의뢰자와 무관한 다른 기관은 볼 수 없고, 의뢰자는 자기 의뢰를 검토할 수 없다
+            assertThat(api.get("/api/v1/test-requests/" + id, manager2).status()).isEqualTo(403);
+            assertThat(api.post("/api/v1/test-requests/" + id + "/review/start", null, manager1).status()).isEqualTo(403);
+
+            // 기업이 검토 시작(담당자 = 본인) → 통과 → 의뢰자에게 알림
+            assertThat(api.post("/api/v1/test-requests/" + id + "/review/start", null, company).data().path("status")
+                    .asString()).isEqualTo("UNDER_REVIEW");
+            assertThat(jdbc.queryForObject("SELECT assignee_id FROM test_requests WHERE id = ?", Long.class, id))
+                    .isEqualTo(companyUserId);
+            assertThat(api.post("/api/v1/test-requests/" + id + "/accept", null, company).data().path("status")
+                    .asString()).isEqualTo("SCHEDULING");
+            assertThat(unread("manager1@astra.demo", "REQUEST_ACCEPTED", id)).isEqualTo(1);
+
+            // 일정: 의뢰자가 제안하고 보유 기업이 확정
+            OffsetDateTime start = OffsetDateTime.now(ZoneOffset.ofHours(9)).plusDays(120).truncatedTo(ChronoUnit.HOURS);
+            Res proposed = api.post("/api/v1/test-requests/" + id + "/reservations", period(start, start.plusHours(2)),
+                    manager1);
+            assertThat(proposed.status()).as(proposed.body().toString()).isLessThan(300);
+            long reservation = proposed.data().path("reservation").path("id").asLong();
+            assertThat(proposed.data().path("reservation").path("proposedBySide").asString()).isEqualTo("COMPANY");
+            assertThat(api.post("/api/v1/reservations/" + reservation + "/confirm", null, manager1).status())
+                    .isEqualTo(403);
+            Res confirmed = api.post("/api/v1/reservations/" + reservation + "/confirm", null, company);
+            assertThat(confirmed.status()).as(confirmed.body().toString()).isEqualTo(200);
+            assertThat(api.get("/api/v1/test-requests/" + id, manager1).data().path("status").asString())
+                    .isEqualTo("CONFIRMED");
+            assertThat(api.post("/api/v1/test-requests/" + id + "/complete", null, company).data().path("status")
+                    .asString()).isEqualTo("COMPLETED");
+        } finally {
+            api.send("DELETE", "/api/v1/equipment/" + equipmentId, null, company);
+        }
+    }
+
+    private static java.util.List<Long> ids(Res page) {
+        java.util.List<Long> list = new java.util.ArrayList<>();
+        page.data().path("content").forEach(n -> list.add(n.path("id").asLong()));
+        return list;
+    }
+
+    @Test
     void 취소하면_열린_일정_제안이_함께_취소된다() throws Exception {
         long id = toScheduling();
         OffsetDateTime start = OffsetDateTime.now(ZoneOffset.ofHours(9)).plusDays(90).truncatedTo(ChronoUnit.HOURS);

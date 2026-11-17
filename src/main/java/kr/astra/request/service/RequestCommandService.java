@@ -90,7 +90,7 @@ public class RequestCommandService {
                 content.read(working.getContent()));
     }
 
-    /** POST /test-requests/{id}/submit — DRAFT → SUBMITTED, 1번 제출본 고정, 기관 담당자 전원에게 알림 */
+    /** POST /test-requests/{id}/submit — DRAFT → SUBMITTED, 1번 제출본 고정, 장비 보유 조직 구성원 전원에게 알림 */
     public ActionResult submit(CurrentUser actor, Long requestId, Integer version) {
         TestRequest request = workflow.begin(requestId, RequestAction.SUBMIT, actor, version);
         TestRequestRevision revision = workflow.currentRevision(request);

@@ -7,6 +7,7 @@ import java.util.List;
 import kr.astra.global.response.ApiResponse;
 import kr.astra.global.response.PageResponse;
 import kr.astra.global.security.CurrentUser;
+import kr.astra.request.dto.RequestBox;
 import kr.astra.request.dto.RequestInputs;
 import kr.astra.request.dto.RequestResponses.ActionResult;
 import kr.astra.request.dto.RequestResponses.Detail;
@@ -36,7 +37,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "시험 의뢰", description = "의뢰 작성·작업본 저장·제출·취소, 목록·상세·제출본 이력·상태 이력 (api-spec §5, 상태 전이 §11). "
-        + "기업은 본인 의뢰, 기관 담당자는 소속 기관으로 제출된 의뢰, 관리자는 전체. "
+        + "의뢰자는 본인 의뢰, 장비 보유 조직 구성원은 소속 조직으로 제출된 의뢰, 관리자는 전체. "
         + "상태를 바꾸는 요청에 version 을 보내면 불일치 시 409 VERSION_CONFLICT. AI 초안(POST /test-requests/ai-draft)은 BE-C")
 @RestController
 @RequestMapping("/test-requests")
@@ -55,14 +56,16 @@ public class TestRequestController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(queryService.detail(user, id)));
     }
 
-    @Operation(summary = "의뢰 목록", description = "기업: 내 의뢰 / 기관: 우리 기관 접수함 (제출된 것만) / 관리자: 전체. "
+    @Operation(summary = "의뢰 목록", description = "?box=SENT 내가 보낸 의뢰 / ?box=RECEIVED 우리 조직 장비로 들어온 의뢰(제출된 것만) / "
+            + "관리자: 전체. box 를 안 보내면 INSTITUTION_MANAGER 는 RECEIVED, 그 외는 SENT. "
             + "?status=UNDER_REVIEW, 정렬 createdAt·updatedAt·submittedAt·requestNo·status·desiredStartDate·title")
     @GetMapping
     public ApiResponse<PageResponse<Summary>> list(@AuthenticationPrincipal CurrentUser user,
+                                                   @RequestParam(required = false) RequestBox box,
                                                    @RequestParam(required = false) RequestStatus status,
                                                    @ParameterObject @PageableDefault(size = 20, sort = "createdAt",
                                                            direction = Sort.Direction.DESC) Pageable pageable) {
-        return ApiResponse.ok(queryService.list(user, status, pageable));
+        return ApiResponse.ok(queryService.list(user, box, status, pageable));
     }
 
     @Operation(summary = "의뢰 상세", description = "현재 상태·현재 제출본·열린 보완 요청·예약·누를 수 있는 버튼(availableActions)")
@@ -78,7 +81,7 @@ public class TestRequestController {
         return ApiResponse.ok(commandService.saveDraft(user, id, request));
     }
 
-    @Operation(summary = "제출", description = "DRAFT → SUBMITTED, 1번 제출본 고정, 기관 담당자 전원에게 알림")
+    @Operation(summary = "제출", description = "DRAFT → SUBMITTED, 1번 제출본 고정, 장비 보유 조직 구성원 전원에게 알림")
     @PostMapping("/{id}/submit")
     public ApiResponse<ActionResult> submit(@AuthenticationPrincipal CurrentUser user, @PathVariable Long id,
                                             @RequestBody(required = false) RequestInputs.VersionOnly request) {

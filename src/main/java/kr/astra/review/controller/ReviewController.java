@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "기관 검토·보완", description = "검토 시작·보완 요청·보완 제출·검토 통과·반려·시험 완료 (api-spec §6, 상태 전이 §11). "
-        + "기관 담당자는 소속 기관으로 들어온 의뢰만, 보완 제출은 의뢰한 기업 본인만. version 을 보내면 불일치 시 409")
+        + "장비 보유 조직 구성원은 소속 조직으로 들어온 의뢰만, 보완 제출은 의뢰자 본인만. version 을 보내면 불일치 시 409")
 @RestController
 @RequiredArgsConstructor
 public class ReviewController {
@@ -54,7 +54,7 @@ public class ReviewController {
         return ApiResponse.ok(reviewService.list(user, id));
     }
 
-    @Operation(summary = "보완 제출", description = "새 제출본(revision) 생성 → RESUBMITTED, 기관 담당자에게 알림. "
+    @Operation(summary = "보완 제출", description = "새 제출본(revision) 생성 → RESUBMITTED, 장비 보유 조직 구성원에게 알림. "
             + "content 를 비우면 PUT /draft 로 저장한 작업본을 제출. 필수 보완 항목이 비면 400 (details.missingItems)")
     @PostMapping("/supplements/{id}/respond")
     public ApiResponse<ActionResult> respond(@AuthenticationPrincipal CurrentUser user, @PathVariable Long id,

@@ -32,7 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 의뢰 상태머신. 모든 상태 변경은 {@link #begin} → (각 기능의 처리) → {@link #transition} 순서로 이 클래스를 거칩니다.
  * <ol>
- *   <li>begin: 행 잠금 → 권한(기업 본인 / 소속 기관) → 전이 가능 여부(§11) → version 확인</li>
+ *   <li>begin: 행 잠금 → 권한(의뢰자 본인 / 장비 보유 조직 구성원) → 전이 가능 여부(§11) → version 확인</li>
  *   <li>transition: 상태 갱신 → request_status_history 저장 → 상대방 알림(§13) → version 증가 반영(flush)</li>
  * </ol>
  * 호출하는 서비스의 트랜잭션 하나에서 전부 처리되므로 중간에 실패하면 함께 롤백됩니다.
@@ -79,7 +79,7 @@ public class RequestWorkflow {
         return request;
     }
 
-    /** 의뢰 당사자(기업 본인 또는 소속 기관 담당자)인지 확인하고 잠급니다. 예약처럼 양쪽이 다 하는 기능용 */
+    /** 의뢰 당사자(의뢰자 본인 또는 장비 보유 조직 구성원)인지 확인하고 잠급니다. 예약처럼 양쪽이 다 하는 기능용 */
     public TestRequest lockForParty(Long requestId, CurrentUser actor, Integer version) {
         TestRequest request = lock(requestId);
         requireParty(actor, request);
@@ -96,13 +96,13 @@ public class RequestWorkflow {
         }
     }
 
-    /** 조회 권한: 기업 본인, 소속 기관 담당자(제출된 의뢰만), 관리자 */
+    /** 조회 권한: 의뢰자 본인, 장비 보유 조직 구성원(제출된 의뢰만), 관리자 */
     public void requireParty(CurrentUser actor, TestRequest request) {
         AccessGuard.requireOwnerOrInstitution(actor, request.getRequesterId(), request.getInstitutionId());
         requireVisibleToInstitution(actor, request);
     }
 
-    /** 한 번도 제출하지 않은 작성 중 의뢰는 기관에 보이지 않습니다 */
+    /** 한 번도 제출하지 않은 작성 중 의뢰는 장비 보유 조직에 보이지 않습니다 */
     private static void requireVisibleToInstitution(CurrentUser actor, TestRequest request) {
         boolean ownerOrAdmin = actor.isAdmin() || request.getRequesterId().equals(actor.userId());
         if (!ownerOrAdmin && request.getSubmittedAt() == null) {
@@ -209,7 +209,7 @@ public class RequestWorkflow {
             case RESPOND_SUPPLEMENT -> notifyInstitution(request, NotificationType.REQUEST_RESUBMITTED,
                     no + "보완 자료가 제출되었습니다: " + request.getTitle());
             case REQUEST_SUPPLEMENT -> notifyRequester(request, NotificationType.SUPPLEMENT_REQUESTED,
-                    no + "기관에서 보완을 요청했습니다.");
+                    no + "장비 보유 조직에서 보완을 요청했습니다.");
             case ACCEPT -> notifyRequester(request, NotificationType.REQUEST_ACCEPTED,
                     no + "기술 검토를 통과했습니다. 일정을 협의해 주세요.");
             case REJECT -> notifyRequester(request, NotificationType.REQUEST_REJECTED,
@@ -226,7 +226,7 @@ public class RequestWorkflow {
         notificationService.notify(request.getRequesterId(), type, title, linkPath(request), request.getId());
     }
 
-    /** 접수 기관 활성 담당자 전원 */
+    /** 장비 보유 조직(기업·기관·대학)의 활성 구성원 전원 */
     public void notifyInstitution(TestRequest request, NotificationType type, String title) {
         List<Long> managers = userService.findActiveManagerIds(request.getInstitutionId());
         for (Long managerId : managers) {
@@ -234,7 +234,7 @@ public class RequestWorkflow {
         }
     }
 
-    /** 행동한 사람의 상대편 (기업이 했으면 기관 전원, 기관·관리자가 했으면 의뢰자) */
+    /** 행동한 사람의 상대편 (의뢰자가 했으면 장비 보유 조직 전원, 보유 조직·관리자가 했으면 의뢰자) */
     public void notifyCounterpart(TestRequest request, CurrentUser actor, NotificationType type, String title) {
         if (request.getRequesterId().equals(actor.userId())) {
             notifyInstitution(request, type, title);

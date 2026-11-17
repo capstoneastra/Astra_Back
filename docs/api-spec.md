@@ -521,7 +521,7 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 |---|---|---|---|---|
 | POST | `/test-requests` | 🏢 | 의뢰 생성(DRAFT) `{ equipmentId, requirementId?, matchResultId? }`. 소속 조직 보유 장비면 `400 VALIDATION_FAILED` | 9 |
 | POST | `/test-requests/ai-draft` | 🏢 | AI 의뢰서 초안 생성 → DRAFT + revision(isAiGenerated) | 8 |
-| GET | `/test-requests` | 🏢 🏛 | 목록 — 기업: 내 의뢰 / 기관: 우리 기관 접수함. `?status=UNDER_REVIEW` | 9 |
+| GET | `/test-requests` | 🏢 🏛 | 목록 — `?box=SENT` 내가 보낸 의뢰 / `?box=RECEIVED` 우리 조직 장비로 들어온 의뢰(제출된 것만). `box`를 안 보내면 `INSTITUTION_MANAGER`는 RECEIVED, 그 외는 SENT (관리자는 전체). `?status=UNDER_REVIEW` | 9 |
 | GET | `/test-requests/{id}` | 🏢 🏛 | 상세 (현재 상태, 최신 revision, 열린 보완요청, 예약) | 9 |
 | PUT | `/test-requests/{id}/draft` | 🏢 | 작업본 revision 내용 저장 (DRAFT 또는 SUPPLEMENT_REQUESTED) | 8 |
 | POST | `/test-requests/{id}/submit` | 🏢 | 제출 (DRAFT→SUBMITTED) | 9 |
@@ -599,7 +599,7 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 | Method | URL | 권한 | 설명 |
 |---|---|---|---|
 | POST | `/test-requests/{id}/reservations` | 🏢 🏛 | 일정 제안 `{ startAt, endAt, note }` (SCHEDULING 상태에서) |
-| GET | `/test-requests/{id}/reservations` | 🏢 🏛 | 이 의뢰의 일정 제안·확정 목록 (최신순, `proposedBySide`: COMPANY/INSTITUTION) |
+| GET | `/test-requests/{id}/reservations` | 🏢 🏛 | 이 의뢰의 일정 제안·확정 목록 (최신순, `proposedBySide`: COMPANY=의뢰자 / INSTITUTION=장비 보유 조직. 조직 유형이 아니라 이 의뢰에서의 입장) |
 | POST | `/reservations/{id}/counter` | 🏢 🏛 | 대안 일정 제안 (→COUNTER_PROPOSED) |
 | POST | `/reservations/{id}/confirm` | 🏛 | 예약 확정 → 의뢰 CONFIRMED |
 | POST | `/reservations/{id}/cancel` | 🏢 🏛 | 예약 취소 |

@@ -16,7 +16,7 @@ public final class ReviewInputs {
     /**
      * POST /test-requests/{id}/review/start
      *
-     * @param assigneeId 담당자 (같은 기관의 활성 기관 담당자). 비우면 요청한 기관 담당자 본인
+     * @param assigneeId 담당자 (장비 보유 조직의 활성 구성원). 비우면 요청한 구성원 본인
      */
     public record StartReview(Integer version, Long assigneeId) {
     }
