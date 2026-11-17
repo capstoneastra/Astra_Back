@@ -11,7 +11,7 @@ TableGroup simulation_domain { simulation_models simulation_presets simulation_r
 
 Table organizations {
   id bigint [pk]
-  org_type varchar(20) [not null, note: 'COMPANY | INSTITUTION | ADMIN']
+  org_type varchar(20) [not null, note: 'COMPANY | INSTITUTION | UNIVERSITY | ADMIN']
   name varchar(200) [not null]
   parent_name varchar(200) [note: '예: \'대전테크노파크\' (하위 센터의 상위기관)']
   business_reg_no varchar(20) [note: '기업 사업자번호']

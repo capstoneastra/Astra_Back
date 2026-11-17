@@ -76,7 +76,7 @@
 | POST | `/auth/signup` | 🔓 | 회원가입 (기업 / 기관 담당자, 이메일 인증 필수) |
 | POST | `/auth/login` | 🔓 | 로그인 → access/refresh 토큰 |
 | POST | `/auth/refresh` | 🔓 | 토큰 재발급 |
-| GET | `/auth/institutions` | 🔓 | 가입용 기관 목록 (id·이름·지역만) |
+| GET | `/auth/institutions` | 🔓 | 가입용 기관·대학 목록 (id·유형·이름·지역만) |
 | POST | `/auth/logout` | 로그인 | refresh 토큰 폐기 |
 | GET | `/users/me` | 로그인 | 내 정보 + 소속 조직 |
 | PATCH | `/users/me` | 로그인 | 내 정보 수정 |
@@ -97,7 +97,7 @@
 - **사업자등록번호**: 숫자 10자리인지만 확인하고(하이픈 있어도 됨, `123-45-67890` 형식으로 저장) 진위 확인은 관리자가 승인할 때 합니다.
 - **같은 이름의 조직**: 이미 있으면 `409 ORGANIZATION_ALREADY_EXISTS`. 단, 미승인 조직이고 승인 대기·활성 회원이 없으면(거절된 신청만 남은 경우) 그 조직을 다시 쓰고 사업자번호·주소·연락처를 새 입력으로 바꿉니다.
 
-> 가입 화면에서 기관을 고르려면 로그인 전에 기관 목록이 필요합니다. 그래서 `GET /auth/institutions`를 `/auth` 아래에 두고 이름·지역만 반환합니다.
+> 가입 화면에서 기관을 고르려면 로그인 전에 기관 목록이 필요합니다. 그래서 `GET /auth/institutions`를 `/auth` 아래에 두고 유형·이름·지역만 반환합니다. 대학(`UNIVERSITY`)도 기관과 같은 방식으로 가입하므로 이 목록에 함께 나옵니다.
 
 ```json
 // ① POST /auth/email-verifications { "email": "a@company.com" } → 200
@@ -124,8 +124,14 @@
   "role": "INSTITUTION_MANAGER", "verificationToken": "...",
   "organization": { "name": "가상 신규 시험기관", "address": "경남 진주시 ...", "phone": "055-000-0000" } }
 // → 201 { "userId": 22, "status": "PENDING" }
+
+// POST /auth/signup (대학 담당자 - 미등록 대학 신청: organization.orgType 을 UNIVERSITY 로. 생략하면 INSTITUTION)
+{ "email": "park@univ.ac.kr", "password": "****", "name": "박담당", "phone": "055-000-0001",
+  "role": "INSTITUTION_MANAGER", "verificationToken": "...",
+  "organization": { "orgType": "UNIVERSITY", "name": "가상대학교 공동기기센터", "address": "경남 진주시 ...", "phone": "055-000-0001" } }
+// → 201 { "userId": 23, "status": "PENDING" }  (이미 승인된 대학은 기관처럼 organizationId 로 선택)
 // 실패: 400 EMAIL_NOT_VERIFIED (토큰 없음·만료·이미 사용·다른 이메일) / 409 EMAIL_ALREADY_EXISTS / 409 ORGANIZATION_ALREADY_EXISTS
-//       400 VALIDATION_FAILED (role=ADMIN, 사업자등록번호 형식 등)
+//       400 VALIDATION_FAILED (role=ADMIN, 사업자등록번호 형식, 기관 담당자 신청의 orgType 이 INSTITUTION·UNIVERSITY 가 아님 등)
 
 // POST /auth/login { "email": "a@company.com", "password": "****" } → 200
 { "accessToken": "eyJ...", "refreshToken": "eyJ...", "expiresIn": 3600,
@@ -138,8 +144,8 @@
 
 // POST /auth/logout { "refreshToken": "eyJ..." } → 200 { "success": true }
 
-// GET /auth/institutions → 200 (승인된 기관만, 가나다순)
-[ { "id": 5, "name": "경상국립대학교 첨단소재분석지원센터", "region": "진주" }, ... ]
+// GET /auth/institutions → 200 (승인된 기관·대학만, 가나다순. orgType 은 INSTITUTION | UNIVERSITY)
+[ { "id": 5, "orgType": "INSTITUTION", "name": "경상국립대학교 첨단소재분석지원센터", "region": "진주" }, ... ]
 
 // GET /users/me → 200 (organization 은 소속이 없으면 null)
 { "id": 3, "email": "manager1@astra.demo", "name": "김담당", "phone": "042-000-0001",
@@ -170,7 +176,7 @@
 | GET | `/search` | 로그인 | 시험항목·자연어 통합 검색 `?q=15kg 시료 진동시험` | 3 |
 | GET | `/test-types` | 로그인 | 시험유형 목록 (15개, 표시 순서, 장비 수 포함) | 3 |
 | GET | `/test-types/{code}` | 로그인 | 시험 정보 안내: 가능 기관·예상비용·기간·이용조건 + 입력할 조건 목록(`conditionRules`) | 4 |
-| GET | `/institutions` | 로그인 | 기관 목록 (승인된 기관, 가나다순, 장비 수 포함) | |
+| GET | `/institutions` | 로그인 | 기관·대학 목록 (승인된 조직, 가나다순, 장비 수 포함) | |
 | GET | `/institutions/{id}` | 로그인 | 기관 상세 + 보유 장비 수·유형별 수·가능 시험유형 | |
 | GET | `/institutions/{id}/security` | 로그인 | 기관 보안시설·시료/데이터 반출·NDA 협의 안내 | |
 | PATCH | `/institutions/{id}/security` | 🏛(소유기관) 👑 | `hasSecureFacility`, `securityNote` 수정 | |
@@ -293,12 +299,12 @@
 [ { "code": "ACOUSTIC_NOISE", "nameKo": "음향·소음 시험", "description": null, "keywords": ["소음", "음향", "dB"], "equipmentCount": 1 },
   { "code": "BATTERY_TEST", "nameKo": "배터리 시험", "description": null, "keywords": ["배터리", "충방전", "전지"], "equipmentCount": 2 }, ... ]
 
-// GET /institutions → 승인된 기관 전체, 이름 가나다순 (페이지 없음)
-[ { "id": 5, "name": "경상국립대학교 첨단소재분석지원센터", "parentName": null, "region": "진주", "equipmentCount": 5 },
-  { "id": 8, "name": "기술지원센터", "parentName": null, "region": "원주", "equipmentCount": 1 }, ... ]
+// GET /institutions → 승인된 기관·대학 전체, 이름 가나다순 (페이지 없음). orgType 은 INSTITUTION | UNIVERSITY
+[ { "id": 5, "orgType": "INSTITUTION", "name": "경상국립대학교 첨단소재분석지원센터", "parentName": null, "region": "진주", "equipmentCount": 5 },
+  { "id": 8, "orgType": "INSTITUTION", "name": "기술지원센터", "parentName": null, "region": "원주", "equipmentCount": 1 }, ... ]
 
 // GET /institutions/2 → 없거나 미승인 기관이면 404 NOT_FOUND
-{ "id": 2, "name": "대전테크노파크 우주·양자산업센터", "parentName": null, "region": "대전",
+{ "id": 2, "orgType": "INSTITUTION", "name": "대전테크노파크 우주·양자산업센터", "parentName": null, "region": "대전",
   "address": null, "phone": null, "email": null, "homepageUrl": null,
   "equipmentCount": 13, "equipmentByType": { "MEASUREMENT": 11, "TEST": 2 },
   "testTypes": [ { "code": "ELECTRICAL_RF_ANALYSIS", "nameKo": "전기·RF 측정", "equipmentCount": 10 },
@@ -764,7 +770,7 @@ UNDER_REVIEW ──reject──▶ REJECTED        (DRAFT~SCHEDULING 에서 기�
 | POST | `/admin/users/{id}/reject` | 👑 | 가입 거절 `{ reason }` (→REJECTED) |
 | PATCH | `/admin/users/{id}/status` | 👑 | 정지·해제 `{ "status": "SUSPENDED" }` / `{ "status": "ACTIVE" }` |
 | GET | `/admin/organizations` | 👑 | 조직 목록 `?orgType=INSTITUTION&verified=false&page=0&size=20&sort=createdAt,desc` |
-| POST | `/admin/organizations` | 👑 | 기관 직접 등록 |
+| POST | `/admin/organizations` | 👑 | 기관·대학 직접 등록 |
 | POST | `/admin/organizations/{id}/verify` | 👑 | 신규 기관 신청 승인 |
 | PATCH | `/admin/organizations/{id}` | 👑 | 기관 정보 수정 |
 | POST | `/admin/equipment/{id}/transfer` | 👑 | 장비 소속 기관 변경 (잘못 수집된 경우) |
@@ -794,6 +800,7 @@ UNDER_REVIEW ──reject──▶ REJECTED        (DRAFT~SCHEDULING 에서 기�
                  "isVerified": false, "createdAt": "2026-11-08T10:00:00+09:00" } ], ... }
 
 // POST /admin/organizations { "name": "가상 시험센터", "region": "진주", "phone": "055-000-0009" } → 201 (위 항목 형식, 시험기관으로 바로 승인)
+// POST /admin/organizations { "orgType": "UNIVERSITY", "name": "가상대학교 공동기기센터" } → 201 (대학으로 바로 승인. orgType 생략 시 INSTITUTION, 그 외 유형은 400)
 // POST /admin/organizations/15/verify → 200 (isVerified=true, 이미 승인됐어도 200)
 // PATCH /admin/organizations/15 { "homepageUrl": "https://..." } → 200 (보낸 값만)
 // 실패: 404 NOT_FOUND / 409 ORGANIZATION_ALREADY_EXISTS (같은 유형에 같은 이름)

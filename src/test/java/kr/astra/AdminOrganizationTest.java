@@ -60,6 +60,23 @@ class AdminOrganizationTest {
     }
 
     @Test
+    void 대학도_직접_등록할_수_있고_기업_유형은_400() throws Exception {
+        String name = "테스트 등록 대학 " + UUID.randomUUID();
+        Res created = api.post("/api/v1/admin/organizations", """
+                { "orgType": "UNIVERSITY", "name": "%s", "region": "진주" }""".formatted(name), admin);
+        assertThat(created.status()).isEqualTo(201);
+        assertThat(created.data().path("orgType").asString()).isEqualTo("UNIVERSITY");
+        assertThat(created.data().path("isVerified").asBoolean()).isTrue();
+        assertThat(api.get("/api/v1/auth/institutions", null).data().toString()).contains(name);
+        assertThat(api.get("/api/v1/institutions/" + created.data().path("id").asLong(), admin)
+                .data().path("orgType").asString()).isEqualTo("UNIVERSITY");
+
+        Res company = api.post("/api/v1/admin/organizations",
+                "{ \"orgType\": \"COMPANY\", \"name\": \"x\" }", admin);
+        assertThat(company.code()).isEqualTo("VALIDATION_FAILED");
+    }
+
+    @Test
     void 미승인_조직을_목록에서_찾아_승인한다() throws Exception {
         String orgName = "테스트 신청 기관 " + UUID.randomUUID();
         api.signupInstitutionManager(uniqueEmail(), """

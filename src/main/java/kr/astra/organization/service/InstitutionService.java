@@ -15,7 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 기관 목록·상세 (api-spec §2 GET /institutions). 승인된 기관만 보여줍니다.
+ * 기관 목록·상세 (api-spec §2 GET /institutions). 승인된 기관·대학만 보여줍니다.
  * 장비 수가 필요해서 OrganizationService 와 따로 둡니다 (EquipmentService 가 OrganizationService 를 쓰므로 순환 방지).
  */
 @Service
@@ -46,7 +46,8 @@ public class InstitutionService {
                         byTestType.get(t.getCode())))
                 .toList();
         long total = byType.values().stream().mapToLong(Long::longValue).sum();
-        return new InstitutionDetailResponse(info.id(), info.name(), info.parentName(), info.region(), info.address(),
+        return new InstitutionDetailResponse(info.id(), info.orgType(), info.name(), info.parentName(), info.region(),
+                info.address(),
                 info.phone(), info.email(), info.homepageUrl(), total, byType, testTypes);
     }
 }

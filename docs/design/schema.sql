@@ -21,7 +21,7 @@ CREATE EXTENSION IF NOT EXISTS btree_gist; -- 예약 시간 겹침 방지(EXCLUD
 -- ---------------------------------------------------------------------
 CREATE TABLE organizations (
     id                BIGSERIAL PRIMARY KEY,
-    org_type          VARCHAR(20)  NOT NULL CHECK (org_type IN ('COMPANY','INSTITUTION','ADMIN')),
+    org_type          VARCHAR(20)  NOT NULL CHECK (org_type IN ('COMPANY','INSTITUTION','UNIVERSITY','ADMIN')),
     name              VARCHAR(200) NOT NULL,
     parent_name       VARCHAR(200),             -- 예: '대전테크노파크' (하위 센터의 상위기관)
     business_reg_no   VARCHAR(20),              -- 기업 사업자번호

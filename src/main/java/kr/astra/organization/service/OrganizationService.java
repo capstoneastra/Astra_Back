@@ -57,17 +57,17 @@ public class OrganizationService {
         return new SecurityInfo(org.getHasSecureFacility(),org.getSecurityNote());
     }
 
-    /** 가입 화면용: 승인된 기관만, 이름순 */
+    /** 가입 화면용: 승인된 기관·대학만, 이름순 */
     public List<InstitutionOptionResponse> listVerifiedInstitutions() {
-        return organizationRepository.findAllByOrgTypeAndVerifiedTrue(OrgType.INSTITUTION).stream()
+        return organizationRepository.findAllByOrgTypeInAndVerifiedTrue(OrgType.INSTITUTION_TYPES).stream()
                 .sorted(BY_KOREAN_NAME)
                 .map(InstitutionOptionResponse::from)
                 .toList();
     }
 
-    /** 승인된 기관 전체 기본 정보 (이름 가나다순) */
+    /** 승인된 기관·대학 전체 기본 정보 (이름 가나다순) */
     public List<InstitutionInfo> listVerifiedInstitutionInfos() {
-        return organizationRepository.findAllByOrgTypeAndVerifiedTrue(OrgType.INSTITUTION).stream()
+        return organizationRepository.findAllByOrgTypeInAndVerifiedTrue(OrgType.INSTITUTION_TYPES).stream()
                 .sorted(BY_KOREAN_NAME)
                 .map(InstitutionInfo::from)
                 .toList();
@@ -87,9 +87,9 @@ public class OrganizationService {
                 .collect(Collectors.toMap(OrganizationSummaryResponse::id, Function.identity()));
     }
 
-    /** 승인 대기 중인 기관 수 (관리자 대시보드) */
+    /** 승인 대기 중인 기관·대학 수 (관리자 대시보드) */
     public long countUnverifiedInstitutions() {
-        return organizationRepository.countByOrgTypeAndVerifiedFalse(OrgType.INSTITUTION);
+        return organizationRepository.countByOrgTypeInAndVerifiedFalse(OrgType.INSTITUTION_TYPES);
     }
 
     /** 승인된 기관이면 true (기관 담당자가 기존 기관을 골라 가입할 때 확인) */
@@ -163,13 +163,13 @@ public class OrganizationService {
         return AdminOrganizationResponse.from(findOrganization(organizationId));
     }
 
-    /** 관리자 기관 직접 등록 (바로 승인). 같은 이름의 기관이 있으면 409 ORGANIZATION_ALREADY_EXISTS */
+    /** 관리자 기관·대학 직접 등록 (바로 승인). 같은 유형에 같은 이름이 있으면 409 ORGANIZATION_ALREADY_EXISTS */
     @Transactional
-    public AdminOrganizationResponse createInstitutionByAdmin(String name, String parentName, String region,
-                                                              String address, String phone, String email,
-                                                              String homepageUrl) {
-        Long id = save(Organization.newInstitutionByAdmin(name.trim(), parentName, region, address, phone, email,
-                homepageUrl));
+    public AdminOrganizationResponse createInstitutionByAdmin(OrgType orgType, String name, String parentName,
+                                                              String region, String address, String phone,
+                                                              String email, String homepageUrl) {
+        Long id = save(Organization.newInstitutionByAdmin(orgType, name.trim(), parentName, region, address, phone,
+                email, homepageUrl));
         return getForAdmin(id);
     }
 
@@ -216,10 +216,10 @@ public class OrganizationService {
         return save(Organization.newCompany(name.trim(), businessRegNo));
     }
 
-    /** 미등록 기관 담당자 가입: 승인 대기(is_verified=false) 기관 생성 */
+    /** 미등록 기관·대학 담당자 가입: 승인 대기(is_verified=false) 조직 생성 */
     @Transactional
-    public Long createInstitutionApplication(String name, String address, String phone) {
-        return save(Organization.newInstitutionApplication(name.trim(), address, phone));
+    public Long createInstitutionApplication(OrgType orgType, String name, String address, String phone) {
+        return save(Organization.newInstitutionApplication(orgType, name.trim(), address, phone));
     }
 
     private Long save(Organization org) {
