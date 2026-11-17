@@ -12,24 +12,25 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 | 4 | 대시보드, 자연어 검색, 90일 경과 장비 알림 | ✅ | PR #7 (2026-11-08) |
 | 5 | 연동·배포 준비: CORS(PR #7) · Dockerfile · 운영 compose · 운영 설정 · 시연 점검표 (배포는 아직) | ✅ | PR #7 · PR #8 (2026-11-08) |
 | 통합 1차 | BE-C 병합 후 통합 점검, SSE 끊김 수정 | ✅ | PR #10 (2026-11-09) |
-| 추가 | 비교표 이용 조건(비용·기간), 정지 계정 즉시 차단, 기존 서비스(ZEUS)와의 차이 | ✅ | push 완료 (PR 대기) |
-| 6주차 | 배포, 통합 테스트, 시연 시나리오 확인 | 🔶 진행 중 | 배포는 VM 정해지면, BE-B 구현 대기 |
-| 7 | 기업·기관·대학 간 장비 공유로 확장 (교수님 피드백) + 가상 조직·시연 장비 268대 | ✅ | `test` 브랜치 push 완료 (PR 대기) |
+| 추가 | 비교표 이용 조건(비용·기간), 정지 계정 즉시 차단, 기존 서비스(ZEUS)와의 차이 | ✅ | PR #11 (2026-11-09) |
+| 6주차 | 배포, 통합 테스트, 시연 시나리오 확인 | 🔶 진행 중 | 배포는 VM 정해지면. BE-B 구현은 PR #13 (2026-11-10) 병합됨 |
+| 안정화 | 인증·토큰·메일·장비 조회의 동시성·성능 수정 9건 — 윤준수, 2026-11-16 | ✅ | PR #14 (2026-11-16) |
+| 7 | 기업·기관·대학 간 장비 공유로 확장 (교수님 피드백) + 가상 조직·시연 장비 268대 — 윤준수, 2026-11-17 | ✅ | `test` 브랜치 push 완료 (PR 대기) |
 
 **지금 남은 것** (2026-11-17 기준, 7번 작업)
 - `test` → main PR. be-b(의뢰·검토·예약)·be-c(상담·매칭·AI) 코드도 고쳤으니 해당 담당자 리뷰 요청
 - Swagger 로 직접 호출 확인 (이번에는 자동 테스트만 함)
 - FE 공지: `orgType` 필드, `?box=SENT|RECEIVED`, `?view=REQUESTER|PROVIDER`(응답 형식은 `view`로 구분), 가입 폼 대학 선택, 역할로 숨기던 의뢰·장비 관리 메뉴 노출
+- 실제 VM 배포 (VM 정해지면), `POST /admin/equipment/import`(P2, 미구현)
+- BE-C 대화 → 시험조건 502·자동 추진 ANALYZE 실패 (11-09 통합 점검에서 발견, 이후 해결 여부 BE-C 확인 필요)
 
-**이전에 남았던 것** (2026-11-09 기준, 갱신 안 함)
-- `feature/be-a` → main PR (커밋 3개: 비교표 이용 조건 · 즉시 차단 · 문서)
-- 공인시험(KOLAS)·운용 인력·보안 협의 정보 필드 설계 — 팀과 의논 후 진행 (DB 변경 시 V6)
-- 실제 VM 배포 (VM 정해지면), `POST /admin/equipment/import`(P2)
-- 다른 담당 대기: BE-B 의뢰·예약·알림 구현 (시연 10·11·13~16단계), BE-C 대화 → 시험조건 502·오류 로그 (아래 11-09 통합 점검 참고)
+11-09 에 남았던 것 중 끝난 것: `feature/be-a` PR(→ PR #11), 공인시험·운용 인력·보안 정보 필드(→ V6, BE-C 주현욱 2026-11-14), BE-B 의뢰·예약·알림 구현(→ PR #13)
 
 ---
 
 ## 2026-11-17 · 7번: 기업·기관·대학 간 장비 공유로 확장 + 시연 데이터 교체
+
+**작업자**: 윤준수 (BE-A) · **작업일**: 2026-11-17 · **브랜치**: `test` (커밋 8개, 아래 1~8)
 
 **배경**: 교수님 피드백 — 기업 → 기관 한 방향이 아니라 기업 ↔ 기업, 기관 ↔ 기관, 대학 ↔ 기업처럼 누구나 장비를 빌려주고 빌리는 플랫폼으로 확장. 시연 데이터도 가상 조직 + 실제 판매 모델 장비로 교체
 
@@ -55,19 +56,76 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 **6. 시연 데이터 교체** (V8, `9836ee5`)
 - 기존 기관 9곳은 삭제하지 않고 **가상 이름으로 변경**(id 유지 → 기존 의뢰·계정 그대로). 대학 부설 2곳은 UNIVERSITY 로
 - 새 가상 조직 6곳(기관 1·대학 2·기업 3, 사천·창원·고흥), 시연 계정 `univ1@astra.demo`(대학)·`company2@astra.demo`(장비 보유 기업)
-- 새 장비 268대(`ASTRA-DEMO-xxxx`): 제조사·모델명·사양은 실제 판매 모델(서브 에이전트가 제조사·데이터시트로 확인, 출처 링크 포함), 보유 조직·요금·가동률·가용 상태는 가상 → 전부 `isMock=true`. 확인한 사양 REAL, 추정치 MOCK/DEMO_ONLY
+- 새 장비 268대(`ASTRA-DEMO-xxxx`): 제조사·모델명·사양은 실제 판매 모델(제조사 페이지·데이터시트로 확인, 출처 링크 포함), 보유 조직·요금·가동률·가용 상태는 가상 → 전부 `isMock=true`. 확인한 사양 REAL, 추정치 MOCK/DEMO_ONLY
 - 제외·조정: 주파수 사양이 없는 충격 시험기 4종 제외, 맞는 시험유형이 없는 질량특성 측정기·초음파 탐상기 6대는 SUPPORT
 - 기존 장비 71대도 `isMock=true`로 바꾸고 실제 기관 출처 링크 삭제 → `includeMock=false`는 회원이 직접 등록한 장비만
 - 생성: `docs/design/tools/gen_v8.py` + `equipment_catalog.json`. **V8 은 배포 후 다시 생성해서 덮어쓰면 안 됨**(Flyway 체크섬)
 
 **7. 조합 시나리오 테스트·시연 문서** (`d10e8b5`): 대학 ↔ 기업 의뢰를 시연 계정으로 끝까지, 자기 조직 추천 제외 단위 테스트, `demo-scenario.md` §1-1(S1~S6)
 
+**8. 문서 정리**: README(사용자·데이터 현황·흐름·시연 계정·테스트·ERD)와 이 작업 기록에 반영
+
 **확인**
 - 테스트 228개 통과 (Testcontainers. 실행 중 Docker Desktop 이 꺼지면 통합 테스트가 전부 실패하니 주의)
 - seed 개수·기관 이름에 묶인 테스트 22개는 바뀔 수 있는 값을 DB 에서 세어 비교하도록 바꿈
 - Swagger·실제 서버 호출은 아직 안 함
 
-**바뀐 파일 (주요)**: `organization/`(OrgType·Organization·Service·DTO), `global/security/`(CurrentUser·AccessGuard), `auth/`, `admin/`, `equipment/service/EquipmentCommandService`, `user/`(UserService·Repository), `request/`(RequestBox 새 enum, Query·Command·Workflow·TestRequestServiceImpl·Controller), `review/`, `reservation/controller`, `matching/service/MatchingService`, `chat/`·`aipipeline/`·`requirement/`(역할 제한 해제), `dashboard/`(DashboardView 새 enum), 마이그레이션 V7·V8, 테스트 13개, `docs/api-spec.md`·`demo-scenario.md`·`design/schema.sql`·`erd.dbml`·`design/tools/`, `README.md`, 이 파일
+**바뀐 파일** (main 대비 56개. 다른 담당 영역 파일도 윤준수가 수정 → 해당 담당자 리뷰·공지 필요)
+
+*BE-A 영역 (윤준수)*
+- `global/security/CurrentUser`·`AccessGuard`: 소속 조직 기준 권한 (공통 코드 → 전원 공지)
+- `organization/`: `OrgType`(UNIVERSITY, 유형 묶음), `Organization`, `OrganizationRepository`, `OrganizationService`, `InstitutionService`(기업은 장비 있을 때만 노출), DTO 4개(`orgType` 추가)
+- `auth/dto/SignupRequest`, `auth/service/AuthService`: 대학 가입
+- `admin/dto/AdminRequests`, `admin/service/AdminOrganizationService`: 대학 직접 등록
+- `equipment/service/EquipmentCommandService`, `equipment/controller/EquipmentManageController`: 기업 장비 등록
+- `user/service/UserService`, `user/repository/UserRepository`: 알림 대상 = 보유 조직 활성 구성원
+- `dashboard/`: `DashboardView`(새), `DashboardService`, `DashboardController`, `DashboardResponses`
+- 마이그레이션 `V7__university_org_type.sql`, `V8__mock_organizations_and_equipment.sql`
+- 테스트: `AccessGuardTest`, `AuthFlowTest`, `AdminOrganizationTest`, `EquipmentManageTest`, `EquipmentApiTest`, `DashboardSearchApiTest`, `DatabaseSchemaTest`, `DemoScenarioTest`
+
+*BE-B 영역 (허영재) — 윤준수 수정*
+- `request/dto/RequestBox`(새): 보낸/받은 의뢰 구분 enum
+- `request/controller/TestRequestController`: 목록에 `box` 파라미터, 설명 문구
+- `request/service/RequestQueryService`: 목록을 역할 대신 `box`로 분기 (기본값은 기존 동작)
+- `request/service/RequestCommandService`: 의뢰 생성의 기업 전용 제한 해제
+- `request/service/TestRequestServiceImpl`: 의뢰자 제한을 "관리자 불가"로 바꾸고 자기 조직 장비 의뢰 차단(400)
+- `request/service/RequestWorkflow`: 주석·알림 문구("장비 보유 조직에서 보완을 요청했습니다")만. 로직 변경 없음
+- `review/service/ReviewService`: 담당자 자동 지정을 기관 담당자 역할 → 보유 조직 구성원 전체로
+- `review/dto/ReviewInputs`, `review/controller/ReviewController`, `reservation/controller/ReservationController`: 설명 문구만
+- 테스트 `RequestWorkflowTest`: 기관 → 다른 기관 의뢰, 기관 → 기업 장비 의뢰 끝까지, 대학 ↔ 기업 시연 계정 시나리오 추가
+
+*BE-C 영역 (주현욱) — 윤준수 수정*
+- `chat/service/ChatPersistence`, `chat/service/ChatSessionQueryService`: 상담의 기업 전용 제한 해제 (본인 데이터만 보는 규칙은 그대로)
+- `requirement/service/RequirementApplicationService`: 시험조건의 기업 전용 제한 5곳 해제
+- `aipipeline/service/PipelineStore`: 자동 추진의 기업 전용 제한 해제
+- `aipipeline/service/PipelineRecovery`: 서버 재시작 시 기업·관리자 실행만 복구하던 조건 제거
+- `matching/service/MatchingService`: 자기 소속 조직 장비를 추천 후보에서 제외
+- 테스트: `PipelineStateTest`, `RequirementServiceTest`(기관 계정의 본인 데이터 허용으로 기대값 변경), `ChatSessionQueryTest`, `ChatSessionQueryIntegrationTest`(대시보드 시그니처 변경 반영), `MatchingServiceTest`(자기 조직 추천 제외 테스트 추가)
+
+*문서*: `README.md`, `docs/api-spec.md`(권한·장비·의뢰·대시보드 — BE-B·BE-C 절 포함), `docs/demo-scenario.md`(§1-1 추가, 기관 이름), `docs/design/schema.sql`, `docs/design/erd.dbml`, `docs/design/tools/gen_v8.py`·`equipment_catalog.json`(새), 이 파일
+
+---
+
+## 2026-11-17 기록 · 안정화: 인증·토큰·메일·장비 조회 수정 (PR #14)
+
+**작업자**: 윤준수 (BE-A) · **작업일**: 2026-11-16 (커밋 9개, PR #14 로 main 병합) · **기록일**: 2026-11-17
+
+**동시 요청 경합**
+- 재발급 토큰 동시 사용 방지 (`6f64705`): 같은 refresh 토큰으로 동시에 재발급하면 둘 다 성공할 수 있던 문제 → 토큰 행을 잠그고(`PESSIMISTIC_WRITE`) 소비
+- 인증 코드 동시 확인 시 실패 횟수 경합 방지 (`d45b605`): 최근 인증 행을 잠가 실패 횟수·인증 상태 갱신을 순서대로 처리
+- 계정 상태 캐시에 옛 상태가 다시 저장되는 문제 (`fd57ee4`): 조회·저장을 `ConcurrentHashMap.compute` 한 번으로 묶음
+
+**메일·정리 작업**
+- 이메일 전송 방식 변경 (`eaf092c`): 인증 코드 저장은 짧은 트랜잭션으로 끝내고 메일은 트랜잭션 밖에서 발송 (메일 서버가 느려도 DB 연결을 붙잡지 않음)
+- 만료된 인증 기록 정리 (`2d877d7`): `ExpiredAuthRecordCleanup`이 매일 만료된 이메일 인증·refresh 토큰 삭제
+- 계정 상태 캐시 만료 항목 정리 (`60e15fc`): 1분마다 만료된 캐시 항목 제거 (조회되지 않는 계정이 메모리에 남지 않게)
+
+**조회 성능**
+- 장비 비교 사양 조회 (`329f79b`): 장비마다 사양을 따로 조회하던 것을 한 번에 조회 (N+1 제거)
+- 유사 장비 검색 (`6f589b9`): 같은 시험유형 여부를 두 번 계산하던 서브쿼리를 `LATERAL` 조인 한 번으로
+- 정비 일정 목록 (`c943af1`): 달력 전체를 만든 뒤 기간만 쓰던 불필요한 조회 제거
+
+**바뀐 파일**: `auth/service/EmailVerificationService`, `auth/service/ExpiredAuthRecordCleanup`(새), `auth/repository/EmailVerificationRepository`, `user/service/UserAccountStatusCache`, `user/service/RefreshTokenService`, `user/repository/RefreshTokenRepository`, `equipment/service/EquipmentCompareService`, `equipment/service/EquipmentScheduleService`, `equipment/repository/EquipmentJdbcRepository`, 테스트 1개(`EmailVerificationLogCodeTest`)
 
 ---
 
