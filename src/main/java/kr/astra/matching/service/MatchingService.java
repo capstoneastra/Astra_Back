@@ -12,11 +12,12 @@ import kr.astra.matching.repository.*;
 import kr.astra.requirement.dto.RequirementSnapshot;
 import kr.astra.requirement.service.RequirementApplicationService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-@Service @RequiredArgsConstructor @Transactional(readOnly = true)
+@Slf4j @Service @RequiredArgsConstructor @Transactional(readOnly = true)
 public class MatchingService {
     public static final String DISCLAIMER = "최종 시험 가능 여부는 기관 검토로 확정됩니다.";
     private final RequirementApplicationService requirements;
@@ -43,13 +44,14 @@ public class MatchingService {
                         .thenComparing(c -> c.equipment.id()))
                 .limit(limit).toList();
         MatchRun run = new MatchRun(requirementId, user.userId(), snapshot);
-        Map<Long,String> descriptions = explanations.explain(candidates.stream().map(c ->
-                new kr.astra.llm.service.MatchExplanationService.Input(c.equipment.id(),c.evaluation.verdict(),c.evaluation.checks())).toList());
+        Map<Long,String> descriptions = explain(candidates);
         int rank = 1;
         for (Candidate c : candidates) {
             var e = c.evaluation;
+            String description = descriptions.get(c.equipment.id());
             String reason = e.checks().stream().map(check -> check.conditionKey() + ": " + check.result())
-                    .collect(java.util.stream.Collectors.joining(", ")) + ". " + descriptions.get(c.equipment.id()) + " " + DISCLAIMER;
+                    .collect(java.util.stream.Collectors.joining(", ")) + ". "
+                    + (description == null ? "" : description.replace(DISCLAIMER, "").strip() + " ") + DISCLAIMER;
             if (c.equipment.availabilityNeedsConfirmation()) reason += " 가용 상태는 기관 확인이 필요합니다.";
             run.getResults().add(new MatchResult(run, c.equipment.id(), rank++, e.score(), e.verdict(),
                     e.usedMockData() || c.equipment.isMock(), reason, e.checks()));
@@ -83,6 +85,21 @@ public class MatchingService {
         if (!kr.astra.requirement.service.RequirementSnapshots.same(r.getRun().getRequirementSnapshot(),requirements.snapshot(user,requirementId)))
             throw new BusinessException(ErrorCode.VERSION_CONFLICT,"매칭 후 시험조건이 변경되었습니다. 매칭을 다시 실행해 주세요.",null);
         return result(r, summary(r.getEquipmentId()));
+    }
+
+    /**
+     * AI 설명은 이미 확정된 규칙 판정을 풀어 쓰는 부가 정보라, 실패하면 설명 없이 규칙 결과만 응답합니다
+     * (Gemini 과부하·한도 초과로 매칭 전체가 502 가 되지 않게).
+     */
+    private Map<Long,String> explain(List<Candidate> candidates) {
+        try {
+            return explanations.explain(candidates.stream().map(c -> new kr.astra.llm.service.MatchExplanationService.Input(
+                    c.equipment.id(),c.evaluation.verdict(),c.evaluation.checks())).toList());
+        } catch (BusinessException e) {
+            if (e.getErrorCode() != ErrorCode.AI_UPSTREAM_ERROR) throw e;
+            log.warn("매칭 AI 설명 실패, 규칙 판정만 응답합니다: {}", e.getMessage());
+            return Map.of();
+        }
     }
 
     private int verdictOrder(MatchVerdict v) {

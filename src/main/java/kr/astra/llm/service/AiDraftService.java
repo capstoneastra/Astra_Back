@@ -16,9 +16,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionOperations;
 
 @Service @RequiredArgsConstructor
 public class AiDraftService {
+    /** 자동 추진(PipelineWorker) 초안 단계가 아직 쓰는 사유. POST /test-requests/ai-draft 는 getDraftReceipt 로 응답 */
     public static final String RECEIPT_PENDING = "BE-B 초안 저장 결과 조회 계약이 없어 DRAFT 및 AI revision을 확인할 수 없습니다.";
     private final RequirementApplicationService requirements;
     private final MatchingService matching;
@@ -28,6 +30,7 @@ public class AiDraftService {
     private final LlmClient llm;
     private final PromptLoader prompts;
     private final StructuredJson json;
+    private final TransactionOperations tx;
     public record Prepared(CreateDraftCommand command, List<String> aiNotes,
             kr.astra.requirement.dto.RequirementSnapshot snapshot) {}
 
@@ -69,7 +72,10 @@ public class AiDraftService {
                 "contactName",applicant.name(),"phone",applicant.phone(),"email",applicant.email()));
         content.put("test",fields("testTypeCode",snapshot.testTypeCode(),"purpose",snapshot.purpose()));
         content.put("sample",fields("name",snapshot.sampleName(),"quantity",snapshot.sampleQuantity()));
-        content.put("conditions",snapshot.conditions());
+        // 의뢰서 본문은 JSON 객체 계약(api-spec §5): 조건마다 key 를 가진 객체, 값이 없는 칸은 생략
+        content.put("conditions",snapshot.conditions().stream().map(c -> fields("key",c.key(),"label",c.label(),
+                "value",c.value(),"min",c.min(),"max",c.max(),"valueText",c.valueText(),"unit",c.unit(),
+                "status",c.status() == null ? null : c.status().name())).toList());
         content.put("schedule",Map.of()); // Dates and standard were not supplied; do not invent them.
         content.put("equipment",fields("id",selected.id(),"externalId",selected.externalId(),"name",selected.name()));
         content.put("notes",notes);
@@ -101,10 +107,18 @@ public class AiDraftService {
         return id;
     }
 
+    /**
+     * AI 호출(prepare)은 트랜잭션 밖에서 하고, 저장과 저장 결과 조회만 한 트랜잭션으로 묶습니다.
+     * 결과 조회가 실패하면 의뢰도 롤백되어 응답할 수 없는 고아 DRAFT 가 남지 않습니다.
+     */
     public AiDraftResponse createForApi(CurrentUser actor, AiDraftRequest input) {
-        validate(actor,input);
-        // Do not create an orphan draft and then fail the response: receipt support is a prerequisite.
-        throw new BusinessException(ErrorCode.INTERNAL_ERROR,RECEIPT_PENDING,Map.of("dependency","TestRequestService draft receipt"));
+        var prepared = prepare(actor,input);
+        return tx.execute(status -> {
+            Long id = create(actor,input,prepared);
+            var receipt = requests.getObject().getDraftReceipt(id);
+            return new AiDraftResponse(receipt.requestId(),receipt.requestNo(),receipt.status(),
+                    new AiDraftResponse.Revision(receipt.revisionNo(),receipt.aiGenerated(),receipt.content()),prepared.aiNotes());
+        });
     }
 
     private Map<String,Object> fields(Object... pairs) {

@@ -45,6 +45,26 @@ class MatchingServiceTest {
         assertThat(result.results()).allSatisfy(r -> { assertThat(r.usedMockData()).isTrue(); assertThat(r.checks()).hasSize(1); });
         verify(runs).saveAndFlush(argThat(r -> r.getRequirementSnapshot().equals(snapshot) && r.getAlgorithmVersion().equals("rule-v2")));
     }
+    @Test void aiExplanationFailureStillReturnsRuleResultsWithoutExplanation() {
+        // AI 설명은 부가 정보. 실패해도 규칙 판정 결과는 그대로 저장·응답 (시연 중 Gemini 503/429 대비)
+        when(equipment.findCandidates("TEST",null)).thenReturn(List.of(candidate(9L)));
+        when(equipment.getSpecs(anyLong())).thenReturn(List.of(new EquipmentSpecView("payload","하중",BigDecimal.TEN,null,null,null,"kg",SpecSourceType.REAL)));
+        when(explanations.explain(any())).thenThrow(new BusinessException(ErrorCode.AI_UPSTREAM_ERROR));
+        var result=service.run(user,7L,null,5);
+        assertThat(result.results()).singleElement().satisfies(r -> {
+            assertThat(r.verdict()).isEqualTo(MatchVerdict.SUITABLE);
+            assertThat(r.reason()).contains("mass: MET").contains(MatchingService.DISCLAIMER).doesNotContain("null");
+        });
+        verify(runs).saveAndFlush(any());
+    }
+    @Test void disclaimerAppearsOnceEvenWhenAiExplanationRepeatsIt() {
+        when(equipment.findCandidates("TEST",null)).thenReturn(List.of(candidate(9L)));
+        when(equipment.getSpecs(anyLong())).thenReturn(List.of(new EquipmentSpecView("payload","하중",BigDecimal.TEN,null,null,null,"kg",SpecSourceType.REAL)));
+        when(explanations.explain(any())).thenReturn(Map.of(9L,"질량 조건을 충족합니다. " + MatchingService.DISCLAIMER));
+        var reason=service.run(user,7L,null,5).results().get(0).reason();
+        assertThat(reason).contains("질량 조건을 충족합니다.");
+        assertThat(reason.split(java.util.regex.Pattern.quote(MatchingService.DISCLAIMER),-1)).hasSize(2);
+    }
     @Test void ownOrganizationEquipmentIsNotRecommended() {
         // 장비 보유 조직(기관 2) 소속 회원이 매칭하면 자기 조직 장비는 의뢰할 수 없으므로 후보에서 빠짐
         var member=new CurrentUser(1L,UserRole.INSTITUTION_MANAGER,2L);
