@@ -14,12 +14,60 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 | 통합 1차 | BE-C 병합 후 통합 점검, SSE 끊김 수정 | ✅ | PR #10 (2026-11-09) |
 | 추가 | 비교표 이용 조건(비용·기간), 정지 계정 즉시 차단, 기존 서비스(ZEUS)와의 차이 | ✅ | push 완료 (PR 대기) |
 | 6주차 | 배포, 통합 테스트, 시연 시나리오 확인 | 🔶 진행 중 | 배포는 VM 정해지면, BE-B 구현 대기 |
+| 7 | 기업·기관·대학 간 장비 공유로 확장 (교수님 피드백) + 가상 조직·시연 장비 268대 | ✅ | `test` 브랜치 push 완료 (PR 대기) |
 
-**지금 남은 것** (2026-11-09 기준)
+**지금 남은 것** (2026-11-17 기준, 7번 작업)
+- `test` → main PR. be-b(의뢰·검토·예약)·be-c(상담·매칭·AI) 코드도 고쳤으니 해당 담당자 리뷰 요청
+- Swagger 로 직접 호출 확인 (이번에는 자동 테스트만 함)
+- FE 공지: `orgType` 필드, `?box=SENT|RECEIVED`, `?view=REQUESTER|PROVIDER`(응답 형식은 `view`로 구분), 가입 폼 대학 선택, 역할로 숨기던 의뢰·장비 관리 메뉴 노출
+
+**이전에 남았던 것** (2026-11-09 기준, 갱신 안 함)
 - `feature/be-a` → main PR (커밋 3개: 비교표 이용 조건 · 즉시 차단 · 문서)
 - 공인시험(KOLAS)·운용 인력·보안 협의 정보 필드 설계 — 팀과 의논 후 진행 (DB 변경 시 V6)
 - 실제 VM 배포 (VM 정해지면), `POST /admin/equipment/import`(P2)
 - 다른 담당 대기: BE-B 의뢰·예약·알림 구현 (시연 10·11·13~16단계), BE-C 대화 → 시험조건 502·오류 로그 (아래 11-09 통합 점검 참고)
+
+---
+
+## 2026-11-17 · 7번: 기업·기관·대학 간 장비 공유로 확장 + 시연 데이터 교체
+
+**배경**: 교수님 피드백 — 기업 → 기관 한 방향이 아니라 기업 ↔ 기업, 기관 ↔ 기관, 대학 ↔ 기업처럼 누구나 장비를 빌려주고 빌리는 플랫폼으로 확장. 시연 데이터도 가상 조직 + 실제 판매 모델 장비로 교체
+
+**설계**: 조직 유형과 권한을 분리. 역할(`COMPANY_USER`/`INSTITUTION_MANAGER`)과 DB 컬럼명(`institution_id`)은 그대로 두고(JWT·FE·테스트 영향 최소화), **권한은 소속 조직으로만 판단**. 한 의뢰에서 누가 의뢰자이고 누가 보유 조직인지는 그 의뢰의 `requester_id`·`institution_id`로 정해짐
+
+**1. 대학 유형** (V7, `da79be1`)
+- `OrgType.UNIVERSITY` 추가. 대학은 기관과 같은 방식으로 가입·승인 (`organization.orgType`, 생략 시 INSTITUTION)
+- `GET /auth/institutions`, `/institutions`, `/institutions/{id}` 응답에 `orgType` 추가. 관리자 직접 등록도 대학 가능
+
+**2. 조직 소속 기준 권한 + 기업 장비 등록** (`18317e6`, `global/security` 변경 → 팀 공지 필요)
+- `CurrentUser.belongsTo()`에서 역할 조건 제거 → 같은 조직이면 통과
+- 기업도 자기 조직 장비 등록·수정·삭제. `GET /institutions`에 기업은 활성 장비 1대 이상일 때만 노출(없으면 상세 404)
+- 장비 갱신·의뢰 접수 알림 대상: 기관 담당자 역할 → 보유 조직의 활성 구성원 전원
+
+**3. 기관·대학도 의뢰** (`57a45b7`)
+- 의뢰·AI 상담·시험조건·자동 추진의 기업 전용 제한(11곳) 해제. 본인 데이터만 보는 규칙은 그대로
+- 자기 조직 보유 장비 의뢰 → 400 `VALIDATION_FAILED`(`details.field=equipmentId`), 매칭 추천에서도 제외
+
+**4. 보낸/받은 의뢰** (`0a5cd63`): `GET /test-requests?box=SENT|RECEIVED`. 안 보내면 INSTITUTION_MANAGER 는 RECEIVED, 그 외 SENT(기존 동작). 검토 담당자 자동 지정도 보유 조직 구성원 전체로
+
+**5. 대시보드 전환** (`607980f`): `GET /dashboard/summary?view=REQUESTER|PROVIDER`, 응답에 `view` 추가. FE 는 응답 형식을 `role`이 아니라 `view`로 구분해야 함
+
+**6. 시연 데이터 교체** (V8, `9836ee5`)
+- 기존 기관 9곳은 삭제하지 않고 **가상 이름으로 변경**(id 유지 → 기존 의뢰·계정 그대로). 대학 부설 2곳은 UNIVERSITY 로
+- 새 가상 조직 6곳(기관 1·대학 2·기업 3, 사천·창원·고흥), 시연 계정 `univ1@astra.demo`(대학)·`company2@astra.demo`(장비 보유 기업)
+- 새 장비 268대(`ASTRA-DEMO-xxxx`): 제조사·모델명·사양은 실제 판매 모델(서브 에이전트가 제조사·데이터시트로 확인, 출처 링크 포함), 보유 조직·요금·가동률·가용 상태는 가상 → 전부 `isMock=true`. 확인한 사양 REAL, 추정치 MOCK/DEMO_ONLY
+- 제외·조정: 주파수 사양이 없는 충격 시험기 4종 제외, 맞는 시험유형이 없는 질량특성 측정기·초음파 탐상기 6대는 SUPPORT
+- 기존 장비 71대도 `isMock=true`로 바꾸고 실제 기관 출처 링크 삭제 → `includeMock=false`는 회원이 직접 등록한 장비만
+- 생성: `docs/design/tools/gen_v8.py` + `equipment_catalog.json`. **V8 은 배포 후 다시 생성해서 덮어쓰면 안 됨**(Flyway 체크섬)
+
+**7. 조합 시나리오 테스트·시연 문서** (`d10e8b5`): 대학 ↔ 기업 의뢰를 시연 계정으로 끝까지, 자기 조직 추천 제외 단위 테스트, `demo-scenario.md` §1-1(S1~S6)
+
+**확인**
+- 테스트 228개 통과 (Testcontainers. 실행 중 Docker Desktop 이 꺼지면 통합 테스트가 전부 실패하니 주의)
+- seed 개수·기관 이름에 묶인 테스트 22개는 바뀔 수 있는 값을 DB 에서 세어 비교하도록 바꿈
+- Swagger·실제 서버 호출은 아직 안 함
+
+**바뀐 파일 (주요)**: `organization/`(OrgType·Organization·Service·DTO), `global/security/`(CurrentUser·AccessGuard), `auth/`, `admin/`, `equipment/service/EquipmentCommandService`, `user/`(UserService·Repository), `request/`(RequestBox 새 enum, Query·Command·Workflow·TestRequestServiceImpl·Controller), `review/`, `reservation/controller`, `matching/service/MatchingService`, `chat/`·`aipipeline/`·`requirement/`(역할 제한 해제), `dashboard/`(DashboardView 새 enum), 마이그레이션 V7·V8, 테스트 13개, `docs/api-spec.md`·`demo-scenario.md`·`design/schema.sql`·`erd.dbml`·`design/tools/`, `README.md`, 이 파일
 
 ---
 
