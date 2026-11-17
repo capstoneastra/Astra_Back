@@ -14,7 +14,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * organizations: 기업(COMPANY) · 시험기관(INSTITUTION) · 플랫폼 운영(ADMIN) 조직.
+ * organizations: 기업(COMPANY) · 시험기관(INSTITUTION) · 대학(UNIVERSITY) · 플랫폼 운영(ADMIN) 조직.
  * 같은 유형 안에서 이름이 겹칠 수 없음 (UNIQUE(org_type, name)).
  */
 @Getter
@@ -77,10 +77,11 @@ public class Organization extends BaseTimeEntity {
         return org;
     }
 
-    /** 미등록 기관 담당자 가입: 관리자 승인 전까지 is_verified=false */
-    public static Organization newInstitutionApplication(String name, String address, String phone) {
+    /** 미등록 기관·대학 담당자 가입: 관리자 승인 전까지 is_verified=false */
+    public static Organization newInstitutionApplication(OrgType orgType, String name, String address,
+                                                         String phone) {
         Organization org = new Organization();
-        org.orgType = OrgType.INSTITUTION;
+        org.orgType = requireInstitutionType(orgType);
         org.name = name;
         org.address = address;
         org.phone = phone;
@@ -99,11 +100,12 @@ public class Organization extends BaseTimeEntity {
         this.phone = phone;
     }
 
-    /** 관리자가 기관을 직접 등록 (바로 승인됨) */
-    public static Organization newInstitutionByAdmin(String name, String parentName, String region, String address,
-                                                     String phone, String email, String homepageUrl) {
+    /** 관리자가 기관·대학을 직접 등록 (바로 승인됨) */
+    public static Organization newInstitutionByAdmin(OrgType orgType, String name, String parentName, String region,
+                                                     String address, String phone, String email,
+                                                     String homepageUrl) {
         Organization org = new Organization();
-        org.orgType = OrgType.INSTITUTION;
+        org.orgType = requireInstitutionType(orgType);
         org.verified = true;
         org.name = name;
         org.parentName = parentName;
@@ -133,7 +135,20 @@ public class Organization extends BaseTimeEntity {
         this.verified = true;
     }
 
+    /** 시험기관 또는 대학 (가입 화면의 선택 목록에 나오는 조직) */
     public boolean isInstitution() {
-        return orgType == OrgType.INSTITUTION;
+        return orgType.isInstitutionType();
+    }
+
+    /** 장비를 보유할 수 있는 조직: 기업·시험기관·대학 */
+    public boolean canOwnEquipment() {
+        return orgType.canOwnEquipment();
+    }
+
+    private static OrgType requireInstitutionType(OrgType orgType) {
+        if (orgType == null || !orgType.isInstitutionType()) {
+            throw new IllegalArgumentException("기관 유형(INSTITUTION, UNIVERSITY)이 아닙니다: " + orgType);
+        }
+        return orgType;
     }
 }

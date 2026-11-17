@@ -2,7 +2,7 @@
 
 > 기준: REST + JSON, Base URL `/api/v1`, 인증 `Authorization: Bearer <accessToken>` (JWT)
 > DB 기준 문서: `schema.sql` / ERD: `erd.dbml`
-> 표기: 🔓 비로그인 허용(`/auth/**`만) · `로그인` 로그인한 모든 사용자 · 🏢 기업(COMPANY_USER) · 🏛 기관 담당자(INSTITUTION_MANAGER) · 👑 플랫폼 관리자(ADMIN)
+> 표기: 🔓 비로그인 허용(`/auth/**`만) · `로그인` 로그인한 모든 사용자 · 🏢 의뢰자(본인 상담·시험조건·의뢰의 주인. 기업·기관·대학 회원 모두 해당) · 🏛 장비 보유 조직 구성원(그 장비·의뢰의 `institution_id`가 내 소속 조직인 회원. 기업·기관·대학 모두 해당) · 👑 플랫폼 관리자(ADMIN)
 > 👑 관리자는 **마스터 권한**이라 모든 API를 호출할 수 있습니다. 그래서 표에는 관리자 전용 API에만 👑를 표시합니다.
 
 ---
@@ -56,11 +56,12 @@
 | 역할 | 범위 |
 |---|---|
 | 비로그인 | `/auth/**` (이메일 인증·가입·로그인·토큰 재발급·가입용 기관 목록)만 허용. 나머지는 전부 `401 AUTH_REQUIRED`. 프론트는 로그인 페이지 외 모든 라우트에서 로그인 페이지로 이동 |
-| 🏢 기업 | 장비·시험정보 조회, 본인 상담/시험조건/의뢰/시뮬레이션만 조회·수정 |
-| 🏛 기관 담당자 | 장비·시험정보 조회, **소속 기관 장비 등록·수정**, 소속 기관으로 들어온 의뢰 검토·보완요청·예약 확정 |
+| 🏢 의뢰자 | 장비·시험정보 조회, 본인 상담/시험조건/의뢰/시뮬레이션만 조회·수정. 기업·기관·대학 회원 누구나 의뢰자가 될 수 있음. 단, **자기 소속 조직이 보유한 장비에는 의뢰할 수 없음** (`400 VALIDATION_FAILED`, `details.field=equipmentId`) — 매칭 추천에서도 자기 조직 장비는 빠짐 |
+| 🏛 장비 보유 조직 구성원 | 장비·시험정보 조회, **소속 조직 장비 등록·수정**, 소속 조직 장비로 들어온 의뢰 검토·보완요청·예약 확정. 기업·기관·대학 어느 유형이든 소속 조직 기준으로 판단 (역할 `COMPANY_USER`/`INSTITUTION_MANAGER`는 가입 유형 표시) |
 | 👑 플랫폼 관리자 | **전체(마스터)**. 모든 조회·수정, 회원·기관 승인, 초기 데이터 적재. 관리자가 대신 처리한 상태 변경도 `request_status_history.changed_by`에 관리자 id로 남음 |
 
-- 소유권 체크: 기관 담당자는 `user.organization_id == equipment.institution_id` (의뢰는 `test_requests.institution_id`) 일 때만 수정 가능, 아니면 `403 FORBIDDEN`
+- 소유권 체크: `user.organization_id == equipment.institution_id` (의뢰는 `test_requests.institution_id`) 일 때만 수정 가능, 아니면 `403 FORBIDDEN`. 역할·조직 유형은 보지 않으므로 기업 회원도 자기 조직 장비를 등록·관리할 수 있음
+- `institution_id`·`/institutions` 라는 이름은 그대로지만 뜻은 "장비 보유 조직"(기업·기관·대학). `GET /institutions`에는 승인된 기관·대학 전부와, 활성 장비가 1대 이상인 기업이 나옴 (`orgType`으로 구분)
 - 상태가 `ACTIVE`가 아닌 계정(PENDING/REJECTED/SUSPENDED)은 로그인 시 `403 ACCOUNT_NOT_ACTIVE` (승인 대기 안내 화면)
 - 로그인한 뒤 관리자가 정지·거절하면 **이미 받은 access 토큰도 다음 요청부터** `403 ACCOUNT_NOT_ACTIVE` (서버가 요청마다 계정 상태 확인, 30초 캐시 + 상태 변경 시 즉시 반영). 계정이 없어진 토큰은 `401 AUTH_REQUIRED`. 가입·로그인 같은 공개 API 는 그대로 사용 가능
 - 관리자 계정은 회원가입으로 만들 수 없음. 서버 초기 세팅(seed/환경변수)으로만 생성
@@ -76,7 +77,7 @@
 | POST | `/auth/signup` | 🔓 | 회원가입 (기업 / 기관 담당자, 이메일 인증 필수) |
 | POST | `/auth/login` | 🔓 | 로그인 → access/refresh 토큰 |
 | POST | `/auth/refresh` | 🔓 | 토큰 재발급 |
-| GET | `/auth/institutions` | 🔓 | 가입용 기관 목록 (id·이름·지역만) |
+| GET | `/auth/institutions` | 🔓 | 가입용 기관·대학 목록 (id·유형·이름·지역만) |
 | POST | `/auth/logout` | 로그인 | refresh 토큰 폐기 |
 | GET | `/users/me` | 로그인 | 내 정보 + 소속 조직 |
 | PATCH | `/users/me` | 로그인 | 내 정보 수정 |
@@ -97,7 +98,7 @@
 - **사업자등록번호**: 숫자 10자리인지만 확인하고(하이픈 있어도 됨, `123-45-67890` 형식으로 저장) 진위 확인은 관리자가 승인할 때 합니다.
 - **같은 이름의 조직**: 이미 있으면 `409 ORGANIZATION_ALREADY_EXISTS`. 단, 미승인 조직이고 승인 대기·활성 회원이 없으면(거절된 신청만 남은 경우) 그 조직을 다시 쓰고 사업자번호·주소·연락처를 새 입력으로 바꿉니다.
 
-> 가입 화면에서 기관을 고르려면 로그인 전에 기관 목록이 필요합니다. 그래서 `GET /auth/institutions`를 `/auth` 아래에 두고 이름·지역만 반환합니다.
+> 가입 화면에서 기관을 고르려면 로그인 전에 기관 목록이 필요합니다. 그래서 `GET /auth/institutions`를 `/auth` 아래에 두고 유형·이름·지역만 반환합니다. 대학(`UNIVERSITY`)도 기관과 같은 방식으로 가입하므로 이 목록에 함께 나옵니다.
 
 ```json
 // ① POST /auth/email-verifications { "email": "a@company.com" } → 200
@@ -124,8 +125,14 @@
   "role": "INSTITUTION_MANAGER", "verificationToken": "...",
   "organization": { "name": "가상 신규 시험기관", "address": "경남 진주시 ...", "phone": "055-000-0000" } }
 // → 201 { "userId": 22, "status": "PENDING" }
+
+// POST /auth/signup (대학 담당자 - 미등록 대학 신청: organization.orgType 을 UNIVERSITY 로. 생략하면 INSTITUTION)
+{ "email": "park@univ.ac.kr", "password": "****", "name": "박담당", "phone": "055-000-0001",
+  "role": "INSTITUTION_MANAGER", "verificationToken": "...",
+  "organization": { "orgType": "UNIVERSITY", "name": "가상대학교 공동기기센터", "address": "경남 진주시 ...", "phone": "055-000-0001" } }
+// → 201 { "userId": 23, "status": "PENDING" }  (이미 승인된 대학은 기관처럼 organizationId 로 선택)
 // 실패: 400 EMAIL_NOT_VERIFIED (토큰 없음·만료·이미 사용·다른 이메일) / 409 EMAIL_ALREADY_EXISTS / 409 ORGANIZATION_ALREADY_EXISTS
-//       400 VALIDATION_FAILED (role=ADMIN, 사업자등록번호 형식 등)
+//       400 VALIDATION_FAILED (role=ADMIN, 사업자등록번호 형식, 기관 담당자 신청의 orgType 이 INSTITUTION·UNIVERSITY 가 아님 등)
 
 // POST /auth/login { "email": "a@company.com", "password": "****" } → 200
 { "accessToken": "eyJ...", "refreshToken": "eyJ...", "expiresIn": 3600,
@@ -138,13 +145,13 @@
 
 // POST /auth/logout { "refreshToken": "eyJ..." } → 200 { "success": true }
 
-// GET /auth/institutions → 200 (승인된 기관만, 가나다순)
-[ { "id": 5, "name": "경상국립대학교 첨단소재분석지원센터", "region": "진주" }, ... ]
+// GET /auth/institutions → 200 (승인된 기관·대학만, 가나다순. orgType 은 INSTITUTION | UNIVERSITY)
+[ { "id": 5, "orgType": "INSTITUTION", "name": "가온대학교 첨단소재분석센터", "region": "진주" }, ... ]
 
 // GET /users/me → 200 (organization 은 소속이 없으면 null)
 { "id": 3, "email": "manager1@astra.demo", "name": "김담당", "phone": "042-000-0001",
   "role": "INSTITUTION_MANAGER", "status": "ACTIVE",
-  "organization": { "id": 2, "orgType": "INSTITUTION", "name": "대전테크노파크 우주·양자산업센터", "region": "대전", "isVerified": true },
+  "organization": { "id": 2, "orgType": "INSTITUTION", "name": "미리내우주환경시험센터", "region": "대전", "isVerified": true },
   "lastLoginAt": "2026-11-07T17:03:04+09:00", "createdAt": "2026-11-07T17:02:51+09:00" }
 
 // PATCH /users/me { "name"?: "김담당", "phone"?: "042-000-0009" } → 200 (GET 과 같은 형식, 보낸 값만 수정)
@@ -170,7 +177,7 @@
 | GET | `/search` | 로그인 | 시험항목·자연어 통합 검색 `?q=15kg 시료 진동시험` | 3 |
 | GET | `/test-types` | 로그인 | 시험유형 목록 (15개, 표시 순서, 장비 수 포함) | 3 |
 | GET | `/test-types/{code}` | 로그인 | 시험 정보 안내: 가능 기관·예상비용·기간·이용조건 + 입력할 조건 목록(`conditionRules`) | 4 |
-| GET | `/institutions` | 로그인 | 기관 목록 (승인된 기관, 가나다순, 장비 수 포함) | |
+| GET | `/institutions` | 로그인 | 장비 보유 조직 목록 (승인된 기관·대학 + 장비가 있는 기업, 가나다순, 장비 수 포함) | |
 | GET | `/institutions/{id}` | 로그인 | 기관 상세 + 보유 장비 수·유형별 수·가능 시험유형 | |
 | GET | `/institutions/{id}/security` | 로그인 | 기관 보안시설·시료/데이터 반출·NDA 협의 안내 | |
 | PATCH | `/institutions/{id}/security` | 🏛(소유기관) 👑 | `hasSecureFacility`, `securityNote` 수정 | |
@@ -196,7 +203,7 @@
 ```json
 // GET /equipment?testType=VIBRATION → content[] 항목  (seed 실제 데이터 ASTRA-CAND-0048)
 { "id": 48, "externalId": "ASTRA-CAND-0048", "name": "진동시험기", "model": "EDS5000LS4-445",
-  "institution": { "id": 2, "name": "대전테크노파크 우주·양자산업센터" }, "region": "대전",
+  "institution": { "id": 2, "name": "미리내우주환경시험센터" }, "region": "대전",
   "equipmentType": "TEST", "testTypes": ["VIBRATION"],
   "availability": "UNKNOWN", "availabilityNeedsConfirmation": true, "utilizationRate": null, "feeText": null,
   "verificationStatus": "LISTING_CONFIRMED", "isMock": true, "infoUpdatedAt": "2026-11-07T11:52:01.241657+09:00" }
@@ -243,11 +250,11 @@
     { "conditionKey": "excitation_axis", "label": "가진 축",     "valueType": "TEXT",   "unit": null, "isRequired": false, "specKey": null,               "comparator": "NONE" },
     { "conditionKey": "accredited_required", "label": "공인성적서 필요 여부", "valueType": "TEXT", "unit": null, "isRequired": false, "specKey": null, "comparator": "NONE" } ],
   "institutions": [
-    { "id": 6, "name": "한국신뢰성기술센터", "region": "대전", "equipmentCount": 2,
+    { "id": 6, "name": "다온신뢰성시험센터", "region": "대전", "equipmentCount": 2,
       "estCostMin": null, "estCostMax": null, "estDurationDays": null, "accessScope": "UNKNOWN" },
-    { "id": 8, "name": "기술지원센터", "region": "원주", "equipmentCount": 1,
+    { "id": 8, "name": "마루기술지원센터", "region": "원주", "equipmentCount": 1,
       "estCostMin": null, "estCostMax": null, "estDurationDays": null, "accessScope": "UNKNOWN" },
-    { "id": 2, "name": "대전테크노파크 우주·양자산업센터", "region": "대전", "equipmentCount": 1,
+    { "id": 2, "name": "미리내우주환경시험센터", "region": "대전", "equipmentCount": 1,
       "estCostMin": null, "estCostMax": null, "estDurationDays": null, "accessScope": "UNKNOWN" } ] }
 // institutions: 장비 수 많은 순, 같으면 가나다순. 기관 장비가 여러 대면 estCostMin=최솟값, estCostMax=최댓값,
 //   estDurationDays=가장 짧은 값, accessScope=하나라도 외부 이용 가능이면 EXTERNAL_ALLOWED / 모두 내부 전용이면 INTERNAL_ONLY / 그 외 UNKNOWN
@@ -293,12 +300,12 @@
 [ { "code": "ACOUSTIC_NOISE", "nameKo": "음향·소음 시험", "description": null, "keywords": ["소음", "음향", "dB"], "equipmentCount": 1 },
   { "code": "BATTERY_TEST", "nameKo": "배터리 시험", "description": null, "keywords": ["배터리", "충방전", "전지"], "equipmentCount": 2 }, ... ]
 
-// GET /institutions → 승인된 기관 전체, 이름 가나다순 (페이지 없음)
-[ { "id": 5, "name": "경상국립대학교 첨단소재분석지원센터", "parentName": null, "region": "진주", "equipmentCount": 5 },
-  { "id": 8, "name": "기술지원센터", "parentName": null, "region": "원주", "equipmentCount": 1 }, ... ]
+// GET /institutions → 승인된 기관·대학 전체 + 장비가 있는 기업, 이름 가나다순 (페이지 없음). orgType 은 INSTITUTION | UNIVERSITY | COMPANY
+[ { "id": 5, "orgType": "INSTITUTION", "name": "가온대학교 첨단소재분석센터", "parentName": null, "region": "진주", "equipmentCount": 5 },
+  { "id": 8, "orgType": "INSTITUTION", "name": "마루기술지원센터", "parentName": null, "region": "원주", "equipmentCount": 1 }, ... ]
 
-// GET /institutions/2 → 없거나 미승인 기관이면 404 NOT_FOUND
-{ "id": 2, "name": "대전테크노파크 우주·양자산업센터", "parentName": null, "region": "대전",
+// GET /institutions/2 → 없거나 미승인이거나, 장비가 없는 기업이면 404 NOT_FOUND
+{ "id": 2, "orgType": "INSTITUTION", "name": "미리내우주환경시험센터", "parentName": null, "region": "대전",
   "address": null, "phone": null, "email": null, "homepageUrl": null,
   "equipmentCount": 13, "equipmentByType": { "MEASUREMENT": 11, "TEST": 2 },
   "testTypes": [ { "code": "ELECTRICAL_RF_ANALYSIS", "nameKo": "전기·RF 측정", "equipmentCount": 10 },
@@ -315,8 +322,8 @@
 
 | Method | URL | 권한 | 설명 |
 |---|---|---|---|
-| GET | `/institutions/me/equipment` | 🏛 | 우리 기관 장비 목록 (검증 상태, 마지막 갱신일, 갱신 필요 여부) |
-| POST | `/equipment` | 🏛 | 장비 등록. `institutionId`는 로그인 사용자 소속으로 서버가 채움 (관리자는 `institutionId` 필수) |
+| GET | `/institutions/me/equipment` | 로그인 | 우리 조직(기업·기관·대학) 장비 목록 (검증 상태, 마지막 갱신일, 갱신 필요 여부). 등록한 장비가 없으면 빈 목록 |
+| POST | `/equipment` | 로그인 | 장비 등록. 기업·기관·대학 모두 가능. `institutionId`는 로그인 사용자 소속 조직으로 서버가 채움 (관리자는 `institutionId` 필수) |
 | PATCH | `/equipment/{id}` | 🏛(소유기관) | 기본정보·이용조건·요금·가동률·가용상태 수정 (보낸 값만) → `INSTITUTION_VERIFIED`, `infoUpdatedAt` 갱신 |
 | PUT | `/equipment/{id}/specs` | 🏛(소유기관) | 실제 사양(REAL) 전체를 보낸 목록으로 교체 (빈 목록이면 REAL 삭제). MOCK 사양은 수정 불가 |
 | PUT | `/equipment/{id}/test-types` | 🏛(소유기관) | 가능 시험유형 + 예상 비용·소요기간 (기능 4 데이터) |
@@ -490,14 +497,14 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 { "id": 3, "requirementId": 7, "algorithmVersion": "rule-v2", "createdAt": "...",
   "results": [
     { "id": 31, "rank": 1, "score": 66.7, "verdict": "PARTIAL", "usedMockData": true,
-      "equipment": { "id": 48, "externalId": "ASTRA-CAND-0048", "name": "진동시험기", "institutionName": "대전테크노파크 우주·양자산업센터" },
+      "equipment": { "id": 48, "externalId": "ASTRA-CAND-0048", "name": "진동시험기", "institutionName": "미리내우주환경시험센터" },
       "reason": "주파수 범위와 시료 질량 조건을 충족합니다. 고정구 질량이 아직 정해지지 않아 기관 확인이 필요합니다.",
       "checks": [
         { "conditionKey": "frequency", "requiredText": "20~2000 Hz", "equipmentText": "10~3000 Hz", "result": "MET" },
         { "conditionKey": "sample_mass", "requiredText": "15 kg", "equipmentText": "최대 40 kg", "result": "MET" },
         { "conditionKey": "fixture_mass", "requiredText": "미정", "equipmentText": "최대 15 kg", "result": "UNKNOWN" } ] },
     { "id": 32, "rank": 2, "score": 33.3, "verdict": "UNSUITABLE", "usedMockData": true,
-      "equipment": { "id": 44, "externalId": "ASTRA-CAND-0044", "name": "진동시험기1", "institutionName": "한국신뢰성기술센터" },
+      "equipment": { "id": 44, "externalId": "ASTRA-CAND-0044", "name": "진동시험기1", "institutionName": "다온신뢰성시험센터" },
       "reason": "시료 질량은 충족하지만 요구 주파수 상한(2000 Hz)이 장비 범위(1800 Hz)를 넘습니다.",
       "checks": [
         { "conditionKey": "frequency", "requiredText": "20~2000 Hz", "equipmentText": "5~1800 Hz", "result": "NOT_MET" },
@@ -512,9 +519,9 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 
 | Method | URL | 권한 | 설명 | 기능 |
 |---|---|---|---|---|
-| POST | `/test-requests` | 🏢 | 의뢰 생성(DRAFT) `{ equipmentId, requirementId?, matchResultId? }` | 9 |
+| POST | `/test-requests` | 🏢 | 의뢰 생성(DRAFT) `{ equipmentId, requirementId?, matchResultId? }`. 소속 조직 보유 장비면 `400 VALIDATION_FAILED` | 9 |
 | POST | `/test-requests/ai-draft` | 🏢 | AI 의뢰서 초안 생성 → DRAFT + revision(isAiGenerated) | 8 |
-| GET | `/test-requests` | 🏢 🏛 | 목록 — 기업: 내 의뢰 / 기관: 우리 기관 접수함. `?status=UNDER_REVIEW` | 9 |
+| GET | `/test-requests` | 🏢 🏛 | 목록 — `?box=SENT` 내가 보낸 의뢰 / `?box=RECEIVED` 우리 조직 장비로 들어온 의뢰(제출된 것만). `box`를 안 보내면 `INSTITUTION_MANAGER`는 RECEIVED, 그 외는 SENT (관리자는 전체). `?status=UNDER_REVIEW` | 9 |
 | GET | `/test-requests/{id}` | 🏢 🏛 | 상세 (현재 상태, 최신 revision, 열린 보완요청, 예약) | 9 |
 | PUT | `/test-requests/{id}/draft` | 🏢 | 작업본 revision 내용 저장 (DRAFT 또는 SUPPLEMENT_REQUESTED) | 8 |
 | POST | `/test-requests/{id}/submit` | 🏢 | 제출 (DRAFT→SUBMITTED) | 9 |
@@ -592,7 +599,7 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 | Method | URL | 권한 | 설명 |
 |---|---|---|---|
 | POST | `/test-requests/{id}/reservations` | 🏢 🏛 | 일정 제안 `{ startAt, endAt, note }` (SCHEDULING 상태에서) |
-| GET | `/test-requests/{id}/reservations` | 🏢 🏛 | 이 의뢰의 일정 제안·확정 목록 (최신순, `proposedBySide`: COMPANY/INSTITUTION) |
+| GET | `/test-requests/{id}/reservations` | 🏢 🏛 | 이 의뢰의 일정 제안·확정 목록 (최신순, `proposedBySide`: COMPANY=의뢰자 / INSTITUTION=장비 보유 조직. 조직 유형이 아니라 이 의뢰에서의 입장) |
 | POST | `/reservations/{id}/counter` | 🏢 🏛 | 대안 일정 제안 (→COUNTER_PROPOSED) |
 | POST | `/reservations/{id}/confirm` | 🏛 | 예약 확정 → 의뢰 CONFIRMED |
 | POST | `/reservations/{id}/cancel` | 🏢 🏛 | 예약 취소 |
@@ -674,7 +681,7 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 
 | Method | URL | 권한 | 설명 |
 |---|---|---|---|
-| GET | `/dashboard/summary` | 로그인 | 역할별 요약 (아래) |
+| GET | `/dashboard/summary` | 로그인 | 요약 (아래). `?view=REQUESTER` 의뢰자 화면 / `?view=PROVIDER` 장비 보유 조직 화면. 안 보내면 `INSTITUTION_MANAGER`는 PROVIDER, `COMPANY_USER`는 REQUESTER. 관리자는 항상 관리자 요약 |
 | GET | `/dashboard/equipment-stats` | 로그인 | 지역/유형별 장비 수, 기관별 보유 현황 |
 | GET | `/notifications` | 로그인 | 알림 목록 `?unreadOnly=true` |
 | GET | `/notifications/unread-count` | 로그인 | 헤더 배지용 |
@@ -684,41 +691,43 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 > 의뢰·예약 칸은 BE-B 의 `RequestDashboardQuery`, 최근 상담은 BE-C 의 `ChatSessionQuery` 구현이 있을 때만 채워집니다.
 > 구현 전에는 0·빈 목록이고 `dataAvailable` 이 `false` → 프론트는 그 칸을 "준비 중"으로 표시합니다. 목록 칸은 최대 5개.
 
+> 응답 형식은 `role`이 아니라 `view`로 구분합니다. 기업 회원도 `?view=PROVIDER`로 자기 조직이 받은 의뢰를, 기관·대학 회원도 `?view=REQUESTER`로 자기가 보낸 의뢰를 볼 수 있습니다.
+
 ```json
-// GET /dashboard/summary (COMPANY_USER)
-{ "role": "COMPANY_USER",
+// GET /dashboard/summary?view=REQUESTER (의뢰자 화면. COMPANY_USER 의 기본값)
+{ "role": "COMPANY_USER", "view": "REQUESTER",
   "requestCounts": { "DRAFT": 1, "SUBMITTED": 0, "UNDER_REVIEW": 2, "SUPPLEMENT_REQUESTED": 1, "RESUBMITTED": 0,
                      "SCHEDULING": 0, "CONFIRMED": 3, "COMPLETED": 0, "REJECTED": 0, "CANCELED": 0 },  // 10개 상태 항상 포함
   "actionRequired": [ { "requestId": 15, "requestNo": "REQ-20261105-0001", "title": "위성 전장품 진동시험",
                         "status": "SUPPLEMENT_REQUESTED", "dueDate": "2026-11-12", "submittedAt": "..." } ],
   "recentChats": [ { "id": 5, "title": "위성 부품 진동시험", "updatedAt": "..." } ],
-  "equipmentStats": { "total": 71, "byRegion": { "경남": 1, "광주": 1, "대전": 32, "원주": 1, "진주": 36 } },
+  "equipmentStats": { "total": 339, "byRegion": { "경남": 1, "고흥": 40, "광주": 1, "대전": 32, "사천": 154, "원주": 1, "진주": 36, "창원": 74 } },
   "dataAvailable": { "requests": true, "chats": true } }
 
-// GET /dashboard/summary (INSTITUTION_MANAGER, manager1 — seed 실제 값)
-{ "role": "INSTITUTION_MANAGER",
-  "institution": { "id": 2, "name": "대전테크노파크 우주·양자산업센터" },
+// GET /dashboard/summary?view=PROVIDER (장비 보유 조직 화면. INSTITUTION_MANAGER 의 기본값, manager1 — seed 실제 값)
+{ "role": "INSTITUTION_MANAGER", "view": "PROVIDER",
+  "institution": { "id": 2, "name": "미리내우주환경시험센터" },
   "requestCounts": { ... 10개 상태 ... },                       // 우리 기관 접수함
   "pendingReview": [ /* actionRequired 와 같은 형식 (SUBMITTED·RESUBMITTED) */ ],
   "upcomingReservations": [ { "reservationId": 4, "requestId": 15, "requestNo": "REQ-20261105-0001", "equipmentId": 48,
                               "equipmentName": "진동시험기", "startAt": "2026-11-20T09:00:00+09:00", "endAt": "..." } ],
   "equipmentNeedsUpdate": { "total": 13, "notConfirmed": 13, "outdated": 0 },  // 기관 확인 전 / 마지막 갱신 90일 경과
-  "equipmentStats": { "total": 71, "byRegion": { ... } },
+  "equipmentStats": { "total": 339, "byRegion": { ... } },
   "dataAvailable": { "requests": false } }
 
 // GET /dashboard/summary (ADMIN)
-{ "role": "ADMIN", "pendingUsers": 1, "pendingInstitutions": 0,
+{ "role": "ADMIN", "view": "ADMIN", "pendingUsers": 1, "pendingInstitutions": 0,
   "requestCounts": { ... 10개 상태 (전체) ... },
   "institutionVerification": [ /* equipment-stats 의 institutions 와 같은 형식 */ ],
-  "equipmentStats": { "total": 71, "byRegion": { ... } },
+  "equipmentStats": { "total": 339, "byRegion": { ... } },
   "dataAvailable": { "requests": false } }
 
 // GET /dashboard/equipment-stats → 활성 장비 기준 (seed 실제 값)
-{ "total": 71,
+{ "total": 339,
   "byRegion": { "경남": 1, "광주": 1, "대전": 32, "원주": 1, "진주": 36 },               // 가나다순
   "byEquipmentType": { "MEASUREMENT": .., "MANUFACTURING": .., "TEST": .., "SOFTWARE": .., "SUPPORT": .. },
   "byTestType": [ { "code": "ACOUSTIC_NOISE", "nameKo": "음향·소음 시험", "equipmentCount": 1 }, ... ],  // 15개, 표시 순서
-  "institutions": [ { "id": 1, "name": "한국생산기술연구원 진주뿌리기술지원센터", "region": "진주",
+  "institutions": [ { "id": 1, "name": "한빛뿌리기술지원센터", "region": "진주",
                       "equipmentCount": 31, "verifiedCount": 0, "verificationRate": 0.0 }, ... ] }  // 장비 수 많은 순
 ```
 
@@ -764,7 +773,7 @@ UNDER_REVIEW ──reject──▶ REJECTED        (DRAFT~SCHEDULING 에서 기�
 | POST | `/admin/users/{id}/reject` | 👑 | 가입 거절 `{ reason }` (→REJECTED) |
 | PATCH | `/admin/users/{id}/status` | 👑 | 정지·해제 `{ "status": "SUSPENDED" }` / `{ "status": "ACTIVE" }` |
 | GET | `/admin/organizations` | 👑 | 조직 목록 `?orgType=INSTITUTION&verified=false&page=0&size=20&sort=createdAt,desc` |
-| POST | `/admin/organizations` | 👑 | 기관 직접 등록 |
+| POST | `/admin/organizations` | 👑 | 기관·대학 직접 등록 |
 | POST | `/admin/organizations/{id}/verify` | 👑 | 신규 기관 신청 승인 |
 | PATCH | `/admin/organizations/{id}` | 👑 | 기관 정보 수정 |
 | POST | `/admin/equipment/{id}/transfer` | 👑 | 장비 소속 기관 변경 (잘못 수집된 경우) |
@@ -774,7 +783,7 @@ UNDER_REVIEW ──reject──▶ REJECTED        (DRAFT~SCHEDULING 에서 기�
 { "content": [
     { "id": 5, "email": "pending@astra.demo", "name": "이대기", "phone": "055-000-0003",
       "role": "INSTITUTION_MANAGER", "status": "PENDING",
-      "organization": { "id": 4, "orgType": "INSTITUTION", "name": "한국재료연구원", "businessRegNo": null,
+      "organization": { "id": 4, "orgType": "INSTITUTION", "name": "가람재료시험연구원", "businessRegNo": null,
                         "region": "경남", "address": null, "phone": null, "isVerified": true },
       "rejectReason": null, "approvedAt": null, "lastLoginAt": null, "createdAt": "2026-11-07T17:02:51+09:00" } ],
   "page": 0, "size": 20, "totalElements": 1, "totalPages": 1 }
@@ -794,6 +803,7 @@ UNDER_REVIEW ──reject──▶ REJECTED        (DRAFT~SCHEDULING 에서 기�
                  "isVerified": false, "createdAt": "2026-11-08T10:00:00+09:00" } ], ... }
 
 // POST /admin/organizations { "name": "가상 시험센터", "region": "진주", "phone": "055-000-0009" } → 201 (위 항목 형식, 시험기관으로 바로 승인)
+// POST /admin/organizations { "orgType": "UNIVERSITY", "name": "가상대학교 공동기기센터" } → 201 (대학으로 바로 승인. orgType 생략 시 INSTITUTION, 그 외 유형은 400)
 // POST /admin/organizations/15/verify → 200 (isVerified=true, 이미 승인됐어도 200)
 // PATCH /admin/organizations/15 { "homepageUrl": "https://..." } → 200 (보낸 값만)
 // 실패: 404 NOT_FOUND / 409 ORGANIZATION_ALREADY_EXISTS (같은 유형에 같은 이름)

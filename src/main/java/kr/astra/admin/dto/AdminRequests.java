@@ -4,6 +4,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import kr.astra.organization.entity.OrgType;
 import kr.astra.user.entity.UserStatus;
 
 /** 관리자 API 요청 본문 (api-spec §12) */
@@ -16,8 +17,9 @@ public final class AdminRequests {
     public record ChangeStatusRequest(@NotNull UserStatus status) {
     }
 
-    /** POST /admin/organizations: 기관 직접 등록 (바로 승인됨) */
+    /** POST /admin/organizations: 기관·대학 직접 등록 (바로 승인됨). orgType 은 INSTITUTION(기본값) 또는 UNIVERSITY */
     public record CreateOrganizationRequest(
+            OrgType orgType,
             @NotBlank @Size(max = 200) String name,
             @Size(max = 200) String parentName,
             @Size(max = 50) String region,

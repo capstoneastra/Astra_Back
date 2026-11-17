@@ -117,10 +117,10 @@ public class UserService {
         return userRepository.countByStatus(status);
     }
 
-    /** 기관의 활성 기관 담당자 id (장비 갱신 알림 받는 사람) */
+    /** 장비 보유 조직(기업·기관·대학)의 활성 구성원 id (장비 갱신·의뢰 접수 알림 받는 사람) */
     public List<Long> findActiveManagerIds(Long institutionId) {
-        return userRepository.findAllByOrganizationIdAndRoleAndStatus(institutionId, UserRole.INSTITUTION_MANAGER,
-                UserStatus.ACTIVE).stream().map(User::getId).toList();
+        return userRepository.findAllByOrganizationIdAndStatus(institutionId, UserStatus.ACTIVE).stream()
+                .map(User::getId).toList();
     }
 
     /** 가입 승인 요청 알림을 받을 관리자 id (ACTIVE 관리자 전원) */

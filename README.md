@@ -33,7 +33,9 @@
 - **의뢰 과정에서 정보와 상태가 엇갈린다.** 접수 → 보완 요청 → 재제출 → 일정 확정을 거치는 동안 누가 무엇을 고쳤는지 추적하기 어렵습니다.
 
 ### ASTRA가 하는 일
-지역 시험장비를 한곳에 모으고, **AI 상담으로 시험 조건을 정리 → 조건에 맞는 장비를 근거와 함께 비교 → 의뢰서 초안 작성 → 기관 검토·보완·예약**까지 하나의 흐름으로 잇습니다.
+지역 시험장비를 한곳에 모으고, **AI 상담으로 시험 조건을 정리 → 조건에 맞는 장비를 근거와 함께 비교 → 의뢰서 초안 작성 → 장비 보유 조직의 검토·보완·예약**까지 하나의 흐름으로 잇습니다.
+
+**기업·시험기관·대학 누구나 장비를 빌려주고 빌릴 수 있습니다.** 기업 ↔ 기관에 그치지 않고 기업 ↔ 기업, 기관 ↔ 기관, 대학 ↔ 기업처럼 어느 조합이든 한 플랫폼에서 의뢰가 오갑니다. 한 조직이 어떤 의뢰에서는 의뢰자, 다른 의뢰에서는 장비 보유 조직이 됩니다.
 
 ### 기존 서비스와의 차이
 
@@ -43,7 +45,7 @@
 
 | | ZEUS AI 검색 (보도 기준) | ASTRA |
 |---|---|---|
-| 대상 | 국가 R&D 예산으로 구축된 연구시설·장비 | 우주항공 시험장비. 테크노파크·연구원·대학 센터의 공개자료로 모은 장비 (현재 9개 기관, 71대) |
+| 대상 | 국가 R&D 예산으로 구축된 연구시설·장비 | 우주항공 시험·생산 장비. 기업·시험기관·대학이 서로 빌려주고 빌림 (시연 데이터: 가상 조직 16곳, 장비 339대) |
 | 찾는 방식 | 연구 목적 입력 → 가까운 이용 가능 장비 추천 | 시험 조건(시료 질량, 주파수 범위 등)을 정리하고, 시험유형별 규칙으로 장비 사양과 **조건마다 충족·미충족·미확인을 판정** |
 | 결과에 담기는 것 | 추천 장비와 예약 | 조건별 근거 표(요구 20~2000Hz vs 장비 5~1800Hz → 미충족), 사양·요금·기간 비교표, 시연 데이터(MOCK)·기관 확인 여부 표시 |
 | 이후 흐름 | 장비 예약 | 의뢰서 초안 → 제출 → 기관 기술 검토·보완 요청 → 재제출(제출본 이력 분리) → 일정 확정 |
@@ -53,19 +55,28 @@
 
 ### 사용자
 
-| 역할 | 하는 일 |
+조직은 **기업**(`COMPANY`) · **시험기관**(`INSTITUTION`) · **대학**(`UNIVERSITY`) 세 유형이고, 어느 유형이든 아래 두 입장을 모두 가질 수 있습니다.
+
+| 입장 | 하는 일 |
 |---|---|
-| **기업** (`COMPANY_USER`) | AI 상담으로 조건 정리, 장비 검색·비교, 시험 의뢰, 보완 자료 제출 |
-| **기관 담당자** (`INSTITUTION_MANAGER`) | 소속 기관 장비 정보 등록·갱신, 들어온 의뢰 검토, 보완 요청, 예약 확정 |
-| **플랫폼 관리자** (`ADMIN`) | 전체 권한(마스터), 회원·기관 승인, 초기 데이터 관리 |
+| **의뢰자** | AI 상담으로 조건 정리, 장비 검색·비교, 다른 조직 장비에 시험 의뢰, 보완 자료 제출 |
+| **장비 보유 조직 구성원** | 소속 조직 장비 정보 등록·갱신, 들어온 의뢰 검토, 보완 요청, 예약 확정 |
+| **플랫폼 관리자** (`ADMIN`) | 전체 권한(마스터), 회원·조직 승인, 초기 데이터 관리 |
+
+- 권한은 역할이 아니라 **소속 조직**으로 판단합니다. 장비·받은 의뢰는 `user.organization_id == equipment.institution_id`인 회원만 다룹니다.
+- 역할 `COMPANY_USER`(기업 가입) / `INSTITUTION_MANAGER`(기관·대학 가입)는 가입 유형과 기본 화면만 정합니다.
+- **자기 조직이 보유한 장비에는 의뢰할 수 없고**, 매칭 추천에서도 빠집니다.
+- 의뢰 목록은 `?box=SENT|RECEIVED`, 대시보드는 `?view=REQUESTER|PROVIDER`로 두 입장을 오갑니다.
 
 로그인하지 않은 사용자는 회원가입·로그인 외에는 아무것도 볼 수 없습니다. (JWT 로그인 적용, [시연 계정](#시연-계정) 참고)
 
-회원가입은 **이메일 인증(6자리 코드) → 가입 신청(승인 대기) → 플랫폼 관리자 승인** 순서입니다. 기업은 회사명·사업자등록번호, 기관 담당자는 소속 기관(목록 선택 또는 신규 입력)을 함께 입력합니다.
+회원가입은 **이메일 인증(6자리 코드) → 가입 신청(승인 대기) → 플랫폼 관리자 승인** 순서입니다. 기업은 회사명·사업자등록번호, 기관·대학 담당자는 소속 기관·대학(목록 선택 또는 신규 입력, `orgType`으로 기관/대학 구분)을 함께 입력합니다.
 
 ### 데이터 현황
-- 공개자료로 수집한 **9개 기관, 장비 71대**를 초기 데이터로 넣습니다.
-- 장비 상세 사양은 대부분 공개되어 있지 않아 **시연용 가상 사양(MOCK)** 을 쓰고, 화면에 "시연용 데이터"로 표시합니다. 실제 사양은 기관 담당자가 등록하면 그 값을 우선 사용합니다.
+- 초기 데이터는 **전부 시연용**(`isMock=true`)입니다. 조직 16곳(기관 8·대학 4·기업 4)은 모두 가상 이름이고, 장비는 339대입니다.
+  - V2 장비 71대: 공개자료로 모은 장비. 소속 기관 이름은 V8 에서 가상 이름으로 바꿨고 원래 출처 링크는 지웠습니다.
+  - V8 장비 268대: 열진공·진동·EMC·만능시험기·CT·CMM 등 **실제 판매 모델**(제조사·모델명·사양은 제조사 공개자료 기준). 보유 조직·요금·가동률·가용 상태는 가상입니다. 원본은 [`docs/design/tools/equipment_catalog.json`](docs/design/tools/equipment_catalog.json)(출처 링크 포함).
+- 공개자료에서 확인한 사양은 `REAL`, 추정치는 `MOCK`(`DEMO_ONLY`)으로 나눠 저장하고, 화면에 "시연용 데이터"로 표시합니다. 회원이 직접 등록한 장비·사양은 실제 데이터로 우선 사용합니다.
 
 ---
 
@@ -73,14 +84,14 @@
 
 ```mermaid
 flowchart LR
-    subgraph COMPANY["기업"]
+    subgraph COMPANY["의뢰자 (기업·기관·대학)"]
         A["AI 상담<br/>시험 목적·조건 입력"] --> B["조건 정리<br/>확인 / 미확인 / 누락 구분"]
         B --> C["장비 매칭·비교<br/>조건별 충족 여부와 근거"]
         C --> D["의뢰서 초안<br/>AI 작성 → 사용자 수정·승인"]
         D --> E["의뢰 제출"]
         G["정보 보완<br/>재제출"]
     end
-    subgraph INSTITUTION["시험기관"]
+    subgraph INSTITUTION["장비 보유 조직 (기업·기관·대학)"]
         F["기술 검토"]
         H["일정 협의·예약 확정"]
     end
@@ -102,7 +113,7 @@ flowchart LR
 | **매칭은 규칙으로, 설명은 AI로** | 조건-사양 비교는 `test_condition_rules`의 규칙(범위 포함, 최대값 이하 등)으로 코드가 판정. LLM은 문장에서 조건을 뽑고 추천 이유를 설명하는 데만 사용 → 결과가 매번 같고 근거를 보여줄 수 있음 |
 | **모르는 건 모른다고 표시한다** | 조건마다 `CONFIRMED / UNCONFIRMED / MISSING`, 매칭 결과마다 `MET / NOT_MET / UNKNOWN` |
 | **누가 무엇을 바꿨는지 남긴다** | 의뢰의 현재 상태(`test_requests`)와 제출본 이력(`test_request_revisions`)을 분리하고, 상태 변경은 모두 `request_status_history`에 기록 |
-| **장비 정보의 주인은 기관이다** | 초기 데이터는 공개자료로 넣고 "기관 미확인"으로 표시. 이후 등록·갱신은 기관 담당자가 직접 하고, 확인하면 `INSTITUTION_VERIFIED` |
+| **장비 정보의 주인은 보유 조직이다** | 초기 데이터는 "보유 조직 미확인"으로 표시. 이후 등록·갱신은 그 장비를 가진 조직(기업·기관·대학)의 구성원이 직접 하고, 확인하면 `INSTITUTION_VERIFIED` |
 | **시연 데이터는 시연 데이터라고 말한다** | 가상 사양은 `source_type = MOCK`, 가상 시뮬레이션은 결과마다 DEMO 경고. 실제 장비 성능처럼 표시하지 않음 |
 | **중요한 규칙은 DB가 지킨다** | 같은 장비의 확정 예약 시간 겹침 금지, 의뢰당 확정 예약 1개, 의뢰당 답변 대기 보완 요청 1개를 DB 제약조건으로 강제 (동시에 요청해도 하나만 성공) |
 
@@ -221,7 +232,7 @@ erDiagram
 erDiagram
     organizations {
         bigint id PK
-        varchar org_type "COMPANY / INSTITUTION / ADMIN"
+        varchar org_type "COMPANY / INSTITUTION / UNIVERSITY / ADMIN"
         varchar name
         varchar parent_name
         varchar business_reg_no
@@ -733,20 +744,20 @@ erDiagram
 stateDiagram-v2
     direction LR
     [*] --> DRAFT
-    DRAFT --> SUBMITTED : 제출 (기업)
-    SUBMITTED --> UNDER_REVIEW : 검토 시작 (기관)
-    UNDER_REVIEW --> SUPPLEMENT_REQUESTED : 보완 요청 (기관)
-    SUPPLEMENT_REQUESTED --> RESUBMITTED : 보완 제출 (기업)
-    RESUBMITTED --> UNDER_REVIEW : 검토 시작 (기관)
-    UNDER_REVIEW --> SCHEDULING : 검토 통과 (기관)
-    UNDER_REVIEW --> REJECTED : 반려 (기관)
-    SCHEDULING --> CONFIRMED : 예약 확정 (기관)
-    CONFIRMED --> COMPLETED : 시험 완료 (기관)
+    DRAFT --> SUBMITTED : 제출 (의뢰자)
+    SUBMITTED --> UNDER_REVIEW : 검토 시작 (보유 조직)
+    UNDER_REVIEW --> SUPPLEMENT_REQUESTED : 보완 요청 (보유 조직)
+    SUPPLEMENT_REQUESTED --> RESUBMITTED : 보완 제출 (의뢰자)
+    RESUBMITTED --> UNDER_REVIEW : 검토 시작 (보유 조직)
+    UNDER_REVIEW --> SCHEDULING : 검토 통과 (보유 조직)
+    UNDER_REVIEW --> REJECTED : 반려 (보유 조직)
+    SCHEDULING --> CONFIRMED : 예약 확정 (보유 조직)
+    CONFIRMED --> COMPLETED : 시험 완료 (보유 조직)
     REJECTED --> [*]
     COMPLETED --> [*]
 ```
 
-`DRAFT`부터 `SCHEDULING`까지는 기업이 언제든 취소(`CANCELED`)할 수 있습니다. 상태 변경은 모두 상태 갱신 + 이력 저장 + 상대방 알림을 한 트랜잭션으로 처리합니다.
+`DRAFT`부터 `SCHEDULING`까지는 의뢰자가 언제든 취소(`CANCELED`)할 수 있습니다. 의뢰자·보유 조직은 조직 유형이 아니라 그 의뢰에서의 입장입니다 (기업이 보유 조직, 대학이 의뢰자일 수도 있음). 상태 변경은 모두 상태 갱신 + 이력 저장 + 상대방 알림을 한 트랜잭션으로 처리합니다.
 
 ---
 
@@ -776,7 +787,7 @@ cp .env.example .env        # 필요한 값 채우기 (DB 는 기본값 그대�
 ./gradlew bootRun           # Windows: gradlew.bat bootRun
 ```
 
-- `bootRun`을 하면 `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고, Flyway가 `V1__init.sql`(테이블), `V2__seed.sql`(초기 데이터), `V3__demo_accounts.sql`(시연 계정), `V4__email_verifications.sql`(가입 이메일 인증), `V5__fill_institution_region.sql`(지역이 비어 있던 기관·장비 31대에 '진주' 채움), `V6__equipment_integrity_and_availability.sql`(사양 사전·기준 단위·가용성·정비·공인·운용·보안)을 적용합니다.
+- `bootRun`을 하면 `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고, Flyway가 `V1__init.sql`(테이블), `V2__seed.sql`(초기 데이터), `V3__demo_accounts.sql`(시연 계정), `V4__email_verifications.sql`(가입 이메일 인증), `V5__fill_institution_region.sql`(지역이 비어 있던 기관·장비 31대에 '진주' 채움), `V6__equipment_integrity_and_availability.sql`(사양 사전·기준 단위·가용성·정비·공인·운용·보안), `V7__university_org_type.sql`(조직 유형에 대학 추가), `V8__mock_organizations_and_equipment.sql`(가상 조직·시연 장비 268대·시연 계정 2개)을 적용합니다.
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - 헬스체크: http://localhost:8080/actuator/health
 - IntelliJ: **Project SDK와 Gradle JVM을 모두 21**로 맞춘 뒤 `AstraApplication`을 실행합니다.
@@ -810,9 +821,13 @@ docker compose -f compose.prod.yaml down              # 중지 (DB 데이터 유
 |---|---|---|---|
 | `admin@astra.demo` | ADMIN | ASTRA 플랫폼 운영 | ACTIVE |
 | `company@astra.demo` | COMPANY_USER | 가상 A기업 | ACTIVE |
-| `manager1@astra.demo` | INSTITUTION_MANAGER | 대전테크노파크 우주·양자산업센터 | ACTIVE |
-| `manager2@astra.demo` | INSTITUTION_MANAGER | 한국신뢰성기술센터 | ACTIVE |
-| `pending@astra.demo` | INSTITUTION_MANAGER | 한국재료연구원 | PENDING (로그인 시 403, 승인 시연용) |
+| `company2@astra.demo` | COMPANY_USER | 미르항공정밀 (장비 44대 보유 기업) | ACTIVE |
+| `manager1@astra.demo` | INSTITUTION_MANAGER | 미리내우주환경시험센터 (기관, 장비 48 보유) | ACTIVE |
+| `manager2@astra.demo` | INSTITUTION_MANAGER | 다온신뢰성시험센터 (기관) | ACTIVE |
+| `univ1@astra.demo` | INSTITUTION_MANAGER | 늘해랑대학교 항공우주공동기기원 (대학, 장비 55대) | ACTIVE |
+| `pending@astra.demo` | INSTITUTION_MANAGER | 가람재료시험연구원 (기관) | PENDING (로그인 시 403, 승인 시연용) |
+
+조직 이름은 모두 가상입니다. `company`(장비 없이 의뢰만 하는 기업)와 `company2`·`univ1`로 기업 ↔ 대학 ↔ 기관 사이의 의뢰를 시연할 수 있습니다.
 
 Swagger에서 호출하기: `POST /api/v1/auth/login`으로 로그인 → 응답의 `accessToken`을 복사 → 오른쪽 위 **Authorize**에 붙여넣기.
 
@@ -826,21 +841,21 @@ Testcontainers가 테스트 전용 PostgreSQL 16을 띄워 실제 DB로 검증�
 
 | 테스트 | 확인하는 것 |
 |---|---|
-| `DatabaseSchemaTest` | 마이그레이션 적용, 초기 데이터 개수, 조건 규칙의 사양 키 존재, 중복 예약 방지, 의뢰당 확정 예약 1개, 의뢰당 답변 대기 보완 요청 1개 |
+| `DatabaseSchemaTest` | 마이그레이션 적용, 초기 데이터 개수(조직 유형별·V2/V8 장비·시연 데이터 표시), 조건 규칙의 사양 키 존재, 중복 예약 방지, 의뢰당 확정 예약 1개, 의뢰당 답변 대기 보완 요청 1개 |
 | `ApiConventionTest` | 공통 실패 응답 형식, Swagger·헬스체크 접근 |
 | `SecurityRequireLoginTest` | 비로그인 `401 AUTH_REQUIRED`, 만료 토큰 `401 TOKEN_EXPIRED`, 위조·refresh 토큰 거부, 로그아웃은 로그인 필요 |
 | `AuthFlowTest` | 이메일 인증(코드 틀림·만료·재발송 제한·토큰 1회 사용) → 가입(모두 PENDING·관리자 불가·사업자번호 형식) → 승인 → 로그인 → 내 정보 → 재발급(쓴 토큰 폐기) → 로그아웃, 시연 계정 seed |
 | `EquipmentApiTest` | 장비 목록·검색(q·지역·기관·유형·외부이용·MOCK 필터, 정렬)·상세(REAL 먼저), 유사·중복·비교, 시험유형 목록·시험 정보 안내, 기관 목록·상세, BE-C용 `EquipmentQueryService` (seed 실제 값으로 검증) |
 | `AdminUserApprovalTest` | 관리자 회원 목록(필터·정렬·페이지), 승인(조직도 승인)·거절(로그인 시 사유 표시)·정지/해제(재발급 차단), 상태 오류 409, 권한 403·404 |
-| `EquipmentManageTest` | 기관 장비 등록(ASTRA-EQ 외부 id)·수정·REAL 사양 교체(MOCK 유지)·시험유형·확인·비활성화·변경 이력, 갱신 필요 표시, 소유 기관 403, 관리자 소속 변경 |
+| `EquipmentManageTest` | 장비 등록(ASTRA-EQ 외부 id)·수정·REAL 사양 교체(MOCK 유지)·시험유형·확인·비활성화·변경 이력, 갱신 필요 표시, 다른 조직 403, 관리자 소속 변경, **기업의 장비 등록·관리와 기관 목록 노출** |
 | `AdminUserApprovalTest` (추가) | 정지하면 이미 받은 access 토큰도 다음 요청부터 403, 해제하면 바로 통과, 계정 없는 토큰 401 |
 | `SseAsyncDispatchTest` | 로그인이 필요한 SSE(스트리밍) 응답이 끝까지 전달되는지 (비동기 재요청을 보안 설정이 막지 않는지), 비로그인 SSE 는 401 |
 | `CorsTest`, `CorsConfigTest` | 프론트 주소 사전 요청(preflight) 허용·다른 주소 거절, 401 응답에도 CORS 헤더, `CORS_ALLOWED_ORIGINS` 해석(쉼표·패턴·빈 값이면 기본 주소) |
 | `DemoScenarioTest` | 시연 시나리오(위성 전장품 15kg, 20~2000Hz 진동시험) 중 BE-A 단계를 순서대로: 가입 → 승인 → 검색 → 상세·비교 → 기관 장비 확인 → 대시보드 |
-| `DashboardSearchApiTest` | 대시보드 장비 통계·역할별 요약(의뢰 0건일 때 0·빈 목록, BE-B 연결 여부 `dataAvailable`), 시연 문장 자연어 검색 해석(진동시험·15kg·20~2000Hz)·지역 필터 |
-| `AdminOrganizationTest` | 관리자 조직 목록(필터·정렬)·기관 직접 등록·승인·수정, 이름 중복 409, 권한 403 |
-| `AccessGuardTest` | 권한 체크 유틸: ADMIN 마스터, 기관은 소속 기관만, 기업은 본인 데이터만 |
-| `RequestWorkflowTest` | 시연 11~16단계 (BE-B): 의뢰 생성·작업본 저장(version 충돌 409)·제출 → 기관 접수함·대시보드 → 검토·보완 요청(중복 409) → 보완 제출(필수 항목 누락 400, 제출본 2번·diff) → 통과 → 일정 제안·확정(중복 확정·시간 겹침 409, 맞닿는 시간 허용) → 상태 이력·완료, 취소 시 제안 정리, 알림 읽음, SIM-0048 가상 시뮬레이션 |
+| `DashboardSearchApiTest` | 대시보드 장비 통계·요약(의뢰 0건일 때 0·빈 목록, BE-B 연결 여부 `dataAvailable`, `view=REQUESTER\|PROVIDER` 전환), 시연 문장 자연어 검색 해석(진동시험·15kg·20~2000Hz)·지역 필터 |
+| `AdminOrganizationTest` | 관리자 조직 목록(필터·정렬)·기관·대학 직접 등록·승인·수정, 이름 중복 409, 권한 403 |
+| `AccessGuardTest` | 권한 체크 유틸: ADMIN 마스터, 장비·받은 의뢰는 소속 조직만(역할 무관), 개인 데이터는 본인만 |
+| `RequestWorkflowTest` | 시연 11~16단계 (BE-B): 의뢰 생성·작업본 저장(version 충돌 409)·제출 → 기관 접수함·대시보드 → 검토·보완 요청(중복 409) → 보완 제출(필수 항목 누락 400, 제출본 2번·diff) → 통과 → 일정 제안·확정(중복 확정·시간 겹침 409, 맞닿는 시간 허용) → 상태 이력·완료, 취소 시 제안 정리, 알림 읽음, SIM-0048 가상 시뮬레이션. **조직 간 공유**: 기관 → 기업 장비, 대학 ↔ 기업 의뢰를 끝까지, 보낸/받은 의뢰 구분, 자기 조직 장비 의뢰 차단 |
 
 ---
 
@@ -873,11 +888,11 @@ src/main/java/kr/astra/
 @GetMapping("/test-requests/{id}")
 public ApiResponse<RequestDetail> detail(@AuthenticationPrincipal CurrentUser user, @PathVariable Long id) {
     TestRequest r = ...;
-    AccessGuard.requireOwnerOrInstitution(user, r.getRequesterId(), r.getInstitutionId()); // 의뢰자 또는 해당 기관 담당자
+    AccessGuard.requireOwnerOrInstitution(user, r.getRequesterId(), r.getInstitutionId()); // 의뢰자 또는 장비 보유 조직 구성원
     ...
 }
-// AccessGuard.requireInstitution(user, equipment.getInstitutionId())  기관 담당자는 소속 기관만
-// AccessGuard.requireOwner(user, session.getUserId())                 기업 본인 데이터만
+// AccessGuard.requireInstitution(user, equipment.getInstitutionId())  장비 보유 조직 구성원만 (기업·기관·대학, 역할 무관)
+// AccessGuard.requireOwner(user, session.getUserId())                 본인 데이터만
 // @PreAuthorize("hasRole('INSTITUTION_MANAGER')")                     역할만 확인 (ADMIN 자동 통과)
 ```
 
@@ -892,6 +907,7 @@ public ApiResponse<RequestDetail> detail(@AuthenticationPrincipal CurrentUser us
 - ✅ 시험 의뢰 상태머신(상태 전이표 §11, 상태 갱신·이력·알림 한 트랜잭션)·작성·제출·취소·제출본 이력/diff, 기관 검토·보완 요청·보완 제출·통과·반려·완료, 예약 제안·대안·확정·취소(중복 예약 이중 방어)·장비 달력, 알림, 가상 시뮬레이션(계산형 9종·규칙형 4종, DEMO 경고) (BE-B). `TestRequestService`·`NotificationService`·`RequestDashboardQuery` 구현 → 대시보드 의뢰 칸·가입 승인 알림·장비 갱신 알림 동작. 첨부파일(P2)은 저장소 결정 후
 - ✅ CORS 설정 (프론트 주소는 `CORS_ALLOWED_ORIGINS`, 기본 `http://localhost:5173`) (BE-A)
 - ✅ Dockerfile·운영용 compose(`compose.prod.yaml`)·운영 설정, 시연 시나리오 점검표(`docs/demo-scenario.md`) (BE-A). 로컬에서 운영 구성 실행 확인
+- ✅ 기업·기관·대학 간 장비 공유로 확장: 대학 유형, 조직 소속 기준 권한, 기업 장비 등록, 기관·대학의 의뢰, 자기 조직 장비 의뢰 차단, 보낸/받은 의뢰·의뢰자/보유 조직 대시보드 전환, 가상 조직·실제 모델 시연 장비 268대 (V7·V8)
 - ⏳ 배포(VM), 통합 테스트(BE-B·BE-C 단계 연결) (6주차)
 
 ---
@@ -925,3 +941,4 @@ public ApiResponse<RequestDetail> detail(@AuthenticationPrincipal CurrentUser us
 | [`docs/backend-hardening-handoff.md`](docs/backend-hardening-handoff.md) | 보완 전 수치, V6 변경 계약, 팀 공지 필요 사항과 검증 결과 |
 | [`docs/design/erd.dbml`](docs/design/erd.dbml) | ERD (dbdiagram.io에 붙여넣기) |
 | [`docs/design/seed.sql`](docs/design/seed.sql) | 초기 데이터 (`docs/design/tools/json_to_seed.py`로 생성) |
+| [`docs/design/tools/equipment_catalog.json`](docs/design/tools/equipment_catalog.json) | V8 시연 장비 원본 (실제 모델·사양·출처). `gen_v8.py`로 V8 SQL 생성 |

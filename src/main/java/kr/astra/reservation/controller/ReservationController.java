@@ -55,7 +55,7 @@ public class ReservationController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(reservationService.counter(user, id, request)));
     }
 
-    @Operation(summary = "예약 확정", description = "기관 담당자. 의뢰 SCHEDULING → CONFIRMED, 의뢰자에게 알림. "
+    @Operation(summary = "예약 확정", description = "장비 보유 조직 구성원. 의뢰 SCHEDULING → CONFIRMED, 의뢰자에게 알림. "
             + "이미 확정된 의뢰면 409 RESERVATION_ALREADY_CONFIRMED")
     @PostMapping("/reservations/{id}/confirm")
     public ApiResponse<ReservationResult> confirm(@AuthenticationPrincipal CurrentUser user, @PathVariable Long id,

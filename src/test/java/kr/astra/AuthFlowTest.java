@@ -241,7 +241,7 @@ class AuthFlowTest {
     @Test
     void 기관_담당자는_승인_전까지_PENDING_이고_로그인하면_403() throws Exception {
         String email = uniqueEmail();
-        Res signup = api.signupInstitutionManager(email, "\"organizationId\": " + institutionId("한국재료연구원"));
+        Res signup = api.signupInstitutionManager(email, "\"organizationId\": " + institutionId("가람재료시험연구원"));
         assertThat(signup.status()).isEqualTo(201);
         assertThat(signup.data().path("status").asString()).isEqualTo("PENDING");
 
@@ -268,6 +268,45 @@ class AuthFlowTest {
     }
 
     @Test
+    void 대학으로_신청하면_UNIVERSITY_조직이_생기고_승인_후_가입용_목록에_나온다() throws Exception {
+        String orgName = "테스트 신규 대학 " + UUID.randomUUID();
+        String email = uniqueEmail();
+        Res signup = api.signupInstitutionManager(email, """
+                "organization": { "orgType": "UNIVERSITY", "name": "%s", "address": "경남 진주시",
+                                  "phone": "055-000-0001" }
+                """.formatted(orgName));
+        assertThat(signup.status()).isEqualTo(201);
+        assertThat(jdbc.queryForObject(
+                "SELECT is_verified FROM organizations WHERE org_type = 'UNIVERSITY' AND name = ?",
+                Boolean.class, orgName)).isFalse();
+        assertThat(api.get("/api/v1/auth/institutions", null).data().toString()).doesNotContain(orgName);
+
+        long userId = signup.data().path("userId").asLong();
+        assertThat(api.post("/api/v1/admin/users/" + userId + "/approve", null, adminToken()).status())
+                .isEqualTo(200);
+        JsonNode listed = null;
+        for (JsonNode n : api.get("/api/v1/auth/institutions", null).data()) {
+            if (orgName.equals(n.path("name").asString())) {
+                listed = n;
+            }
+        }
+        assertThat(listed).isNotNull();
+        assertThat(listed.path("orgType").asString()).isEqualTo("UNIVERSITY");
+
+        Res me = api.get("/api/v1/users/me", api.login(email).data().path("accessToken").asString());
+        assertThat(me.data().path("organization").path("orgType").asString()).isEqualTo("UNIVERSITY");
+    }
+
+    @Test
+    void 기관_담당자_신청에_기업_유형은_쓸_수_없다() throws Exception {
+        Res res = api.signupInstitutionManager(uniqueEmail(), """
+                "organization": { "orgType": "COMPANY", "name": "테스트 유형 오류 %s" }
+                """.formatted(UUID.randomUUID()));
+        assertThat(res.code()).isEqualTo("VALIDATION_FAILED");
+        assertThat(res.details().path("fields").get(0).path("field").asString()).isEqualTo("organization.orgType");
+    }
+
+    @Test
     void 승인되지_않은_기관이나_기업_조직은_선택할_수_없다() throws Exception {
         long companyOrgId = jdbc.queryForObject(
                 "SELECT id FROM organizations WHERE org_type = 'COMPANY' AND name = '가상 A기업'", Long.class);
@@ -277,32 +316,36 @@ class AuthFlowTest {
     }
 
     @Test
-    void 가입용_기관_목록은_로그인_없이_id_이름_지역만_준다() throws Exception {
+    void 가입용_기관_목록은_로그인_없이_id_유형_이름_지역만_준다() throws Exception {
         Res res = api.get("/api/v1/auth/institutions", null);
         assertThat(res.status()).isEqualTo(200);
         JsonNode first = res.data().get(0);
-        assertThat(first.propertyNames()).containsExactlyInAnyOrder("id", "name", "region");
+        assertThat(first.propertyNames()).containsExactlyInAnyOrder("id", "orgType", "name", "region");
         assertThat(res.data().size()).isGreaterThanOrEqualTo(9);
-        // 가나다순: 경상국립대학교 … 한국재료연구원
+        // 가나다순: 가람재료시험연구원 … 한빛뿌리기술지원센터 (기관·대학)
         List<String> names = new ArrayList<>();
         res.data().forEach(n -> names.add(n.path("name").asString()));
         assertThat(names).isSortedAccordingTo(Collator.getInstance(Locale.KOREAN));
-        assertThat(names.getFirst()).isEqualTo("경상국립대학교 첨단소재분석지원센터");
+        assertThat(names.getFirst()).isEqualTo("가람재료시험연구원");
+        assertThat(names).contains("가온대학교 첨단소재분석센터", "늘해랑대학교 항공우주공동기기원")
+                .doesNotContain("미르항공정밀"); // 기업은 가입용 기관 목록에 없음
     }
 
     // ------------------------------------------------------------ V3 시연 계정
 
     @Test
     void 시연_계정과_기관_승인이_seed_로_들어간다() {
-        // V2 로 들어간 기관(장비 보유 기관)은 모두 승인 상태
+        // 장비를 가진 조직(V2 기관, V8 기관·대학·기업)은 모두 승인 상태
         assertThat(jdbc.queryForObject("SELECT count(*) FROM organizations o WHERE NOT o.is_verified "
                 + "AND EXISTS (SELECT 1 FROM equipment e WHERE e.institution_id = o.id)", Long.class)).isZero();
         assertThat(jdbc.queryForList(
                 "SELECT role || ':' || status FROM users WHERE email LIKE '%@astra.demo' ORDER BY email", String.class))
-                .containsExactly("ADMIN:ACTIVE", "COMPANY_USER:ACTIVE", "INSTITUTION_MANAGER:ACTIVE",
-                        "INSTITUTION_MANAGER:ACTIVE", "INSTITUTION_MANAGER:PENDING");
+                // admin, company, company2(V8 장비 보유 기업), manager1, manager2, pending, univ1(V8 대학)
+                .containsExactly("ADMIN:ACTIVE", "COMPANY_USER:ACTIVE", "COMPANY_USER:ACTIVE",
+                        "INSTITUTION_MANAGER:ACTIVE", "INSTITUTION_MANAGER:ACTIVE", "INSTITUTION_MANAGER:PENDING",
+                        "INSTITUTION_MANAGER:ACTIVE");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM users WHERE email LIKE '%@astra.demo' "
-                + "AND password_hash LIKE '$2a$10$%'", Long.class)).isEqualTo(5);
+                + "AND password_hash LIKE '$2a$10$%'", Long.class)).isEqualTo(7);
     }
 
     // ------------------------------------------------------------ helpers

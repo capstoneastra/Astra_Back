@@ -46,9 +46,14 @@ public final class DashboardResponses {
 
     // ------------------------------------------------------------ GET /dashboard/summary
 
-    /** 역할별 요약 공통: 모든 응답에 role 이 들어감 */
+    /**
+     * 요약 공통: 모든 응답에 role(로그인한 회원의 역할)과 view(이 응답의 화면 종류)가 들어감.
+     * 응답 형식은 role 이 아니라 view 로 구분합니다 (REQUESTER → CompanySummary, PROVIDER → InstitutionSummary).
+     */
     public sealed interface Summary permits CompanySummary, InstitutionSummary, AdminSummary {
         UserRole role();
+
+        DashboardView view();
     }
 
     /** 전체 장비 요약 (모든 역할 공통) */
@@ -60,16 +65,18 @@ public final class DashboardResponses {
     public record DataAvailable(boolean requests, Boolean chats) {
     }
 
-    /** COMPANY_USER: 내 의뢰 상태별 수, 처리할 의뢰, 최근 상담, 장비 요약 */
-    public record CompanySummary(UserRole role, Map<RequestStatus, Long> requestCounts,
+    /** 의뢰자 화면(view=REQUESTER): 내가 보낸 의뢰 상태별 수, 처리할 의뢰, 최근 상담, 장비 요약 */
+    public record CompanySummary(UserRole role, DashboardView view, Map<RequestStatus, Long> requestCounts,
                                  List<RequestActionItem> actionRequired, List<ChatSessionSummary> recentChats,
                                  EquipmentOverview equipmentStats, DataAvailable dataAvailable) implements Summary {
     }
 
     /**
-     * INSTITUTION_MANAGER: 우리 기관 접수함 상태별 수, 검토 대기, 다가오는 예약, 갱신 필요 장비 수, 장비 요약
+     * 장비 보유 조직 화면(view=PROVIDER): 우리 조직이 받은 의뢰 상태별 수, 검토 대기, 다가오는 예약,
+     * 갱신 필요 장비 수, 장비 요약. institution 은 로그인한 회원의 소속 조직(기업·기관·대학)
      */
-    public record InstitutionSummary(UserRole role, InstitutionRef institution, Map<RequestStatus, Long> requestCounts,
+    public record InstitutionSummary(UserRole role, DashboardView view, InstitutionRef institution,
+                                     Map<RequestStatus, Long> requestCounts,
                                      List<RequestActionItem> pendingReview,
                                      List<UpcomingReservationItem> upcomingReservations,
                                      NeedsUpdate equipmentNeedsUpdate, EquipmentOverview equipmentStats,
@@ -84,7 +91,7 @@ public final class DashboardResponses {
     }
 
     /** ADMIN: 승인 대기 회원·기관 수, 전체 의뢰 상태별 수, 기관별 장비 확인 비율, 장비 요약 */
-    public record AdminSummary(UserRole role, long pendingUsers, long pendingInstitutions,
+    public record AdminSummary(UserRole role, DashboardView view, long pendingUsers, long pendingInstitutions,
                                Map<RequestStatus, Long> requestCounts, List<InstitutionStat> institutionVerification,
                                EquipmentOverview equipmentStats, DataAvailable dataAvailable) implements Summary {
     }

@@ -28,7 +28,7 @@ class DatabaseSchemaTest {
     JdbcTemplate jdbc;
 
     long equipmentId;       // ASTRA-CAND-0048 진동시험기
-    long institutionId;     // 대전테크노파크 우주·양자산업센터
+    long institutionId;     // 미리내우주환경시험센터
     long companyUserId;
 
     @BeforeAll
@@ -43,17 +43,22 @@ class DatabaseSchemaTest {
                 """, Long.class, companyId);
     }
 
-    // ------------------------------------------------------------ 초기 데이터 (V2__seed.sql)
+    // ------------------------------------------------------------ 초기 데이터 (V2__seed.sql + V8 시연 장비)
 
     @Test
     void 초기_데이터가_모두_들어간다() {
-        assertThat(count("organizations WHERE org_type = 'INSTITUTION'")).isEqualTo(9);
-        assertThat(count("equipment")).isEqualTo(71);
-        assertThat(count("equipment_specs")).isEqualTo(117);
+        // V2 기관 9곳 중 대학 부설 2곳은 V8 에서 UNIVERSITY 로 바뀌고, V8 이 기관 1·대학 2·기업 3 을 추가
+        assertThat(count("organizations WHERE org_type = 'INSTITUTION'")).isEqualTo(8);
+        assertThat(count("organizations WHERE org_type = 'UNIVERSITY'")).isEqualTo(4);
+        assertThat(count("organizations WHERE org_type = 'COMPANY'")).isGreaterThanOrEqualTo(4);
+        assertThat(count("equipment WHERE external_id LIKE 'ASTRA-CAND-%'")).isEqualTo(71);
+        assertThat(count("equipment WHERE external_id LIKE 'ASTRA-DEMO-%'")).isEqualTo(268);
+        assertThat(count("equipment WHERE external_id LIKE 'ASTRA-DEMO-%' AND NOT is_mock")).isZero();
+        assertThat(count("equipment_specs")).isEqualTo(838);
         assertThat(count("test_types")).isEqualTo(15);
         assertThat(count("test_condition_rules")).isEqualTo(47); // 15개 유형에 선택 공인 요구 조건 추가
         assertThat(count("spec_definitions")).isEqualTo(29);
-        assertThat(count("equipment_test_types")).isEqualTo(48);
+        assertThat(count("equipment_test_types")).isEqualTo(320);
         assertThat(count("simulation_models")).isEqualTo(20);
         assertThat(count("simulation_presets")).isEqualTo(71);
     }
@@ -86,13 +91,13 @@ class DatabaseSchemaTest {
         assertThat(count("equipment e WHERE is_active AND equipment_type IN ('TEST','MEASUREMENT') "
                 + "AND NOT EXISTS (SELECT 1 FROM equipment_test_types t WHERE t.equipment_id=e.id)")).isZero();
         assertThat(count("equipment e WHERE is_active AND NOT EXISTS "
-                + "(SELECT 1 FROM equipment_test_types t WHERE t.equipment_id=e.id)")).isEqualTo(25);
+                + "(SELECT 1 FROM equipment_test_types t WHERE t.equipment_id=e.id)")).isEqualTo(50);
     }
 
     @Test
     void 사양은_사전과_기준단위를_따르고_잘못된_키와_값을_DB에서_거부한다() {
         assertThat(count("equipment_specs s JOIN spec_definitions d USING (spec_key) WHERE s.unit IS DISTINCT FROM d.base_unit")).isZero();
-        assertThat(count("equipment_specs WHERE spec_key='frequency' AND unit='Hz'")).isEqualTo(16);
+        assertThat(count("equipment_specs WHERE spec_key='frequency' AND unit='Hz'")).isEqualTo(95);
         for (String sql : List.of(
                 "UPDATE equipment_specs SET spec_key='invented' WHERE equipment_id=" + equipmentId,
                 "UPDATE equipment_specs SET min_num=20,max_num=10 WHERE equipment_id=" + equipmentId + " AND spec_key='frequency'",

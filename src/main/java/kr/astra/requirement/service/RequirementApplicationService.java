@@ -8,7 +8,6 @@ import kr.astra.requirement.entity.*;
 import kr.astra.requirement.repository.RequirementRepository;
 import kr.astra.testtype.dto.ConditionRuleResponse;
 import kr.astra.testtype.service.TestTypeService;
-import kr.astra.user.entity.UserRole;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -24,13 +23,13 @@ public class RequirementApplicationService implements RequirementService {
 
     @Transactional
     public RequirementResponse create(CurrentUser user, RequirementInput input) {
-        AccessGuard.requireRole(user, UserRole.COMPANY_USER);
+        AccessGuard.requireLogin(user);
         return createForSession(user, user.userId(), null, input);
     }
 
     @Transactional
     public RequirementResponse createExtracted(CurrentUser user, RequirementInput input) {
-        AccessGuard.requireRole(user, UserRole.COMPANY_USER);
+        AccessGuard.requireLogin(user);
         TestRequirement r = new TestRequirement(user.userId(), null, input);
         replace(r, input.conditions(), rules(input.testTypeCode()), ConditionSource.AI_EXTRACTED);
         return response(repository.saveAndFlush(r));
@@ -39,7 +38,7 @@ public class RequirementApplicationService implements RequirementService {
     /** Called by the chat service after locking and authorizing the session. */
     @Transactional
     public RequirementResponse createForSession(CurrentUser actor, Long ownerId, Long sessionId, RequirementInput input) {
-        AccessGuard.requireRole(actor, UserRole.COMPANY_USER);
+        AccessGuard.requireLogin(actor);
         AccessGuard.requireOwner(actor, ownerId);
         List<ConditionRuleResponse> rules = rules(input.testTypeCode());
         TestRequirement requirement = new TestRequirement(ownerId, sessionId, input);
@@ -51,7 +50,7 @@ public class RequirementApplicationService implements RequirementService {
     public RequirementResponse get(CurrentUser user, Long id) { return response(owned(user, id, false)); }
 
     public Optional<RequirementResponse> forSession(CurrentUser user, Long sessionId) {
-        AccessGuard.requireRole(user, UserRole.COMPANY_USER);
+        AccessGuard.requireLogin(user);
         return repository.findFirstByChatSessionIdOrderByIdDesc(sessionId).map(r -> {
             AccessGuard.requireOwner(user, r.getUserId());
             return response(r);
@@ -163,7 +162,7 @@ public class RequirementApplicationService implements RequirementService {
     }
 
     private TestRequirement owned(CurrentUser user, Long id, boolean lock) {
-        AccessGuard.requireRole(user, UserRole.COMPANY_USER);
+        AccessGuard.requireLogin(user);
         TestRequirement r = (lock ? repository.lockById(id) : repository.findById(id))
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         AccessGuard.requireOwner(user, r.getUserId());

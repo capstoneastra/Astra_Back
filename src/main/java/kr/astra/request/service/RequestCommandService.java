@@ -24,13 +24,12 @@ import kr.astra.request.entity.TestRequestRevision;
 import kr.astra.requirement.dto.RequirementSnapshot;
 import kr.astra.requirement.service.RequirementApplicationService;
 import kr.astra.user.dto.UserMeResponse;
-import kr.astra.user.entity.UserRole;
 import kr.astra.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 기업 쪽 의뢰 작성·제출·취소 (api-spec §5) */
+/** 의뢰자 쪽 의뢰 작성·제출·취소 (api-spec §5). 기업·기관·대학 회원 모두 의뢰자가 될 수 있습니다 */
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -49,7 +48,7 @@ public class RequestCommandService {
      * matchResultId 는 그 시험조건의 매칭 결과 중 이 장비 행이어야 합니다 (BE-C 검증 재사용).
      */
     public Long create(CurrentUser actor, RequestInputs.Create input) {
-        AccessGuard.requireRole(actor, UserRole.COMPANY_USER);
+        AccessGuard.requireLogin(actor);
         if (input.matchResultId() != null && input.requirementId() == null) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED, "matchResultId 를 보내려면 requirementId 도 필요합니다.",
                     Map.of("field", "requirementId"));
@@ -91,7 +90,7 @@ public class RequestCommandService {
                 content.read(working.getContent()));
     }
 
-    /** POST /test-requests/{id}/submit — DRAFT → SUBMITTED, 1번 제출본 고정, 기관 담당자 전원에게 알림 */
+    /** POST /test-requests/{id}/submit — DRAFT → SUBMITTED, 1번 제출본 고정, 장비 보유 조직 구성원 전원에게 알림 */
     public ActionResult submit(CurrentUser actor, Long requestId, Integer version) {
         TestRequest request = workflow.begin(requestId, RequestAction.SUBMIT, actor, version);
         TestRequestRevision revision = workflow.currentRevision(request);

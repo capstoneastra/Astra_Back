@@ -48,7 +48,7 @@ public class AuthService {
     }
 
     /**
-     * 회원가입. 이메일 인증 토큰을 한 번 사용하고, 기업·기관 담당자 모두 PENDING 으로 만든 뒤
+     * 회원가입. 이메일 인증 토큰을 한 번 사용하고, 기업·기관·대학 담당자 모두 PENDING 으로 만든 뒤
      * 관리자 전원에게 USER_APPROVAL_REQUESTED 알림 (알림 구현이 있을 때만).
      */
     @Transactional
@@ -79,6 +79,9 @@ public class AuthService {
         if (org == null) {
             throw invalidField("organization", "회사명과 사업자번호를 입력해 주세요.");
         }
+        if (org.orgType() != null && org.orgType() != OrgType.COMPANY) {
+            throw invalidField("organization.orgType", "기업 회원은 기업(COMPANY) 조직으로만 가입할 수 있습니다.");
+        }
         if (!StringUtils.hasText(org.businessRegNo())) {
             throw invalidField("organization.businessRegNo", "사업자등록번호를 입력해 주세요.");
         }
@@ -97,7 +100,8 @@ public class AuthService {
         boolean hasId = request.organizationId() != null;
         boolean hasNew = request.organization() != null;
         if (hasId == hasNew) {
-            throw invalidField("organizationId", "기관 목록에서 선택(organizationId)하거나 새 기관 정보(organization) 중 하나만 보내 주세요.");
+            throw invalidField("organizationId",
+                    "기관·대학 목록에서 선택(organizationId)하거나 새 조직 정보(organization) 중 하나만 보내 주세요.");
         }
         if (hasId) {
             if (!organizationService.isVerifiedInstitution(request.organizationId())) {
@@ -106,9 +110,14 @@ public class AuthService {
             return request.organizationId();
         }
         OrganizationInput org = request.organization();
-        return reusableApplication(OrgType.INSTITUTION, org.name())
+        OrgType orgType = org.orgType() == null ? OrgType.INSTITUTION : org.orgType();
+        if (!orgType.isInstitutionType()) {
+            throw invalidField("organization.orgType", "기관(INSTITUTION) 또는 대학(UNIVERSITY)만 신청할 수 있습니다.");
+        }
+        return reusableApplication(orgType, org.name())
                 .map(id -> organizationService.reapplyInstitution(id, org.address(), org.phone()))
-                .orElseGet(() -> organizationService.createInstitutionApplication(org.name(), org.address(), org.phone()));
+                .orElseGet(() -> organizationService.createInstitutionApplication(orgType, org.name(),
+                        org.address(), org.phone()));
     }
 
     /**

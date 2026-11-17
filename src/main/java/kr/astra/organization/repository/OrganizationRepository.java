@@ -1,5 +1,6 @@
 package kr.astra.organization.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import kr.astra.organization.entity.OrgType;
@@ -16,9 +17,9 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
 
     Optional<Organization> findByOrgTypeAndName(OrgType orgType, String name);
 
-    List<Organization> findAllByOrgTypeAndVerifiedTrue(OrgType orgType);
+    List<Organization> findAllByOrgTypeInAndVerifiedTrue(Collection<OrgType> orgTypes);
 
-    long countByOrgTypeAndVerifiedFalse(OrgType orgType);
+    long countByOrgTypeInAndVerifiedFalse(Collection<OrgType> orgTypes);
 
     /** 관리자 조직 목록: orgType·verified 는 null 이면 조건 없음 */
     @Query("""

@@ -16,10 +16,10 @@
 | 항목 | 내용 |
 |---|---|
 | 서버 | 시연 서버: `docker compose -f compose.prod.yaml up -d --build` (README "시연 서버 실행") / 노트북: `./gradlew bootRun` |
-| DB | 처음부터 시작하려면 seed 만 있는 새 DB (로컬은 `docker compose down -v` 후 실행). 기관 9곳, 장비 71대, 시연 계정 5개 |
+| DB | 처음부터 시작하려면 seed 만 있는 새 DB (로컬은 `docker compose down -v` 후 실행). 기관 8곳·대학 4곳·기업 4곳(모두 가상 이름), 장비 339대(기존 71대 + V8 시연 장비 268대, 전부 시연용 `isMock=true`), 시연 계정 7개 |
 | `.env` | `JWT_SECRET`(32자 이상), `MAIL_*`(Gmail 앱 비밀번호), `CORS_ALLOWED_ORIGINS`(프론트 주소). 시연 당일만 `MAIL_LOG_CODE=true` (일회용 메일이 늦을 때 서버 로그로 코드 확인) |
-| 계정 | `company@astra.demo`(기업, 가상 A기업), `manager1@astra.demo`(대전테크노파크 우주·양자산업센터 = 장비 48 보유), `manager2@astra.demo`(한국신뢰성기술센터 = 장비 44 보유), `admin@astra.demo`. 비밀번호는 팀 채팅 |
-| 주요 장비 | **ASTRA-CAND-0048** 진동시험기 (대전TP, 주파수 10~3000Hz, 최대 시료 40kg, 고정구 15kg, 모두 MOCK) / **ASTRA-CAND-0044** 진동시험기1 (한국신뢰성기술센터, 주파수 5~1800Hz) |
+| 계정 | `company@astra.demo`(기업, 가상 A기업), `manager1@astra.demo`(미리내우주환경시험센터 = 장비 48 보유), `manager2@astra.demo`(다온신뢰성시험센터 = 장비 44 보유), `univ1@astra.demo`(대학, 늘해랑대학교 항공우주공동기기원), `company2@astra.demo`(장비 보유 기업, 미르항공정밀), `admin@astra.demo`. 비밀번호는 팀 채팅 |
+| 주요 장비 | **ASTRA-CAND-0048** 진동시험기 (대전TP, 주파수 10~3000Hz, 최대 시료 40kg, 고정구 15kg, 모두 MOCK) / **ASTRA-CAND-0044** 진동시험기1 (다온신뢰성시험센터, 주파수 5~1800Hz) |
 
 ---
 
@@ -31,7 +31,7 @@
 |---|---|---|---|---|---|---|
 | 1 | (선택) 새 기업 가입 | BE-A | 새 이메일 | `POST /auth/email-verifications` → `.../confirm` → `POST /auth/signup` | 메일로 6자리 코드 수신, 가입 후 `PENDING`, 로그인하면 403 `ACCOUNT_NOT_ACTIVE` | ✅ 2026-11-08 |
 | 2 | (선택) 관리자 가입 승인 | BE-A | admin | `GET /admin/users?status=PENDING` → `POST /admin/users/{id}/approve` | 승인 대기 목록에 보이고, 승인하면 `ACTIVE` + 기업 조직 승인 → 로그인 가능 | ✅ 2026-11-08 |
-| 3 | 기업 로그인·대시보드 | BE-A (+BE-B·C) | company | `POST /auth/login`, `GET /dashboard/summary` | 장비 요약(71대). 의뢰 상태·최근 상담 칸은 BE-B·BE-C 연결 후 채워짐 | ✅ 2026-11-09 (최근 상담 칸 BE-C 연결 확인, 의뢰 칸 ⏳) |
+| 3 | 기업 로그인·대시보드 | BE-A (+BE-B·C) | company | `POST /auth/login`, `GET /dashboard/summary` | 장비 요약(339대). 의뢰 상태·최근 상담 칸은 BE-B·BE-C 연결 후 채워짐 | ✅ 2026-11-09 (최근 상담 칸 BE-C 연결 확인, 의뢰 칸 ⏳) |
 | 4 | 문장으로 장비 검색 | BE-A | company | `GET /search?q=위성 전장품 15kg, 20~2000Hz 진동시험` | 시험유형 `VIBRATION`, 조건 `sample_mass 15kg`·`frequency 20~2000Hz`, 장비 4대 (0044·0045·0047·0048) | ✅ 2026-11-08 |
 | 5 | AI 상담 | BE-C | company | `POST /chat/sessions`, `POST /chat/sessions/{id}/messages` "위성 부품 진동시험 하고 싶어요. 시료 15kg, 20~2000Hz요" | 응답이 스트리밍(SSE)으로 나오고, 시료 질량·주파수 추출, **고정구 질량 누락**이라 되물음 | ✅ 2026-11-09 JSON·SSE 모두 (Gemini `gemini-3.5-flash`, 약 10초). 시료 15kg·주파수 20~2000Hz 추출, 고정구 무게 되물음 |
 | 6 | 조건 정리·누락 보완 | BE-C | company | `POST /chat/sessions/{id}/requirement`, `POST /requirements/{id}/analyze`, `PUT /requirements/{id}/conditions` | `missing: fixture_mass` → 사용자가 2kg 입력 → `readyForMatching: true` | ⚠️ 2026-11-09 대화 → 시험조건(`POST /chat/sessions/{id}/requirement`)이 계속 502 (BE-C 확인 필요). 조건 직접 입력(`POST /requirements`) → 분석(누락 fixture_mass + 질문) → 보완 → `readyForMatching: true` 는 ✅ |
@@ -48,6 +48,17 @@
 | 17 | (선택) AI 자동 추진 | BE-C | company | `POST /ai/auto-runs` | 조건 분석 → 검색 → 매칭 → 초안까지 단계별 진행, 누락 시 `WAITING_USER` | ⚠️ 2026-11-09 시작(202)은 되지만 ANALYZE 단계가 3초 만에 FAILED (6번과 같은 원인으로 보임, BE-C 확인 필요) |
 | 18 | 관리자 대시보드 | BE-A (+BE-B) | admin | `GET /dashboard/summary`, `GET /dashboard/equipment-stats` | 승인 대기 회원·기관 수, 기관별 장비 확인 비율. 전체 의뢰 칸은 BE-B 연결 후 | ✅ 2026-11-08 (의뢰 칸 ⏳) |
 
+### 1-1. 조직 간 장비 공유 (기업·기관·대학 누구나 빌려주고 빌림)
+
+| # | 단계 | 계정 | API | 기대 결과 | 확인 |
+|---|---|---|---|---|---|
+| S1 | 대학이 기업 장비에 의뢰 | univ1 | `POST /test-requests {equipmentId: 미르항공정밀 장비}` → `.../submit` | 201 → `SUBMITTED`, company2 에게 `REQUEST_SUBMITTED` 알림 | ✅ 자동 점검 |
+| S2 | 기업이 받은 의뢰 검토·통과 | company2 | `GET /test-requests?box=RECEIVED`, `POST .../review/start`, `POST .../accept` | 받은 의뢰 목록에 보이고 `SCHEDULING` | ✅ 자동 점검 |
+| S3 | 기업이 대학 장비에 의뢰 | company2 | `POST /test-requests {equipmentId: 늘해랑대학교 장비}` → `.../submit` | univ1 의 받은 의뢰(기본 목록)에 보임 | ✅ 자동 점검 |
+| S4 | 보낸·받은 의뢰 전환 | univ1, company2 | `GET /test-requests?box=SENT`, `GET /dashboard/summary?view=REQUESTER\|PROVIDER` | 한 계정에서 두 목록·두 대시보드가 따로 보임 | ✅ 자동 점검 |
+| S5 | 자기 조직 장비 의뢰 차단 | univ1 | `POST /test-requests {equipmentId: 자기 조직 장비}` | 400 `VALIDATION_FAILED` (`details.field=equipmentId`). 매칭 추천에서도 빠짐 | ✅ 자동 점검 |
+| S6 | 기업이 장비 등록 | company | `POST /equipment` | 201, `GET /institutions`에 기업이 `orgType=COMPANY`로 나옴 | ✅ 자동 점검 |
+
 ---
 
 ## 2. 자동 점검
@@ -59,6 +70,7 @@
 | 운영용 실행 | `compose.prod.yaml` 로컬 실행: prod 프로필, Flyway V1~V5, 헬스체크 UP, 401·Swagger·CORS | ✅ 2026-11-08 |
 | BE-C 단계 실제 서버 (2026-11-09) | 상담 JSON·SSE ✅, 조건 직접 입력 → 분석 → 매칭 ✅, 대시보드 최근 상담 ✅ / 대화 → 시험조건·자동 추진 분석 ⚠️ | 🚧 |
 | BE-B 단계 | 의뢰·보완·예약 구현 후 | ⏳ |
+| 조직 간 공유 (1-1) | `RequestWorkflowTest`(대학↔기업, 기관→기업 끝까지), `EquipmentManageTest`(기업 장비 등록), `MatchingServiceTest`(자기 조직 추천 제외) | `./gradlew test` |
 
 ---
 

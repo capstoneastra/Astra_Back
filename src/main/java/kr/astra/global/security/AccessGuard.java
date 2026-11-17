@@ -12,13 +12,13 @@ import kr.astra.user.entity.UserRole;
  *   <li>로그인하지 않았으면 401 AUTH_REQUIRED, 권한이 없으면 403 FORBIDDEN 을 던집니다.</li>
  * </ul>
  * <pre>
- * // 기관 담당자는 소속 기관 장비만 수정 (equipment.institution_id)
+ * // 장비를 보유한 조직(기업·기관·대학)의 구성원만 수정 (equipment.institution_id)
  * AccessGuard.requireInstitution(user, equipment.getInstitutionId());
- * // 기관이 받은 의뢰 검토 (test_requests.institution_id)
+ * // 장비 보유 조직이 받은 의뢰 검토 (test_requests.institution_id)
  * AccessGuard.requireInstitution(user, request.getInstitutionId());
- * // 기업 본인 데이터 (test_requests.requester_id, chat_sessions.user_id ...)
+ * // 본인 데이터 (test_requests.requester_id, chat_sessions.user_id ...)
  * AccessGuard.requireOwner(user, request.getRequesterId());
- * // 기업 본인 또는 해당 기관 담당자 (의뢰 상세처럼 양쪽 다 보는 화면)
+ * // 의뢰자 본인 또는 장비 보유 조직 구성원 (의뢰 상세처럼 양쪽 다 보는 화면)
  * AccessGuard.requireOwnerOrInstitution(user, request.getRequesterId(), request.getInstitutionId());
  * // 역할만 확인
  * AccessGuard.requireRole(user, UserRole.COMPANY_USER);
@@ -54,7 +54,7 @@ public final class AccessGuard {
         }
     }
 
-    /** 해당 기관 소속 기관 담당자여야 함. ADMIN 은 항상 통과 */
+    /** 해당 조직(장비 보유 조직) 소속이어야 함. 조직 유형·역할은 보지 않음. ADMIN 은 항상 통과 */
     public static void requireInstitution(CurrentUser user, Long institutionId) {
         if (!requireLogin(user).belongsTo(institutionId)) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
@@ -68,7 +68,7 @@ public final class AccessGuard {
         }
     }
 
-    /** 본인 데이터이거나, 해당 기관 소속 기관 담당자여야 함. ADMIN 은 항상 통과 */
+    /** 본인 데이터이거나, 해당 조직(장비 보유 조직) 소속이어야 함. ADMIN 은 항상 통과 */
     public static void requireOwnerOrInstitution(CurrentUser user, Long ownerUserId, Long institutionId) {
         CurrentUser u = requireLogin(user);
         if (!isOwner(u, ownerUserId) && !u.belongsTo(institutionId)) {

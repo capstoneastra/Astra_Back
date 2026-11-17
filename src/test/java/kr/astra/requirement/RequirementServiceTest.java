@@ -52,12 +52,16 @@ class RequirementServiceTest {
         assertThat(service.get(owner,7L).conditions().getFirst().value()).isEqualByComparingTo("10");
         assertThat(service.get(owner,7L).conditions().getFirst().source()).isEqualTo(ConditionSource.USER);
     }
-    @Test void noPrincipalOtherOwnerAndInstitutionDeniedButAdminAllowed() {
+    @Test void noPrincipalAndOtherOwnersDeniedWhateverTheirRoleButAdminAllowed() {
         assertThatThrownBy(() -> service.get(null,7L)).isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> service.get(new CurrentUser(2L,UserRole.COMPANY_USER,null),7L))
                 .isInstanceOfSatisfying(BusinessException.class,e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN));
-        assertThatThrownBy(() -> service.get(new CurrentUser(1L,UserRole.INSTITUTION_MANAGER,9L),7L)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.get(new CurrentUser(2L,UserRole.INSTITUTION_MANAGER,9L),7L)).isInstanceOf(BusinessException.class);
         assertThat(service.get(new CurrentUser(99L,UserRole.ADMIN,null),7L)).isNotNull();
+    }
+    @Test void ownerMayReadOwnRequirementWhateverTheRole() {
+        // 기관·대학 회원도 의뢰자로서 자기 시험조건을 다룰 수 있다 (역할이 아니라 본인 여부로 판단)
+        assertThat(service.get(new CurrentUser(1L,UserRole.INSTITUTION_MANAGER,9L),7L)).isNotNull();
     }
     @Test void publishedSnapshotContractUsesAuthenticatedPrincipal() {
         assertThatThrownBy(() -> service.getSnapshot(7L)).isInstanceOf(BusinessException.class);
