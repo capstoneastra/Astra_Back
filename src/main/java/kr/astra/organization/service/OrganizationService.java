@@ -45,14 +45,14 @@ public class OrganizationService {
     public record SecurityInfo(Boolean hasSecureFacility, String securityNote) {}
     public SecurityInfo security(Long id) {
         var org = findOrganization(id);
-        if (!org.isInstitution() || !org.isVerified()) throw new BusinessException(ErrorCode.NOT_FOUND);
+        if (!org.canOwnEquipment() || !org.isVerified()) throw new BusinessException(ErrorCode.NOT_FOUND);
         return new SecurityInfo(org.getHasSecureFacility(), org.getSecurityNote());
     }
     @Transactional
     public SecurityInfo updateSecurity(kr.astra.global.security.CurrentUser actor, Long id, Boolean facility, String note) {
         kr.astra.global.security.AccessGuard.requireInstitution(actor,id);
         var org = findOrganization(id);
-        if (!org.isInstitution()) throw new BusinessException(ErrorCode.NOT_FOUND);
+        if (!org.canOwnEquipment()) throw new BusinessException(ErrorCode.NOT_FOUND);
         org.updateSecurity(facility,note);
         return new SecurityInfo(org.getHasSecureFacility(),org.getSecurityNote());
     }
@@ -65,18 +65,21 @@ public class OrganizationService {
                 .toList();
     }
 
-    /** 승인된 기관·대학 전체 기본 정보 (이름 가나다순) */
-    public List<InstitutionInfo> listVerifiedInstitutionInfos() {
-        return organizationRepository.findAllByOrgTypeInAndVerifiedTrue(OrgType.INSTITUTION_TYPES).stream()
+    /** 장비를 보유할 수 있는 승인된 조직(기업·기관·대학) 전체 기본 정보 (이름 가나다순) */
+    public List<InstitutionInfo> listVerifiedEquipmentOwners() {
+        return organizationRepository.findAllByOrgTypeInAndVerifiedTrue(OrgType.EQUIPMENT_OWNER_TYPES).stream()
                 .sorted(BY_KOREAN_NAME)
                 .map(InstitutionInfo::from)
                 .toList();
     }
 
-    /** 승인된 기관 하나. 없거나 기관이 아니거나 미승인이면 empty */
-    public Optional<InstitutionInfo> findVerifiedInstitution(Long organizationId) {
+    /** 장비를 보유할 수 있는 승인된 조직(기업·기관·대학) 하나. 없거나 운영 조직이거나 미승인이면 empty */
+    public Optional<InstitutionInfo> findVerifiedEquipmentOwner(Long organizationId) {
+        if (organizationId == null) {
+            return Optional.empty();
+        }
         return organizationRepository.findById(organizationId)
-                .filter(org -> org.isInstitution() && org.isVerified())
+                .filter(org -> org.canOwnEquipment() && org.isVerified())
                 .map(InstitutionInfo::from);
     }
 

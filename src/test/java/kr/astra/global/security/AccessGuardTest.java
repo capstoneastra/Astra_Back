@@ -9,7 +9,7 @@ import kr.astra.user.entity.UserRole;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
 
-/** 권한 규칙 (api-spec §0-4): ADMIN 마스터, 기관 담당자는 소속 기관만, 기업은 본인 데이터만 */
+/** 권한 규칙 (api-spec §0-4): ADMIN 마스터, 장비·의뢰는 보유 조직 구성원만, 개인 데이터는 본인만 */
 class AccessGuardTest {
 
     private static final long INSTITUTION_A = 2L;
@@ -44,9 +44,13 @@ class AccessGuardTest {
     }
 
     @Test
-    void 기업은_소속_조직_id_가_같아도_기관_권한이_없다() {
-        CurrentUser companyWithSameOrgId = new CurrentUser(4L, UserRole.COMPANY_USER, INSTITUTION_A);
-        assertCode(() -> AccessGuard.requireInstitution(companyWithSameOrgId, INSTITUTION_A), ErrorCode.FORBIDDEN);
+    void 조직_소속은_역할과_무관하게_판단한다() {
+        // 기업 회원도 자기 조직이 보유한 장비·받은 의뢰는 다룰 수 있고, 다른 조직 것은 못 다룬다
+        assertThatCode(() -> AccessGuard.requireInstitution(company, 200L)).doesNotThrowAnyException();
+        assertCode(() -> AccessGuard.requireInstitution(company, INSTITUTION_A), ErrorCode.FORBIDDEN);
+        CurrentUser noOrganization = new CurrentUser(6L, UserRole.COMPANY_USER, null);
+        assertCode(() -> AccessGuard.requireInstitution(noOrganization, INSTITUTION_A), ErrorCode.FORBIDDEN);
+        assertCode(() -> AccessGuard.requireInstitution(noOrganization, null), ErrorCode.FORBIDDEN);
     }
 
     @Test
@@ -57,7 +61,7 @@ class AccessGuardTest {
     }
 
     @Test
-    void 의뢰처럼_양쪽이_보는_데이터는_의뢰자_또는_해당_기관_담당자만() {
+    void 의뢰처럼_양쪽이_보는_데이터는_의뢰자_또는_장비_보유_조직_구성원만() {
         long requesterId = company.userId();
         assertThatCode(() -> {
             AccessGuard.requireOwnerOrInstitution(company, requesterId, INSTITUTION_A);

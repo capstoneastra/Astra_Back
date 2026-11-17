@@ -31,8 +31,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "기관 장비 관리", description = "소속 기관 장비 등록·수정·사양·시험유형·비활성화·확인·변경 이력 (api-spec §2-1). "
-        + "기관 담당자는 소속 기관 장비만 (아니면 403 FORBIDDEN), 관리자는 전부")
+@Tag(name = "장비 관리", description = "소속 조직 장비 등록·수정·사양·시험유형·비활성화·확인·변경 이력 (api-spec §2-1). "
+        + "기업·기관·대학 구성원은 소속 조직 장비만 (아니면 403 FORBIDDEN), 관리자는 전부")
 @RestController
 @RequestMapping("/equipment")
 @RequiredArgsConstructor
@@ -40,7 +40,7 @@ public class EquipmentManageController {
 
     private final EquipmentCommandService commandService;
 
-    @Operation(summary = "장비 등록", description = "소속 기관으로 등록, 외부 id ASTRA-EQ-{id 4자리}, 바로 INSTITUTION_VERIFIED. "
+    @Operation(summary = "장비 등록", description = "소속 조직(기업·기관·대학)으로 등록, 외부 id ASTRA-EQ-{id 4자리}, 바로 INSTITUTION_VERIFIED. "
             + "사양은 REAL 로 저장. 관리자는 institutionId 필수")
     @PostMapping
     public ResponseEntity<ApiResponse<Created>> create(@AuthenticationPrincipal CurrentUser user,

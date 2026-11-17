@@ -84,7 +84,7 @@ class EquipmentManageTest {
     }
 
     @Test
-    void 관리자는_기관을_지정해야_등록되고_기업과_다른_기관은_403() throws Exception {
+    void 관리자는_기관을_지정해야_등록되고_다른_기관으로는_403() throws Exception {
         assertThat(api.post("/api/v1/equipment", createBody("관리자 등록 " + UUID.randomUUID()), admin).code())
                 .isEqualTo("VALIDATION_FAILED");
         Res byAdmin = api.post("/api/v1/equipment",
@@ -94,11 +94,49 @@ class EquipmentManageTest {
         assertThat(jdbc.queryForObject("SELECT institution_id FROM equipment WHERE id = ?", Long.class,
                 byAdmin.data().path("id").asLong())).isEqualTo(6);
 
-        assertThat(api.post("/api/v1/equipment", createBody("기업 " + UUID.randomUUID()), company).code())
-                .isEqualTo("FORBIDDEN");
         assertThat(api.post("/api/v1/equipment",
                 createBody("남의 기관 " + UUID.randomUUID()).replace("\"equipmentType\"", "\"institutionId\": 6, \"equipmentType\""),
                 manager1).code()).isEqualTo("FORBIDDEN");
+        assertThat(api.post("/api/v1/equipment",
+                createBody("남의 기관 " + UUID.randomUUID()).replace("\"equipmentType\"", "\"institutionId\": 6, \"equipmentType\""),
+                company).code()).isEqualTo("FORBIDDEN");
+    }
+
+    @Test
+    void 기업도_자기_조직_장비를_등록하고_관리하며_장비가_있는_동안_기관_목록에_나온다() throws Exception {
+        long companyOrgId = jdbc.queryForObject(
+                "SELECT organization_id FROM users WHERE email = 'company@astra.demo'", Long.class);
+        // 장비가 없는 기업은 기관 목록·상세에 나오지 않는다
+        assertThat(institutionIds()).doesNotContain(companyOrgId);
+        assertThat(api.get("/api/v1/institutions/" + companyOrgId, company).code()).isEqualTo("NOT_FOUND");
+
+        Res created = api.post("/api/v1/equipment", createBody("기업 보유 장비 " + UUID.randomUUID()), company);
+        assertThat(created.status()).isEqualTo(201);
+        long id = created.data().path("id").asLong();
+        try {
+            JsonNode d = api.get("/api/v1/equipment/" + id, manager1).data();
+            assertThat(d.path("institution").path("id").asLong()).isEqualTo(companyOrgId);
+            assertThat(d.path("institution").path("name").asString()).isEqualTo("가상 A기업");
+
+            assertThat(externalIds(myEquipment(company))).containsExactly("ASTRA-EQ-%04d".formatted(id));
+            assertThat(institutionIds()).contains(companyOrgId);
+            JsonNode org = api.get("/api/v1/institutions/" + companyOrgId, manager1).data();
+            assertThat(org.path("orgType").asString()).isEqualTo("COMPANY");
+            assertThat(org.path("equipmentCount").asLong()).isEqualTo(1);
+
+            // 수정은 보유 기업만. 다른 조직(기관 담당자)은 403
+            assertThat(api.send("PATCH", "/api/v1/equipment/" + id, "{ \"model\": \"C-100\" }", manager1).code())
+                    .isEqualTo("FORBIDDEN");
+            Res patched = api.send("PATCH", "/api/v1/equipment/" + id, "{ \"model\": \"C-100\" }", company);
+            assertThat(patched.status()).isEqualTo(200);
+            assertThat(patched.data().path("model").asString()).isEqualTo("C-100");
+            // 기업은 기관 장비를 고칠 수 없다
+            assertThat(api.send("PATCH", "/api/v1/equipment/48", "{ \"model\": \"x\" }", company).code())
+                    .isEqualTo("FORBIDDEN");
+        } finally {
+            assertThat(api.send("DELETE", "/api/v1/equipment/" + id, null, company).status()).isEqualTo(200);
+        }
+        assertThat(institutionIds()).doesNotContain(companyOrgId);
     }
 
     @Test
@@ -226,7 +264,10 @@ class EquipmentManageTest {
 
         assertThat(api.get("/api/v1/institutions/me/equipment", admin).code()).isEqualTo("VALIDATION_FAILED");
         assertThat(api.get("/api/v1/institutions/me/equipment?institutionId=6", admin).status()).isEqualTo(200);
-        assertThat(api.get("/api/v1/institutions/me/equipment", company).code()).isEqualTo("FORBIDDEN");
+        // 기업도 소속 조직 장비 목록을 본다 (등록한 장비가 없으면 빈 목록)
+        Res companyList = api.get("/api/v1/institutions/me/equipment", company);
+        assertThat(companyList.status()).isEqualTo(200);
+        assertThat(companyList.data().path("content").size()).isZero();
     }
 
     @Test
@@ -311,6 +352,12 @@ class EquipmentManageTest {
                              { "key": "max_payload", "label": "최대 시료 질량", "value": 50, "unit": "kg" } ],
                   "testTypes": [ { "code": "VIBRATION", "estCostMin": 300000, "estCostMax": 600000, "estDurationDays": 2 } ] }
                 """.formatted(name);
+    }
+
+    private List<Long> institutionIds() throws Exception {
+        List<Long> ids = new ArrayList<>();
+        api.get("/api/v1/institutions", admin).data().forEach(n -> ids.add(n.path("id").asLong()));
+        return ids;
     }
 
     private long create(String token) throws Exception {

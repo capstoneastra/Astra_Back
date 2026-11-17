@@ -16,7 +16,14 @@ public enum OrgType {
     /** 기관 방식(목록에서 선택하거나 신청 → 관리자 승인)으로 가입하는 유형: 시험기관·대학 */
     public static final Set<OrgType> INSTITUTION_TYPES = Set.of(INSTITUTION, UNIVERSITY);
 
+    /** 장비를 보유하고 의뢰를 받을 수 있는 유형: 기업·시험기관·대학 (플랫폼 운영 조직 제외) */
+    public static final Set<OrgType> EQUIPMENT_OWNER_TYPES = Set.of(COMPANY, INSTITUTION, UNIVERSITY);
+
     public boolean isInstitutionType() {
         return INSTITUTION_TYPES.contains(this);
+    }
+
+    public boolean canOwnEquipment() {
+        return EQUIPMENT_OWNER_TYPES.contains(this);
     }
 }

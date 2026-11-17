@@ -135,9 +135,14 @@ public class Organization extends BaseTimeEntity {
         this.verified = true;
     }
 
-    /** 시험기관 또는 대학 (기관 목록에 나오고 장비를 보유하는 조직) */
+    /** 시험기관 또는 대학 (가입 화면의 선택 목록에 나오는 조직) */
     public boolean isInstitution() {
         return orgType.isInstitutionType();
+    }
+
+    /** 장비를 보유할 수 있는 조직: 기업·시험기관·대학 */
+    public boolean canOwnEquipment() {
+        return orgType.canOwnEquipment();
     }
 
     private static OrgType requireInstitutionType(OrgType orgType) {

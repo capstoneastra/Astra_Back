@@ -2,7 +2,7 @@
 
 > 기준: REST + JSON, Base URL `/api/v1`, 인증 `Authorization: Bearer <accessToken>` (JWT)
 > DB 기준 문서: `schema.sql` / ERD: `erd.dbml`
-> 표기: 🔓 비로그인 허용(`/auth/**`만) · `로그인` 로그인한 모든 사용자 · 🏢 기업(COMPANY_USER) · 🏛 기관 담당자(INSTITUTION_MANAGER) · 👑 플랫폼 관리자(ADMIN)
+> 표기: 🔓 비로그인 허용(`/auth/**`만) · `로그인` 로그인한 모든 사용자 · 🏢 기업(COMPANY_USER) · 🏛 장비 보유 조직 구성원(그 장비·의뢰의 `institution_id`가 내 소속 조직인 회원. 기업·기관·대학 모두 해당) · 👑 플랫폼 관리자(ADMIN)
 > 👑 관리자는 **마스터 권한**이라 모든 API를 호출할 수 있습니다. 그래서 표에는 관리자 전용 API에만 👑를 표시합니다.
 
 ---
@@ -57,10 +57,11 @@
 |---|---|
 | 비로그인 | `/auth/**` (이메일 인증·가입·로그인·토큰 재발급·가입용 기관 목록)만 허용. 나머지는 전부 `401 AUTH_REQUIRED`. 프론트는 로그인 페이지 외 모든 라우트에서 로그인 페이지로 이동 |
 | 🏢 기업 | 장비·시험정보 조회, 본인 상담/시험조건/의뢰/시뮬레이션만 조회·수정 |
-| 🏛 기관 담당자 | 장비·시험정보 조회, **소속 기관 장비 등록·수정**, 소속 기관으로 들어온 의뢰 검토·보완요청·예약 확정 |
+| 🏛 장비 보유 조직 구성원 | 장비·시험정보 조회, **소속 조직 장비 등록·수정**, 소속 조직 장비로 들어온 의뢰 검토·보완요청·예약 확정. 기업·기관·대학 어느 유형이든 소속 조직 기준으로 판단 (역할 `COMPANY_USER`/`INSTITUTION_MANAGER`는 가입 유형 표시) |
 | 👑 플랫폼 관리자 | **전체(마스터)**. 모든 조회·수정, 회원·기관 승인, 초기 데이터 적재. 관리자가 대신 처리한 상태 변경도 `request_status_history.changed_by`에 관리자 id로 남음 |
 
-- 소유권 체크: 기관 담당자는 `user.organization_id == equipment.institution_id` (의뢰는 `test_requests.institution_id`) 일 때만 수정 가능, 아니면 `403 FORBIDDEN`
+- 소유권 체크: `user.organization_id == equipment.institution_id` (의뢰는 `test_requests.institution_id`) 일 때만 수정 가능, 아니면 `403 FORBIDDEN`. 역할·조직 유형은 보지 않으므로 기업 회원도 자기 조직 장비를 등록·관리할 수 있음
+- `institution_id`·`/institutions` 라는 이름은 그대로지만 뜻은 "장비 보유 조직"(기업·기관·대학). `GET /institutions`에는 승인된 기관·대학 전부와, 활성 장비가 1대 이상인 기업이 나옴 (`orgType`으로 구분)
 - 상태가 `ACTIVE`가 아닌 계정(PENDING/REJECTED/SUSPENDED)은 로그인 시 `403 ACCOUNT_NOT_ACTIVE` (승인 대기 안내 화면)
 - 로그인한 뒤 관리자가 정지·거절하면 **이미 받은 access 토큰도 다음 요청부터** `403 ACCOUNT_NOT_ACTIVE` (서버가 요청마다 계정 상태 확인, 30초 캐시 + 상태 변경 시 즉시 반영). 계정이 없어진 토큰은 `401 AUTH_REQUIRED`. 가입·로그인 같은 공개 API 는 그대로 사용 가능
 - 관리자 계정은 회원가입으로 만들 수 없음. 서버 초기 세팅(seed/환경변수)으로만 생성
@@ -176,7 +177,7 @@
 | GET | `/search` | 로그인 | 시험항목·자연어 통합 검색 `?q=15kg 시료 진동시험` | 3 |
 | GET | `/test-types` | 로그인 | 시험유형 목록 (15개, 표시 순서, 장비 수 포함) | 3 |
 | GET | `/test-types/{code}` | 로그인 | 시험 정보 안내: 가능 기관·예상비용·기간·이용조건 + 입력할 조건 목록(`conditionRules`) | 4 |
-| GET | `/institutions` | 로그인 | 기관·대학 목록 (승인된 조직, 가나다순, 장비 수 포함) | |
+| GET | `/institutions` | 로그인 | 장비 보유 조직 목록 (승인된 기관·대학 + 장비가 있는 기업, 가나다순, 장비 수 포함) | |
 | GET | `/institutions/{id}` | 로그인 | 기관 상세 + 보유 장비 수·유형별 수·가능 시험유형 | |
 | GET | `/institutions/{id}/security` | 로그인 | 기관 보안시설·시료/데이터 반출·NDA 협의 안내 | |
 | PATCH | `/institutions/{id}/security` | 🏛(소유기관) 👑 | `hasSecureFacility`, `securityNote` 수정 | |
@@ -299,11 +300,11 @@
 [ { "code": "ACOUSTIC_NOISE", "nameKo": "음향·소음 시험", "description": null, "keywords": ["소음", "음향", "dB"], "equipmentCount": 1 },
   { "code": "BATTERY_TEST", "nameKo": "배터리 시험", "description": null, "keywords": ["배터리", "충방전", "전지"], "equipmentCount": 2 }, ... ]
 
-// GET /institutions → 승인된 기관·대학 전체, 이름 가나다순 (페이지 없음). orgType 은 INSTITUTION | UNIVERSITY
+// GET /institutions → 승인된 기관·대학 전체 + 장비가 있는 기업, 이름 가나다순 (페이지 없음). orgType 은 INSTITUTION | UNIVERSITY | COMPANY
 [ { "id": 5, "orgType": "INSTITUTION", "name": "경상국립대학교 첨단소재분석지원센터", "parentName": null, "region": "진주", "equipmentCount": 5 },
   { "id": 8, "orgType": "INSTITUTION", "name": "기술지원센터", "parentName": null, "region": "원주", "equipmentCount": 1 }, ... ]
 
-// GET /institutions/2 → 없거나 미승인 기관이면 404 NOT_FOUND
+// GET /institutions/2 → 없거나 미승인이거나, 장비가 없는 기업이면 404 NOT_FOUND
 { "id": 2, "orgType": "INSTITUTION", "name": "대전테크노파크 우주·양자산업센터", "parentName": null, "region": "대전",
   "address": null, "phone": null, "email": null, "homepageUrl": null,
   "equipmentCount": 13, "equipmentByType": { "MEASUREMENT": 11, "TEST": 2 },
@@ -321,8 +322,8 @@
 
 | Method | URL | 권한 | 설명 |
 |---|---|---|---|
-| GET | `/institutions/me/equipment` | 🏛 | 우리 기관 장비 목록 (검증 상태, 마지막 갱신일, 갱신 필요 여부) |
-| POST | `/equipment` | 🏛 | 장비 등록. `institutionId`는 로그인 사용자 소속으로 서버가 채움 (관리자는 `institutionId` 필수) |
+| GET | `/institutions/me/equipment` | 로그인 | 우리 조직(기업·기관·대학) 장비 목록 (검증 상태, 마지막 갱신일, 갱신 필요 여부). 등록한 장비가 없으면 빈 목록 |
+| POST | `/equipment` | 로그인 | 장비 등록. 기업·기관·대학 모두 가능. `institutionId`는 로그인 사용자 소속 조직으로 서버가 채움 (관리자는 `institutionId` 필수) |
 | PATCH | `/equipment/{id}` | 🏛(소유기관) | 기본정보·이용조건·요금·가동률·가용상태 수정 (보낸 값만) → `INSTITUTION_VERIFIED`, `infoUpdatedAt` 갱신 |
 | PUT | `/equipment/{id}/specs` | 🏛(소유기관) | 실제 사양(REAL) 전체를 보낸 목록으로 교체 (빈 목록이면 REAL 삭제). MOCK 사양은 수정 불가 |
 | PUT | `/equipment/{id}/test-types` | 🏛(소유기관) | 가능 시험유형 + 예상 비용·소요기간 (기능 4 데이터) |

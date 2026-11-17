@@ -42,7 +42,6 @@ import kr.astra.organization.dto.InstitutionInfo;
 import kr.astra.organization.service.OrganizationService;
 import kr.astra.testtype.entity.TestType;
 import kr.astra.testtype.service.TestTypeService;
-import kr.astra.user.entity.UserRole;
 import kr.astra.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -55,9 +54,9 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 기관 장비 관리 (api-spec §2-1): 기관 담당자는 소속 기관 장비만, 관리자는 전부.
+ * 장비 관리 (api-spec §2-1): 기업·기관·대학 구성원은 소속 조직 장비만, 관리자는 전부.
  * 모든 변경은 equipment_change_logs 에 action 과 {"필드": {"before", "after"}} 로 남깁니다.
- * 기관이 수정하거나 확인하면 INSTITUTION_VERIFIED + 정보 갱신일(infoUpdatedAt)을 지금으로 바꿉니다.
+ * 보유 조직이 수정하거나 확인하면 INSTITUTION_VERIFIED + 정보 갱신일(infoUpdatedAt)을 지금으로 바꿉니다.
  */
 @Service
 @RequiredArgsConstructor
@@ -81,7 +80,7 @@ public class EquipmentCommandService {
     // ------------------------------------------------------------ 조회
 
     /**
-     * GET /institutions/me/equipment. 기관 담당자는 소속 기관, 관리자는 institutionId 를 꼭 보냄.
+     * GET /institutions/me/equipment. 일반 회원은 소속 조직, 관리자는 institutionId 를 꼭 보냄.
      * 기본 정렬 externalId 오름차순.
      */
     @Transactional(readOnly = true)
@@ -116,7 +115,7 @@ public class EquipmentCommandService {
     /** POST /equipment → 외부 id ASTRA-EQ-{id 4자리}, INSTITUTION_VERIFIED */
     public Created create(CurrentUser user, CreateRequest request) {
         Long institutionId = resolveInstitution(user, request.institutionId(), "institutionId");
-        InstitutionInfo institution = organizationService.findVerifiedInstitution(institutionId).orElseThrow();
+        InstitutionInfo institution = organizationService.findVerifiedEquipmentOwner(institutionId).orElseThrow();
         List<SpecInput> specs = request.specs() == null ? List.of() : request.specs();
         List<TestTypeInput> testTypes = request.testTypes() == null ? List.of() : request.testTypes();
         validateSpecs(specs, "specs");
@@ -233,17 +232,17 @@ public class EquipmentCommandService {
         log(equipmentId, user.userId(), EquipmentChangeAction.DEACTIVATE, Map.of("active", change(true, false)));
     }
 
-    /** POST /admin/equipment/{id}/transfer: 관리자만, 승인된 다른 기관으로 소속 변경 */
+    /** POST /admin/equipment/{id}/transfer: 관리자만, 승인된 다른 조직(기업·기관·대학)으로 소속 변경 */
     public EquipmentDetailResponse transfer(CurrentUser admin, Long equipmentId, Long targetInstitutionId,
                                             String reason) {
         AccessGuard.requireAdmin(admin);
         Equipment e = equipmentRepository.findByIdAndActiveTrue(equipmentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EQUIPMENT_NOT_FOUND));
-        if (organizationService.findVerifiedInstitution(targetInstitutionId).isEmpty()) {
-            throw invalidField("institutionId", "승인된 기관만 선택할 수 있습니다.");
+        if (organizationService.findVerifiedEquipmentOwner(targetInstitutionId).isEmpty()) {
+            throw invalidField("institutionId", "승인된 조직만 선택할 수 있습니다.");
         }
         if (targetInstitutionId.equals(e.getInstitutionId())) {
-            throw invalidField("institutionId", "이미 그 기관 소속입니다.");
+            throw invalidField("institutionId", "이미 그 조직 소속입니다.");
         }
         Long before = e.getInstitutionId();
         e.transferTo(targetInstitutionId, admin.userId());
@@ -260,27 +259,30 @@ public class EquipmentCommandService {
     // ------------------------------------------------------------ 내부
 
     /**
-     * 작업할 기관 id. 기관 담당자는 소속 기관 (다른 기관을 보내면 403), 관리자는 요청 값 필수 (승인된 기관).
-     * 기업 회원은 403.
+     * 작업할 조직 id. 기업·기관·대학 구성원은 소속 조직 (다른 조직을 보내면 403),
+     * 관리자는 요청 값 필수 (승인된 조직). 소속 조직이 없거나 승인되지 않았으면 403.
      */
     private Long resolveInstitution(CurrentUser user, Long requested, String field) {
-        AccessGuard.requireRole(user, UserRole.INSTITUTION_MANAGER);
-        if (user.isAdmin()) {
+        CurrentUser u = AccessGuard.requireLogin(user);
+        if (u.isAdmin()) {
             if (requested == null) {
-                throw invalidField(field, "관리자는 대상 기관(" + field + ")을 지정해야 합니다.");
+                throw invalidField(field, "관리자는 대상 조직(" + field + ")을 지정해야 합니다.");
             }
-            if (organizationService.findVerifiedInstitution(requested).isEmpty()) {
-                throw invalidField(field, "승인된 기관만 선택할 수 있습니다.");
+            if (organizationService.findVerifiedEquipmentOwner(requested).isEmpty()) {
+                throw invalidField(field, "승인된 조직만 선택할 수 있습니다.");
             }
             return requested;
         }
-        if (requested != null && !requested.equals(user.organizationId())) {
+        if (requested != null && !requested.equals(u.organizationId())) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
-        return user.organizationId();
+        if (organizationService.findVerifiedEquipmentOwner(u.organizationId()).isEmpty()) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+        return u.organizationId();
     }
 
-    /** 활성 장비 + 소유 기관 확인 (없으면 404, 다른 기관이면 403) */
+    /** 활성 장비 + 보유 조직 확인 (없으면 404, 다른 조직이면 403) */
     private Equipment findOwned(CurrentUser user, Long equipmentId) {
         Equipment e = equipmentRepository.lockActive(equipmentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EQUIPMENT_NOT_FOUND));
