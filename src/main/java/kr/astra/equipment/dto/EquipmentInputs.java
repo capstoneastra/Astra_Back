@@ -101,7 +101,8 @@ public final class EquipmentInputs {
 
     /** PATCH /equipment/{id}: 보낸 값만 수정 (null 은 그대로) */
     public record UpdateRequest(
-            @Size(min = 1, max = 200) String name,
+            // null 은 그대로, 보냈으면 공백만으로는 안 됨 (저장할 때 trim)
+            @Size(min = 1, max = 200) @Pattern(regexp = "(?s).*\\S.*", message = "장비명을 입력해 주세요.") String name,
             @Size(max = 200) String model,
             @Size(max = 200) String manufacturer,
             @Size(max = 100) String category,

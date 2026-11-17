@@ -2,11 +2,16 @@ package kr.astra;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import javax.sql.DataSource;
 import kr.astra.TestApi.Res;
 import kr.astra.TestMailConfiguration.CapturingEmailSender;
+import kr.astra.equipment.service.EquipmentUpdateReminder;
 import kr.astra.global.security.JwtProvider;
 import kr.astra.user.entity.UserRole;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +43,12 @@ class EquipmentManageTest {
 
     @Autowired
     CapturingEmailSender mail;
+
+    @Autowired
+    DataSource dataSource;
+
+    @Autowired
+    EquipmentUpdateReminder reminder;
 
     private TestApi api;
     private String manager1;
@@ -332,6 +343,99 @@ class EquipmentManageTest {
                 .isEqualTo("FORBIDDEN");
         assertThat(api.send("PATCH", "/api/v1/equipment/" + id, "{ \"model\": \"x\" }", manager2).status())
                 .isEqualTo(200);
+    }
+
+    @Test
+    void 관리자_소속_변경은_행을_잠가_동시에_들어온_담당자_수정을_되돌리지_않는다() throws Exception {
+        long id = create(manager1);
+        // 다른 트랜잭션이 먼저 행을 잠그고 수정 중
+        try (Connection c = dataSource.getConnection()) {
+            c.setAutoCommit(false);
+            try (var st = c.prepareStatement("SELECT id FROM equipment WHERE id = ? FOR UPDATE")) {
+                st.setLong(1, id);
+                st.executeQuery();
+            }
+            CompletableFuture<Res> transfer = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return api.post("/api/v1/admin/equipment/" + id + "/transfer", "{ \"institutionId\": 6 }", admin);
+                } catch (Exception e) {
+                    throw new IllegalStateException(e);
+                }
+            });
+            Thread.sleep(1000); // 소속 변경 요청이 행 잠금에서 기다리도록
+            try (var st = c.prepareStatement("UPDATE equipment SET model = 'CONCURRENT' WHERE id = ?")) {
+                st.setLong(1, id);
+                st.executeUpdate();
+            }
+            c.commit();
+            assertThat(transfer.get(10, TimeUnit.SECONDS).status()).isEqualTo(200);
+        }
+        assertThat(jdbc.queryForObject("SELECT model FROM equipment WHERE id = ?", String.class, id))
+                .isEqualTo("CONCURRENT");
+        assertThat(jdbc.queryForObject("SELECT institution_id FROM equipment WHERE id = ?", Long.class, id))
+                .isEqualTo(6);
+    }
+
+    @Test
+    void 수정할_때_공백뿐인_장비명은_400() throws Exception {
+        long id = create(manager1);
+        assertThat(firstField(api.send("PATCH", "/api/v1/equipment/" + id, "{ \"name\": \"   \" }", manager1)))
+                .isEqualTo("name");
+        assertThat(jdbc.queryForObject("SELECT name FROM equipment WHERE id = ?", String.class, id)).isNotBlank();
+    }
+
+    @Test
+    void 대시보드_갱신_필요_수는_기관_장비_목록의_needsUpdate_수와_같다() throws Exception {
+        long id = create(manager1); // 기관 확인 + 가용 상태 확인 → 갱신 필요 아님
+        // 일반 정보는 확인했지만 가용 상태는 확인이 필요한 장비
+        jdbc.update("UPDATE equipment SET availability = 'UNKNOWN' WHERE id = ?", id);
+        JsonNode list = myEquipment(manager1);
+        assertThat(list.path("totalElements").asLong()).isLessThanOrEqualTo(100);
+        assertThat(findById(list, id).path("needsUpdate").asBoolean()).isTrue();
+        long needsUpdate = 0;
+        for (JsonNode n : list.path("content")) {
+            if (n.path("needsUpdate").asBoolean()) {
+                needsUpdate++;
+            }
+        }
+        JsonNode counts = api.get("/api/v1/dashboard/summary?view=PROVIDER", manager1).data()
+                .path("equipmentNeedsUpdate");
+        assertThat(counts.path("total").asLong()).isEqualTo(needsUpdate);
+        assertThat(counts.path("total").asLong()).isGreaterThanOrEqualTo(
+                Math.max(counts.path("notConfirmed").asLong(), counts.path("outdated").asLong()));
+        jdbc.update("UPDATE equipment SET is_active = false WHERE id = ?", id);
+    }
+
+    @Test
+    void 갱신_알림은_기관마다_요약_한_건만_보내고_다시_보내지_않는다() throws Exception {
+        long manager1Id = jdbc.queryForObject("SELECT id FROM users WHERE email = 'manager1@astra.demo'", Long.class);
+        // 다른 테스트가 남긴 대상이 섞이지 않도록 기존 장비는 모두 알림 보낸 것으로
+        jdbc.update("UPDATE equipment SET availability_reminded_at = now() WHERE availability_reminded_at IS NULL");
+        List<Long> ids = List.of(create(manager1), create(manager1), create(manager1));
+        for (Long id : ids) {
+            jdbc.update("UPDATE equipment SET availability_updated_at = now() - interval '100 days', "
+                    + "availability_reminded_at = NULL WHERE id = ?", id);
+        }
+        long before = reminderCount(manager1Id);
+
+        assertThat(reminder.remind()).isPositive();
+        assertThat(reminderCount(manager1Id)).isEqualTo(before + 1);
+        String title = jdbc.queryForObject("SELECT title FROM notifications WHERE user_id = ? "
+                + "AND type = 'EQUIPMENT_UPDATE_REQUIRED' ORDER BY id DESC LIMIT 1", String.class, manager1Id);
+        assertThat(title).contains("3대");
+        for (Long id : ids) {
+            assertThat(jdbc.queryForObject("SELECT availability_reminded_at IS NOT NULL FROM equipment WHERE id = ?",
+                    Boolean.class, id)).isTrue();
+        }
+
+        // 같은 확인 주기에는 다시 보내지 않음
+        assertThat(reminder.remind()).isZero();
+        assertThat(reminderCount(manager1Id)).isEqualTo(before + 1);
+    }
+
+    private long reminderCount(long userId) {
+        return jdbc.queryForObject("SELECT count(*) FROM notifications WHERE user_id = ? "
+                + "AND type = 'EQUIPMENT_UPDATE_REQUIRED'", Long.class, userId);
     }
 
     // ------------------------------------------------------------ helpers

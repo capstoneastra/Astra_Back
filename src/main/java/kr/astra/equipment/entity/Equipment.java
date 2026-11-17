@@ -26,6 +26,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Equipment extends BaseTimeEntity {
 
+    /** 일반 정보·가용 상태를 이 기간(일) 동안 확인하지 않으면 "갱신 필요" (목록·대시보드·알림 공통) */
+    public static final int UPDATE_INTERVAL_DAYS = 90;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -101,7 +104,7 @@ public class Equipment extends BaseTimeEntity {
 
     public boolean availabilityNeedsConfirmation(OffsetDateTime now) {
         return availability == Availability.UNKNOWN || availabilityUpdatedAt == null
-                || availabilityUpdatedAt.plusDays(90).isBefore(now) || availabilityUpdatedBy == null;
+                || availabilityUpdatedAt.plusDays(UPDATE_INTERVAL_DAYS).isBefore(now) || availabilityUpdatedBy == null;
     }
 
     public void updateUsage(kr.astra.equipment.dto.EquipmentInputs.UsageInput input, Long actor, OffsetDateTime now) {
