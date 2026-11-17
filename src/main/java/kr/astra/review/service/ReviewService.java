@@ -7,6 +7,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import kr.astra.global.exception.BusinessException;
 import kr.astra.global.exception.DbConstraints;
@@ -109,10 +110,11 @@ public class ReviewService {
      * required=true 인 보완 항목이 비어 있으면 400 VALIDATION_FAILED (details.missingItems).
      */
     public ActionResult respond(CurrentUser actor, Long supplementId, ReviewInputs.Respond input) {
+        // 의뢰를 먼저 잠근 뒤 보완 요청을 읽어야 잠금 대기 중 바뀐 상태를 놓치지 않음
+        Long requestId = supplementRepository.findRequestIdById(supplementId).orElseThrow(ReviewService::notFound);
+        TestRequest request = workflow.begin(requestId, RequestAction.RESPOND_SUPPLEMENT, actor, input.version());
         SupplementRequest supplement = supplementRepository.findById(supplementId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "보완 요청을 찾을 수 없습니다.", null));
-        TestRequest request = workflow.begin(supplement.getRequestId(), RequestAction.RESPOND_SUPPLEMENT, actor,
-                input.version());
+                .orElseThrow(ReviewService::notFound);
         if (supplement.getStatus() != SupplementStatus.OPEN) {
             throw new BusinessException(ErrorCode.REQUEST_INVALID_STATUS, "이미 답변했거나 닫힌 보완 요청입니다.",
                     Map.of("supplementStatus", supplement.getStatus()));
@@ -207,8 +209,16 @@ public class ReviewService {
                 .forEach(SupplementRequest::close);
     }
 
+    /** 저장된 보완 항목. 예전에 검증 없이 들어간 null 원소는 건너뜀 */
     private List<ReviewInputs.Item> readItems(SupplementRequest s) {
-        return s.getItems() == null || s.getItems().isBlank() ? List.of() : jsonMapper.readValue(s.getItems(), ITEMS);
+        if (s.getItems() == null || s.getItems().isBlank()) {
+            return List.of();
+        }
+        return jsonMapper.readValue(s.getItems(), ITEMS).stream().filter(Objects::nonNull).toList();
+    }
+
+    private static BusinessException notFound() {
+        return new BusinessException(ErrorCode.NOT_FOUND, "보완 요청을 찾을 수 없습니다.", null);
     }
 
     private SupplementView view(SupplementRequest s, RequestViews.Names names) {

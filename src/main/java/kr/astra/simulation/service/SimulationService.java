@@ -40,6 +40,8 @@ public class SimulationService {
     /** 모든 실행 결과에 붙는 경고 (api-spec §9 예시 문구 그대로) */
     public static final String WARNING = "가상 시연 모델입니다. 실제 장비 성능·시험 적합성을 의미하지 않습니다.";
     private static final String NOT_CALCULATED = "이 모델은 계산하지 않는 시연용 모델입니다 (프리셋 표시만).";
+    /** 문자열 입력값 최대 길이 */
+    private static final int MAX_TEXT_INPUT = 200;
 
     private static final TypeReference<LinkedHashMap<String, Object>> MAP = new TypeReference<>() {
     };
@@ -90,11 +92,13 @@ public class SimulationService {
         Map<String, Object> params = readMap(preset.getInputParameters());
         if (input.inputParameters() != null) {
             Set<String> allowed = new HashSet<>(model.getRequiredInputFields());
-            for (String key : input.inputParameters().keySet()) {
+            for (Map.Entry<String, Object> e : input.inputParameters().entrySet()) {
+                String key = e.getKey();
                 if (!allowed.contains(key)) {
                     throw new BusinessException(ErrorCode.VALIDATION_FAILED, "이 모델에 없는 입력입니다: " + key,
                             Map.of("field", "inputParameters." + key, "allowed", model.getRequiredInputFields()));
                 }
+                requireScalar(key, e.getValue());
             }
             params.putAll(input.inputParameters());
         }
@@ -106,7 +110,7 @@ public class SimulationService {
                 output = engine.run(model.getModelType(), params, readList(preset.getSpecsSnapshot()));
             } catch (SimulationEngine.InvalidInput e) {
                 throw new BusinessException(ErrorCode.VALIDATION_FAILED, e.getMessage(),
-                        Map.of("field", "inputParameters." + e.field()));
+                        Map.of("field", e.field() == null ? "inputParameters" : "inputParameters." + e.field()));
             }
             status = SimulationRunStatus.SUCCEEDED;
         } else {
@@ -134,6 +138,17 @@ public class SimulationService {
         Page<SimulationRun> page = equipmentId == null ? runRepository.findAllByUserId(userId, pageable)
                 : runRepository.findAllByUserIdAndEquipmentId(userId, equipmentId, pageable);
         return PageResponse.from(page, r -> view(r, model(r.getModelType())));
+    }
+
+    /** 입력값은 짧은 문자열·숫자·true/false 만 (계산하지 않는 모델도 그대로 저장·응답되므로) */
+    private static void requireScalar(String key, Object value) {
+        boolean ok = value == null || value instanceof Number || value instanceof Boolean
+                || value instanceof String s && s.length() <= MAX_TEXT_INPUT;
+        if (!ok) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED,
+                    "입력값은 " + MAX_TEXT_INPUT + "자 이하 문자열, 숫자, true/false 만 쓸 수 있습니다: " + key,
+                    Map.of("field", "inputParameters." + key));
+        }
     }
 
     private SimulationModel model(String modelType) {

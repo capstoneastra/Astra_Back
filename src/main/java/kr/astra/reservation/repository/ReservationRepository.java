@@ -3,6 +3,7 @@ package kr.astra.reservation.repository;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import kr.astra.reservation.entity.Reservation;
 import kr.astra.reservation.entity.ReservationStatus;
 import org.springframework.data.domain.Pageable;
@@ -46,14 +47,24 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
     List<Reservation> findBusy(@Param("equipmentId") Long equipmentId, @Param("status") ReservationStatus status,
                                @Param("from") OffsetDateTime from, @Param("to") OffsetDateTime to);
 
-    /** 대시보드: 기관의 다가오는 확정 예약 (시작 빠른 순) */
+    /** 대시보드: 기관의 다가오는 확정 예약 (시작 빠른 순). 의뢰번호를 같이 가져와 행마다 의뢰를 다시 읽지 않음 */
     @Query("""
-            SELECT r FROM Reservation r, TestRequest q
+            SELECT new kr.astra.reservation.repository.ReservationRepository$Upcoming(
+                   r.id, q.id, q.requestNo, r.equipmentId, r.startAt, r.endAt)
+            FROM Reservation r, TestRequest q
             WHERE r.requestId = q.id AND q.institutionId = :institutionId
               AND r.status = :status AND r.startAt >= :now
             ORDER BY r.startAt
             """)
-    List<Reservation> findUpcomingForInstitution(@Param("institutionId") Long institutionId,
-                                                 @Param("status") ReservationStatus status,
-                                                 @Param("now") OffsetDateTime now, Pageable pageable);
+    List<Upcoming> findUpcomingForInstitution(@Param("institutionId") Long institutionId,
+                                              @Param("status") ReservationStatus status,
+                                              @Param("now") OffsetDateTime now, Pageable pageable);
+
+    /** 의뢰를 잠그기 전에 의뢰 id 만 조회 (엔티티를 미리 읽어 두지 않으려고) */
+    @Query("SELECT r.requestId FROM Reservation r WHERE r.id = :id")
+    Optional<Long> findRequestIdById(@Param("id") Long id);
+
+    record Upcoming(Long reservationId, Long requestId, String requestNo, Long equipmentId, OffsetDateTime startAt,
+                    OffsetDateTime endAt) {
+    }
 }

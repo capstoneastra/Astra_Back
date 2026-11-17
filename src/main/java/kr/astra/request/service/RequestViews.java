@@ -8,9 +8,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Stream;
-import kr.astra.equipment.dto.EquipmentDetailResponse;
-import kr.astra.equipment.service.EquipmentService;
-import kr.astra.global.exception.BusinessException;
+import kr.astra.equipment.entity.Equipment;
+import kr.astra.equipment.repository.EquipmentRepository;
 import kr.astra.organization.dto.OrganizationSummaryResponse;
 import kr.astra.organization.service.OrganizationService;
 import kr.astra.request.dto.RequestResponses.EquipmentRef;
@@ -21,51 +20,45 @@ import kr.astra.request.dto.RequestResponses.Summary;
 import kr.astra.request.entity.TestRequest;
 import kr.astra.request.entity.TestRequestRevision;
 import kr.astra.user.service.UserService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Entity → 응답 DTO. 장비·기관·사람 이름은 다른 도메인 서비스로 한 번에 모아서 조회합니다 (목록에서 행마다 조회하지 않음).
+ * Entity → 응답 DTO. 장비·기관·사람 이름은 한 번에 모아서 조회합니다 (목록에서 행마다 조회하지 않음).
+ * 장비는 표시용 4개 값만 필요하므로 EquipmentRepository 로 같은 트랜잭션에서 한 번에 읽습니다
+ * (비활성 장비도 포함해서 읽고 "(비활성 장비)" 로 표시 — 예외를 던지지 않으므로 트랜잭션을 따로 열 필요 없음).
  */
 @Component
+@RequiredArgsConstructor
 public class RequestViews {
 
-    private final EquipmentService equipmentService;
+    static final String INACTIVE_EQUIPMENT = "(비활성 장비)";
+
+    private final EquipmentRepository equipmentRepository;
     private final OrganizationService organizationService;
     private final UserService userService;
     private final RequestContent content;
-    /**
-     * 장비 조회 전용 별도 트랜잭션. EquipmentService 는 @Transactional 이라 비활성 장비에서 404 를 던지면
-     * 참여 중인 트랜잭션을 rollback-only 로 만들어 버리므로, 조회를 따로 떼어 실패가 의뢰 조회에 번지지 않게 합니다.
-     */
-    private final TransactionTemplate equipmentLookupTx;
-
-    public RequestViews(EquipmentService equipmentService, OrganizationService organizationService,
-                        UserService userService, RequestContent content, PlatformTransactionManager txManager) {
-        this.equipmentService = equipmentService;
-        this.organizationService = organizationService;
-        this.userService = userService;
-        this.content = content;
-        this.equipmentLookupTx = new TransactionTemplate(txManager);
-        this.equipmentLookupTx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-        this.equipmentLookupTx.setReadOnly(true);
-    }
 
     /** 한 번의 응답을 만드는 동안 쓰는 이름 캐시 */
     public final class Names {
-        private final Map<Long, EquipmentRef> equipment = new HashMap<>();
+        private final Map<Long, EquipmentRef> equipment;
         private final Map<Long, OrganizationSummaryResponse> orgs;
         private final Map<Long, String> people;
 
-        private Names(Collection<Long> orgIds, Collection<Long> userIds) {
+        private Names(Collection<Long> equipmentIds, Collection<Long> orgIds, Collection<Long> userIds) {
+            this.equipment = loadEquipment(equipmentIds);
             this.orgs = orgIds.isEmpty() ? Map.of() : organizationService.findSummaries(orgIds);
             this.people = userIds.isEmpty() ? Map.of() : userService.findNames(userIds);
         }
 
+        /** 미리 모으지 않은 장비는 그때 한 건 조회 */
         public EquipmentRef equipment(Long id) {
-            return equipment.computeIfAbsent(id, RequestViews.this::loadEquipment);
+            EquipmentRef ref = equipment.get(id);
+            if (ref == null) {
+                ref = loadEquipment(List.of(id)).get(id);
+                equipment.put(id, ref);
+            }
+            return ref;
         }
 
         public OrgRef org(Long id) {
@@ -86,11 +79,13 @@ public class RequestViews {
         }
     }
 
-    /** 의뢰 목록에 나오는 기관·회사·사람 이름을 한 번에 조회 */
+    /** 의뢰 목록에 나오는 장비·기관·회사·사람 이름을 한 번에 조회 */
     public Names names(Collection<TestRequest> requests, Collection<Long> extraUserIds) {
+        Set<Long> equipmentIds = new HashSet<>();
         Set<Long> orgIds = new HashSet<>();
         Set<Long> userIds = new HashSet<>(extraUserIds);
         for (TestRequest r : requests) {
+            equipmentIds.add(r.getEquipmentId());
             orgIds.add(r.getInstitutionId());
             if (r.getCompanyOrgId() != null) {
                 orgIds.add(r.getCompanyOrgId());
@@ -100,7 +95,7 @@ public class RequestViews {
                 userIds.add(r.getAssigneeId());
             }
         }
-        return new Names(orgIds, userIds);
+        return new Names(equipmentIds, orgIds, userIds);
     }
 
     public Names names(TestRequest request, Collection<Long> extraUserIds) {
@@ -109,17 +104,29 @@ public class RequestViews {
 
     /** 사람 이름만 필요할 때 (이력·제출본 목록) */
     public Names people(Collection<Long> userIds) {
-        return new Names(List.of(), userIds.stream().filter(Objects::nonNull).toList());
+        return new Names(List.of(), List.of(), userIds.stream().filter(Objects::nonNull).toList());
     }
 
-    private EquipmentRef loadEquipment(Long id) {
-        try {
-            EquipmentDetailResponse e = equipmentLookupTx.execute(status -> equipmentService.getDetail(id));
-            return new EquipmentRef(e.id(), e.externalId(), e.name(), e.isMock());
-        } catch (BusinessException notActive) {
-            // 의뢰 뒤에 기관이 장비를 비활성화한 경우. 의뢰 이력은 그대로 보여 줌
-            return new EquipmentRef(id, null, "(비활성 장비)", false);
+    /** 장비 이름만 필요할 때 (대시보드 다가오는 예약) */
+    public Names equipmentNames(Collection<Long> equipmentIds) {
+        return new Names(equipmentIds.stream().filter(Objects::nonNull).toList(), List.of(), List.of());
+    }
+
+    /** 장비 id → 표시용 참조. 없거나 비활성(의뢰 뒤에 비활성화)인 장비는 "(비활성 장비)" 로 이력은 그대로 보여 줌 */
+    private Map<Long, EquipmentRef> loadEquipment(Collection<Long> ids) {
+        Map<Long, EquipmentRef> refs = new HashMap<>();
+        if (ids.isEmpty()) {
+            return refs;
         }
+        for (Equipment e : equipmentRepository.findAllById(Set.copyOf(ids))) {
+            if (e.isActive()) {
+                refs.put(e.getId(), new EquipmentRef(e.getId(), e.getExternalId(), e.getName(), e.isMock()));
+            }
+        }
+        for (Long id : ids) {
+            refs.putIfAbsent(id, new EquipmentRef(id, null, INACTIVE_EQUIPMENT, false));
+        }
+        return refs;
     }
 
     public Summary summary(TestRequest r, Names n) {
