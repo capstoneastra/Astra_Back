@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.OffsetDateTime;
 import kr.astra.global.entity.BaseTimeEntity;
 import lombok.AccessLevel;
@@ -60,8 +61,14 @@ public class User extends BaseTimeEntity {
     @Column(name = "reject_reason", length = 500)
     private String rejectReason;
 
+    /** 로그인 시 UserRepository.updateLastLoginAt 으로만 갱신 (엔티티 전체 UPDATE 로 상태를 덮어쓰지 않게) */
     @Column(name = "last_login_at")
     private OffsetDateTime lastLoginAt;
+
+    /** 낙관적 락: 승인·거절·정지·정보 수정이 동시에 일어나면 나중 쪽이 409 VERSION_CONFLICT */
+    @Version
+    @Column(nullable = false)
+    private long version;
 
     /**
      * 회원가입. 기업·기관 담당자 모두 관리자 승인 전까지 PENDING (api-spec §1 가입 흐름).
@@ -108,10 +115,6 @@ public class User extends BaseTimeEntity {
     /** 관리자 정지(SUSPENDED) 또는 해제(ACTIVE) */
     public void changeStatus(UserStatus status) {
         this.status = status;
-    }
-
-    public void recordLogin(OffsetDateTime now) {
-        this.lastLoginAt = now;
     }
 
     public void updateProfile(String name, String phone) {

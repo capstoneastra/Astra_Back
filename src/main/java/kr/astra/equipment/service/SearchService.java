@@ -16,16 +16,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 시험항목·자연어 통합 검색 (GET /search, api-spec §2 기능 3).
  * 문장 해석은 BE-C 의 {@link ConditionExtractor} 가 있으면 그것(AI), 없으면 {@link KeywordConditionExtractor}(KEYWORD).
  * 장비는 해석된 시험유형으로 찾고, 시험유형을 못 찾으면 문장 그대로 장비명·모델 검색을 합니다.
+ * AI 호출 동안 DB 연결을 잡지 않도록 트랜잭션을 열지 않습니다 (DB 조회는 각 서비스 트랜잭션에서, 결과는 DTO).
  */
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class SearchService {
 
     static final int EQUIPMENT_LIMIT = 20;

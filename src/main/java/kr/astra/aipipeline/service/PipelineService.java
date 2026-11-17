@@ -22,7 +22,7 @@ public class PipelineService {
     }
     void recover(CurrentUser user,Long id) { enqueue(user,store.get(user,id)); }
     private void enqueue(CurrentUser user,PipelineResponse run) {
-        try { executor.submit(() -> {
+        try { executor.submitPipeline(() -> {
             var context = org.springframework.security.core.context.SecurityContextHolder.createEmptyContext();
             context.setAuthentication(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
                     user,null,java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_" + user.role().name()))));

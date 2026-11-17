@@ -47,6 +47,14 @@ class SpecDefinitionServiceTest {
                 .isInstanceOf(BusinessException.class);
     }
 
+    @Test
+    void 같은_키의_사전은_한_번만_조회한다() {
+        definition("frequency", "Hz", ConditionValueType.RANGE);
+        service.normalize(range("frequency", "1", "2", "Hz"));
+        service.normalize(range("frequency", "3", "4", "kHz"));
+        verify(repository, times(1)).findById("frequency");
+    }
+
     private void definition(String key, String unit, ConditionValueType type) {
         SpecDefinition d = mock(SpecDefinition.class);
         when(d.getNameKo()).thenReturn(key);

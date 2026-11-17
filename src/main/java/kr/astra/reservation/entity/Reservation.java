@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.OffsetDateTime;
 import kr.astra.global.entity.BaseTimeEntity;
 import lombok.AccessLevel;
@@ -63,6 +64,11 @@ public class Reservation extends BaseTimeEntity {
 
     @Column(length = 500)
     private String note;
+
+    /** 낙관적 잠금. 다른 트랜잭션이 먼저 바꿨으면 409 VERSION_CONFLICT */
+    @Version
+    @Column(nullable = false)
+    private long version;
 
     public Reservation(Long requestId, Long equipmentId, OffsetDateTime startAt, OffsetDateTime endAt,
                        ReservationStatus status, Long proposedBy, String note) {

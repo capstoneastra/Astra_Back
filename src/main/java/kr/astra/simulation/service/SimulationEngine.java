@@ -31,7 +31,7 @@ public class SimulationEngine {
             "IDEAL_DC_POWER",
             "WORK_ENVELOPE_FIT", "ROBOT_REACH_CHECK", "MEASUREMENT_VOLUME_FIT", "RF_FREQUENCY_COVERAGE");
 
-    /** 입력값이 없거나 범위를 벗어남 → 서비스가 400 VALIDATION_FAILED 로 바꿈 */
+    /** 입력값이 없거나 범위를 벗어남 → 서비스가 400 VALIDATION_FAILED 로 바꿈 (field 가 null 이면 특정 입력 아님) */
     public static class InvalidInput extends RuntimeException {
         private final String field;
 
@@ -333,7 +333,11 @@ public class SimulationEngine {
         return xs;
     }
 
+    /** 모든 출력 숫자가 거치는 곳. 입력이 유한해도 계산 중 넘치면(Infinity/NaN) 400 으로 돌려보냄 */
     static double round(double v, int digits) {
+        if (!Double.isFinite(v)) {
+            throw new InvalidInput(null, "입력값이 너무 커서 계산할 수 없습니다. 값을 줄여 주세요.");
+        }
         return BigDecimal.valueOf(v).setScale(digits, RoundingMode.HALF_UP).doubleValue();
     }
 

@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import kr.astra.global.validation.BcryptPassword;
 import kr.astra.organization.entity.OrgType;
 import kr.astra.user.entity.UserRole;
 
@@ -22,7 +23,8 @@ import kr.astra.user.entity.UserRole;
 public record SignupRequest(
         @NotBlank @Email @Size(max = 200) String email,
         @NotBlank(message = "이메일 인증을 먼저 완료해 주세요.") @Size(max = 200) String verificationToken,
-        @NotBlank @Size(min = 8, max = 72, message = "비밀번호는 8자 이상 72자 이하로 입력해 주세요.") String password,
+        @NotBlank @Size(min = 8, max = 72, message = "비밀번호는 8자 이상 72자 이하로 입력해 주세요.")
+        @BcryptPassword String password,
         @NotBlank @Size(max = 50) String name,
         @Size(max = 30) String phone,
         @NotNull UserRole role,

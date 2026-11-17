@@ -40,14 +40,34 @@ public class TestRequestServiceImpl implements TestRequestService {
     @Override
     @Transactional
     public Long createDraft(CreateDraftCommand command) {
-        if (command == null || command.requesterId() == null || command.equipmentId() == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_FAILED, "의뢰자와 장비는 필수입니다.", null);
+        requireIds(command);
+        UserAccount requester = requester(command);
+        return create(command, requester, equipmentService.getDetail(command.equipmentId()));
+    }
+
+    /**
+     * 이미 조회한 장비로 의뢰 생성 (POST /test-requests 가 장비를 두 번 읽지 않도록).
+     *
+     * @param equipment command.equipmentId() 로 조회한 활성 장비
+     */
+    @Transactional
+    public Long createDraft(CreateDraftCommand command, EquipmentDetailResponse equipment) {
+        requireIds(command);
+        if (!equipment.id().equals(command.equipmentId())) {
+            throw new IllegalArgumentException("장비 id 가 명령과 다릅니다.");
         }
+        return create(command, requester(command), equipment);
+    }
+
+    private UserAccount requester(CreateDraftCommand command) {
         UserAccount requester = userService.getActiveAccount(command.requesterId());
         if (requester.role() == UserRole.ADMIN) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "플랫폼 관리자 계정으로는 시험 의뢰를 만들 수 없습니다.", null);
         }
-        EquipmentDetailResponse equipment = equipmentService.getDetail(command.equipmentId());
+        return requester;
+    }
+
+    private Long create(CreateDraftCommand command, UserAccount requester, EquipmentDetailResponse equipment) {
         if (equipment.institution().id().equals(requester.organizationId())) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED, "소속 조직이 보유한 장비에는 의뢰할 수 없습니다.",
                     Map.of("field", "equipmentId"));
@@ -68,6 +88,12 @@ public class TestRequestServiceImpl implements TestRequestService {
                 command.aiGenerated(), command.aiGenerated() ? "AI 초안" : null, requester.id()));
         workflow.recordCreated(request, requester.id(), command.aiGenerated() ? "AI 의뢰서 초안 생성" : "의뢰 작성 시작");
         return request.getId();
+    }
+
+    private static void requireIds(CreateDraftCommand command) {
+        if (command == null || command.requesterId() == null || command.equipmentId() == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED, "의뢰자와 장비는 필수입니다.", null);
+        }
     }
 
     @Override

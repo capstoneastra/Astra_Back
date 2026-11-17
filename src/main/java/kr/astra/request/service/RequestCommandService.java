@@ -35,7 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class RequestCommandService {
 
-    private final TestRequestService testRequestService;
+    private final TestRequestServiceImpl testRequestService;
     private final RequestWorkflow workflow;
     private final RequestContent content;
     private final EquipmentService equipmentService;
@@ -67,7 +67,7 @@ public class RequestCommandService {
                 equipment.name() + " 시험 의뢰");
         return testRequestService.createDraft(new CreateDraftCommand(actor.userId(), equipment.id(),
                 input.requirementId(), input.matchResultId(), title, initialContent(me, equipment, requirement),
-                false));
+                false), equipment);
     }
 
     /** PUT /test-requests/{id}/draft — 작업본 저장. 제출은 하지 않습니다. */

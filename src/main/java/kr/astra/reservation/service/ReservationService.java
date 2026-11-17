@@ -5,7 +5,6 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
@@ -81,8 +80,8 @@ public class ReservationService {
 
     /** POST /reservations/{id}/counter — 대안 일정. 원래 제안은 CANCELED, 새 제안은 COUNTER_PROPOSED */
     public ReservationResult counter(CurrentUser actor, Long reservationId, ReservationInputs.Propose input) {
+        TestRequest request = workflow.lockForParty(requestIdOf(reservationId), actor, input.version());
         Reservation original = find(reservationId);
-        TestRequest request = workflow.lockForParty(original.getRequestId(), actor, input.version());
         requireScheduling(request);
         if (!original.isOpen()) {
             throw new BusinessException(ErrorCode.REQUEST_INVALID_STATUS, "확정 전 제안에만 대안 일정을 낼 수 있습니다.",
@@ -105,9 +104,9 @@ public class ReservationService {
      * 같은 의뢰의 다른 제안은 CANCELED.
      */
     public ReservationResult confirm(CurrentUser actor, Long reservationId, Integer version) {
-        Reservation reservation = find(reservationId);
-        TestRequest request = workflow.lock(reservation.getRequestId());
+        TestRequest request = workflow.lock(requestIdOf(reservationId));
         workflow.authorize(RequestAction.CONFIRM_RESERVATION.party(), actor, request);
+        Reservation reservation = find(reservationId);
         if (reservation.getStatus() == ReservationStatus.CONFIRMED
                 || reservationRepository.existsByRequestIdAndStatus(request.getId(), ReservationStatus.CONFIRMED)) {
             throw new BusinessException(ErrorCode.RESERVATION_ALREADY_CONFIRMED);
@@ -118,11 +117,16 @@ public class ReservationService {
         }
         RequestWorkflow.requireAllowed(request, RequestAction.CONFIRM_RESERVATION);
         RequestWorkflow.checkVersion(request, version);
+        OffsetDateTime now = OffsetDateTime.now();
+        if (!reservation.getStartAt().isAfter(now)) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED, "시작 시각이 지난 일정은 확정할 수 없습니다. 새 일정을 제안해 주세요.",
+                    Map.of("field", "startAt"));
+        }
 
         // 1차 방어: 서비스 조회
         requireNoOverlap(reservation.getEquipmentId(), reservation.getStartAt(), reservation.getEndAt(),
                 reservation.getId());
-        reservation.confirm(actor.userId(), OffsetDateTime.now());
+        reservation.confirm(actor.userId(), now);
         // 2차 방어: 동시에 확정한 경우 DB 제약이 거부
         try {
             reservationRepository.saveAndFlush(reservation);
@@ -147,8 +151,8 @@ public class ReservationService {
 
     /** POST /reservations/{id}/cancel — 확정 전 제안 취소 (기업·기관 모두). 확정된 일정은 취소할 수 없음 */
     public ReservationResult cancel(CurrentUser actor, Long reservationId, Integer version) {
+        TestRequest request = workflow.lockForParty(requestIdOf(reservationId), actor, version);
         Reservation reservation = find(reservationId);
-        TestRequest request = workflow.lockForParty(reservation.getRequestId(), actor, version);
         if (!reservation.isOpen()) {
             throw new BusinessException(ErrorCode.REQUEST_INVALID_STATUS,
                     reservation.getStatus() == ReservationStatus.CONFIRMED
@@ -174,14 +178,7 @@ public class ReservationService {
     @Transactional(readOnly = true)
     public List<ReservationView> viewsFor(TestRequest request) {
         List<Reservation> list = reservationRepository.findAllByRequestIdOrderByCreatedAtDescIdDesc(request.getId());
-        Set<Long> userIds = new HashSet<>();
-        list.forEach(r -> {
-            userIds.add(r.getProposedBy());
-            if (r.getConfirmedBy() != null) {
-                userIds.add(r.getConfirmedBy());
-            }
-        });
-        RequestViews.Names names = views.people(userIds);
+        RequestViews.Names names = views.people(userIds(list));
         return list.stream().map(r -> view(r, request, names)).toList();
     }
 
@@ -206,16 +203,12 @@ public class ReservationService {
     /** 대시보드: 기관의 다가오는 확정 예약 */
     @Transactional(readOnly = true)
     public List<UpcomingReservationItem> upcomingForInstitution(Long institutionId, int limit) {
-        List<Reservation> list = reservationRepository.findUpcomingForInstitution(institutionId,
+        List<ReservationRepository.Upcoming> rows = reservationRepository.findUpcomingForInstitution(institutionId,
                 ReservationStatus.CONFIRMED, OffsetDateTime.now(), PageRequest.of(0, limit));
-        List<UpcomingReservationItem> items = new ArrayList<>();
-        RequestViews.Names names = views.people(List.of());
-        for (Reservation r : list) {
-            TestRequest request = workflow.get(r.getRequestId());
-            items.add(new UpcomingReservationItem(r.getId(), request.getId(), request.getRequestNo(),
-                    r.getEquipmentId(), names.equipment(r.getEquipmentId()).name(), r.getStartAt(), r.getEndAt()));
-        }
-        return items;
+        RequestViews.Names names = views.equipmentNames(rows.stream().map(ReservationRepository.Upcoming::equipmentId)
+                .toList());
+        return rows.stream().map(r -> new UpcomingReservationItem(r.reservationId(), r.requestId(), r.requestNo(),
+                r.equipmentId(), names.equipment(r.equipmentId()).name(), r.startAt(), r.endAt())).toList();
     }
 
     /** 의뢰가 반려·취소되면 확정 전 제안을 모두 취소합니다 (같은 트랜잭션) */
@@ -226,9 +219,20 @@ public class ReservationService {
 
     // ------------------------------------------------------------ 내부
 
+    /**
+     * 예약의 의뢰 id. 확정·대안·취소는 이 id 로 의뢰를 먼저 잠근 뒤 {@link #find} 로 예약을 읽습니다
+     * (잠금 전에 읽은 사본은 잠금을 기다리는 동안 다른 트랜잭션이 바꿨을 수 있음).
+     */
+    private Long requestIdOf(Long reservationId) {
+        return reservationRepository.findRequestIdById(reservationId).orElseThrow(ReservationService::notFound);
+    }
+
     private Reservation find(Long id) {
-        return reservationRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "예약을 찾을 수 없습니다.", null));
+        return reservationRepository.findById(id).orElseThrow(ReservationService::notFound);
+    }
+
+    private static BusinessException notFound() {
+        return new BusinessException(ErrorCode.NOT_FOUND, "예약을 찾을 수 없습니다.", null);
     }
 
     private static void requireScheduling(TestRequest request) {
@@ -270,13 +274,20 @@ public class ReservationService {
     }
 
     private ReservationResult result(Reservation reservation, TestRequest request) {
-        Set<Long> userIds = new HashSet<>();
-        userIds.add(reservation.getProposedBy());
-        if (reservation.getConfirmedBy() != null) {
-            userIds.add(reservation.getConfirmedBy());
-        }
-        return new ReservationResult(view(reservation, request, views.people(userIds)),
+        return new ReservationResult(view(reservation, request, views.people(userIds(List.of(reservation)))),
                 RequestWorkflow.result(request));
+    }
+
+    /** 제안한 사람·확정한 사람 id */
+    private static Set<Long> userIds(List<Reservation> list) {
+        Set<Long> ids = new HashSet<>();
+        for (Reservation r : list) {
+            ids.add(r.getProposedBy());
+            if (r.getConfirmedBy() != null) {
+                ids.add(r.getConfirmedBy());
+            }
+        }
+        return ids;
     }
 
     private static ReservationView view(Reservation r, TestRequest request, RequestViews.Names names) {

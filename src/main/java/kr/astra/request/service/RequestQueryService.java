@@ -4,6 +4,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import kr.astra.global.exception.BusinessException;
 import kr.astra.global.exception.ErrorCode;
@@ -100,7 +101,7 @@ public class RequestQueryService {
         workflow.requireParty(actor, r);
 
         TestRequestRevision current = workflow.currentRevision(r);
-        boolean ownerOrAdmin = actor.isAdmin() || r.getRequesterId().equals(actor.userId());
+        boolean ownerOrAdmin = ownerOrAdmin(actor, r);
         TestRequestRevision working = ownerOrAdmin ? workflow.nextWorkingRevision(r).orElse(null) : null;
 
         Set<Long> userIds = RequestViews.authorIds(Stream.of(current, working));
@@ -119,12 +120,14 @@ public class RequestQueryService {
     public List<Revision> revisions(CurrentUser actor, Long requestId) {
         TestRequest r = workflow.get(requestId);
         workflow.requireParty(actor, r);
-        boolean ownerOrAdmin = actor.isAdmin() || r.getRequesterId().equals(actor.userId());
-        List<TestRequestRevision> list = revisionRepository.findAllByRequestIdOrderByRevisionNoAsc(requestId).stream()
-                .filter(rev -> ownerOrAdmin || rev.isSubmitted())
+        boolean ownerOrAdmin = ownerOrAdmin(actor, r);
+        List<TestRequestRevisionRepository.Meta> list = revisionRepository.findMetaByRequestId(requestId).stream()
+                .filter(rev -> ownerOrAdmin || rev.submitted())
                 .toList();
-        RequestViews.Names names = views.people(RequestViews.authorIds(list.stream()));
-        return list.stream().map(rev -> views.revision(rev, names, false)).toList();
+        RequestViews.Names names = views.people(list.stream().map(TestRequestRevisionRepository.Meta::authorId)
+                .collect(Collectors.toSet()));
+        return list.stream().map(rev -> new Revision(rev.revisionNo(), rev.aiGenerated(), rev.submitted(),
+                rev.changeSummary(), names.person(rev.authorId()), rev.createdAt(), rev.submittedAt(), null)).toList();
     }
 
     /** GET /test-requests/{id}/revisions/{no}?diffWith=1 — 특정 제출본 (+ 다른 제출본과 바뀐 값) */
@@ -152,11 +155,16 @@ public class RequestQueryService {
     }
 
     private TestRequestRevision visibleRevision(CurrentUser actor, TestRequest r, int revisionNo) {
-        boolean ownerOrAdmin = actor.isAdmin() || r.getRequesterId().equals(actor.userId());
+        boolean ownerOrAdmin = ownerOrAdmin(actor, r);
         return revisionRepository.findByRequestIdAndRevisionNo(r.getId(), revisionNo)
                 .filter(rev -> ownerOrAdmin || rev.isSubmitted())
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "제출본을 찾을 수 없습니다: " + revisionNo,
                         null));
+    }
+
+    /** 의뢰자 본인 또는 관리자 (아직 제출 안 한 작업본을 볼 수 있음) */
+    private static boolean ownerOrAdmin(CurrentUser actor, TestRequest r) {
+        return actor.isAdmin() || r.getRequesterId().equals(actor.userId());
     }
 
     /** 상세 화면 버튼 (§11 표 기준). 관리자는 양쪽 버튼을 모두 봄 */

@@ -20,6 +20,17 @@ class ConditionValidatorTest {
         var c=new ConditionInput("temperature",null,new BigDecimal("-40"),new BigDecimal("80"),null,"°C",ConditionStatus.CONFIRMED,null,null);
         assertThat(validator.validate(List.of(c),rules)).hasSize(1);
     }
+    @Test void unitAliasesAreNormalizedToRuleUnit() {
+        var withHumidity=new ArrayList<>(rules);
+        withHumidity.add(new ConditionRuleResponse("humidity","습도",ConditionValueType.RANGE,"%RH",false,"humidity",ConditionComparator.RANGE_WITHIN));
+        var temperature=new ConditionInput("temperature",null,new BigDecimal("-40"),new BigDecimal("85"),null,"℃",ConditionStatus.CONFIRMED,null,null);
+        var humidity=new ConditionInput("humidity",new BigDecimal("95"),null,null,null,"%",ConditionStatus.CONFIRMED,null,null);
+        assertThat(validator.validate(List.of(temperature,humidity),withHumidity)).extracting(ConditionInput::unit)
+                .containsExactly("°C","%RH");
+        assertThat(UnitConverter.canonical("배","x")).isEqualTo("x");
+        assertThat(UnitConverter.canonical("킬로그램","kg")).isEqualTo("kg");
+        assertThat(UnitConverter.canonical("%","kg")).isEqualTo("%"); // %RH 규칙일 때만 습도로 해석
+    }
     @Test void rejectsUnknownDuplicateNegativeAndIncompatibleValues() {
         var valid=mass("15","kg",ConditionStatus.CONFIRMED);
         for (var inputs: List.of(List.of(valid,valid),List.of(mass("-1","kg",ConditionStatus.CONFIRMED)),

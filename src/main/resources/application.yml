@@ -14,6 +14,16 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/astra}
     username: ${DB_USERNAME:astra}
     password: ${DB_PASSWORD:astra}
+    hikari:
+      # 기본 10 은 동시 요청이 몰리면 금방 바닥남. 연결을 못 받으면 30초 대신 10초 안에 실패
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+      connection-timeout: 10000
+
+  data:
+    web:
+      pageable:
+        # 목록 API 의 size 상한 (기본 2000). 더 크게 보내면 100 으로 잘림
+        max-page-size: 100
 
   jpa:
     open-in-view: false
@@ -41,6 +51,10 @@ spring:
     properties:
       mail.smtp.auth: true
       mail.smtp.starttls.enable: true
+      # 메일 서버가 응답하지 않을 때 요청 스레드가 무한정 기다리지 않게 (기본값은 무제한)
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
 
 springdoc:
   swagger-ui:

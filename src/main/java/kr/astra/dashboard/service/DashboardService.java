@@ -22,6 +22,7 @@ import kr.astra.dashboard.dto.DashboardResponses.NeedsUpdate;
 import kr.astra.dashboard.dto.DashboardResponses.Summary;
 import kr.astra.dashboard.dto.DashboardResponses.TestTypeCount;
 import kr.astra.dashboard.dto.DashboardView;
+import kr.astra.equipment.entity.Equipment;
 import kr.astra.equipment.repository.EquipmentJdbcRepository.InstitutionVerificationRow;
 import kr.astra.equipment.repository.EquipmentJdbcRepository.NeedsUpdateRow;
 import kr.astra.equipment.service.EquipmentService;
@@ -55,7 +56,7 @@ public class DashboardService {
     /** 목록 칸(처리할 의뢰·검토 대기·예약·최근 상담) 최대 개수 */
     static final int LIST_LIMIT = 5;
     /** 이 기간이 지나면 "정보 갱신 필요" (기관 장비 관리와 같은 기준) */
-    static final int UPDATE_INTERVAL_DAYS = 90;
+    static final int UPDATE_INTERVAL_DAYS = Equipment.UPDATE_INTERVAL_DAYS;
 
     private static final Collator KOREAN = Collator.getInstance(Locale.KOREAN);
 
@@ -72,8 +73,9 @@ public class DashboardService {
         List<TestTypeCount> testTypes = testTypeService.findAllOrdered().stream()
                 .map(t -> new TestTypeCount(t.getCode(), t.getNameKo(), byTestType.getOrDefault(t.getCode(), 0L)))
                 .toList();
-        return new EquipmentStats(total(), byRegion(), equipmentService.countByEquipmentTypeAll(), testTypes,
-                institutionStats());
+        List<InstitutionVerificationRow> rows = equipmentService.countVerificationByInstitution();
+        return new EquipmentStats(total(rows), byRegion(), equipmentService.countByEquipmentTypeAll(), testTypes,
+                institutionStats(rows));
     }
 
     /**
@@ -120,11 +122,13 @@ public class DashboardService {
 
     private AdminSummary adminSummary() {
         RequestDashboardQuery requests = requestQuery.getIfAvailable();
+        List<InstitutionVerificationRow> rows = equipmentService.countVerificationByInstitution();
         return new AdminSummary(UserRole.ADMIN, DashboardView.ADMIN,
                 userService.countByStatus(UserStatus.PENDING),
                 organizationService.countUnverifiedInstitutions(),
                 counts(requests == null ? null : requests::countAll),
-                institutionStats(), overview(), new DataAvailable(requests != null, null));
+                institutionStats(rows), new EquipmentOverview(total(rows), byRegion()),
+                new DataAvailable(requests != null, null));
     }
 
     /** 의뢰 상태 10개를 모두 넣고 없는 상태는 0 (구현이 없으면 전부 0) */
@@ -150,6 +154,11 @@ public class DashboardService {
         return equipmentService.countByInstitution().values().stream().mapToLong(Long::longValue).sum();
     }
 
+    /** 기관별 집계를 이미 읽었으면 그 합 (같은 GROUP BY 를 두 번 돌리지 않도록) */
+    private static long total(List<InstitutionVerificationRow> rows) {
+        return rows.stream().mapToLong(InstitutionVerificationRow::equipmentCount).sum();
+    }
+
     /** 지역 → 장비 수, 지역 가나다순 */
     private Map<String, Long> byRegion() {
         Map<String, Long> sorted = new LinkedHashMap<>();
@@ -160,8 +169,7 @@ public class DashboardService {
     }
 
     /** 기관별 장비 수·기관 확인 비율 (장비 수 많은 순, 같으면 이름 가나다순) */
-    private List<InstitutionStat> institutionStats() {
-        List<InstitutionVerificationRow> rows = equipmentService.countVerificationByInstitution();
+    private List<InstitutionStat> institutionStats(List<InstitutionVerificationRow> rows) {
         Map<Long, OrganizationSummaryResponse> orgs = organizationService.findSummaries(
                 rows.stream().map(InstitutionVerificationRow::institutionId).toList());
         return rows.stream().map(r -> {

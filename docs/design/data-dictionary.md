@@ -69,9 +69,9 @@ CONFIRMED는 사용자가 명시·확인한 조건, UNCONFIRMED는 추정·불�
 | reason / created_by / created_at | 정비·운휴 사유 / 등록 사용자 / 등록 시각 |
 | reservations.status | PROPOSED·COUNTER_PROPOSED는 제안, CONFIRMED만 점유, CANCELED는 취소 |
 
-상태 확인일이 없거나 90일 초과, UNKNOWN, 기관 확인자가 없는 DEMO는 확인 필요다. 알림은 상태 확인일(없으면 생성일)로 90일을 계산한다. 매일 09:00 Asia/Seoul, 중단 중 누락을 보충하며 상태 확인 주기당 한 번 보낸다. 담당자가 없으면 발송 완료로 기록하지 않는다.
+상태 확인일이 없거나 90일 초과, UNKNOWN, 기관 확인자가 없는 DEMO는 확인 필요다. 알림은 상태 확인일(없으면 생성일)로 90일을 계산하고 매일 09:00 Asia/Seoul에 보낸다. 중단 중 누락분은 보충하며, 상태 확인 주기당 한 번 보낸다. 담당자가 없으면 발송 완료로 기록하지 않는다.
 
-기간 조회의 날짜는 한국 날짜이며 `to` 날짜를 포함한다. 확정 예약과 정비를 합친 구간 우선순위는 UNAVAILABLE > MAINTENANCE > BUSY > UNKNOWN > AVAILABLE. 같은 장비의 예약 확정과 정비 등록은 행 잠금·DB 트리거로 경합을 막는다. 예약자·의뢰 정보는 가용성 응답에 넣지 않는다.
+기간 조회의 날짜는 한국 날짜이며 `to` 날짜를 포함한다. 확정 예약과 정비를 합친 구간 우선순위는 UNAVAILABLE > MAINTENANCE > BUSY > UNKNOWN > AVAILABLE이다. 같은 장비의 예약 확정과 정비 등록은 행 잠금·DB 트리거로 경합을 막는다. 예약자·의뢰 정보는 가용성 응답에 넣지 않는다.
 
 ## 현업 정보
 

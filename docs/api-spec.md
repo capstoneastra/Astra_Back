@@ -3,7 +3,7 @@
 > 기준: REST + JSON, Base URL `/api/v1`, 인증 `Authorization: Bearer <accessToken>` (JWT)
 > DB 기준 문서: `schema.sql` / ERD: `erd.dbml`
 > 표기: 🔓 비로그인 허용(`/auth/**`만) · `로그인` 로그인한 모든 사용자 · 🏢 의뢰자(본인 상담·시험조건·의뢰의 주인. 기업·기관·대학 회원 모두 해당) · 🏛 장비 보유 조직 구성원(그 장비·의뢰의 `institution_id`가 내 소속 조직인 회원. 기업·기관·대학 모두 해당) · 👑 플랫폼 관리자(ADMIN)
-> 👑 관리자는 **마스터 권한**이라 모든 API를 호출할 수 있습니다. 그래서 표에는 관리자 전용 API에만 👑를 표시합니다.
+> 👑 관리자는 마스터 권한으로 모든 API를 호출할 수 있으므로, 표에는 관리자 전용 API에만 👑를 표시합니다.
 
 ---
 
@@ -26,12 +26,12 @@
 ### 0-2. 규칙
 | 항목 | 규칙 |
 |---|---|
-| JSON 필드명 | camelCase (`desiredStartDate`) — DB는 snake_case |
+| JSON 필드명 | camelCase (`desiredStartDate`). DB는 snake_case |
 | 날짜/시각 | `2026-11-20` / ISO-8601 `2026-11-05T09:00:00+09:00` |
 | 페이지네이션 | `?page=0&size=20&sort=createdAt,desc` (0부터 시작) |
-| enum | 대문자 문자열 그대로 (`UNDER_REVIEW`) — 화면 한글 라벨은 프론트에서 매핑 |
+| enum | 대문자 문자열 그대로 (`UNDER_REVIEW`). 화면 한글 라벨은 프론트에서 매핑 |
 | ID | 숫자 `id` 사용. 장비는 `externalId`도 함께 응답 (초기 적재 `ASTRA-CAND-0001`, 기관 신규 등록 `ASTRA-EQ-0072`) |
-| 조건·사양 키 | JSON 필드명(camelCase)과 별개로, 조건·사양을 가리키는 **키 값**은 단위 없는 snake_case. 단위는 `unit`에 따로 (`{ "key": "sample_mass", "value": 15, "unit": "kg" }`). 시험유형별 키 목록은 `GET /test-types/{code}`의 `conditionRules` |
+| 조건·사양 키 | JSON 필드명(camelCase)과 별개로, 조건·사양을 가리키는 키 값은 단위 없는 snake_case. 단위는 `unit`에 따로 (`{ "key": "sample_mass", "value": 15, "unit": "kg" }`). 시험유형별 키 목록은 `GET /test-types/{code}`의 `conditionRules` |
 | MOCK 표시 | 시연용 데이터가 섞인 응답엔 `isMock`/`sourceType` 필드를 반드시 포함, 프론트는 "DEMO" 배지 표시 |
 | 동시성 | 상태 변경 요청은 `version` 필드를 보내고, 불일치 시 `409 CONFLICT` |
 | CORS | 브라우저에서 부를 수 있는 프론트 주소는 서버 환경변수 `CORS_ALLOWED_ORIGINS` (쉼표로 여러 개, `http://localhost:*` 패턴 가능, 기본 `http://localhost:5173`). 쿠키는 쓰지 않으므로 `withCredentials` 불필요. 401·403 응답에도 CORS 헤더가 붙음 |
@@ -56,9 +56,9 @@
 | 역할 | 범위 |
 |---|---|
 | 비로그인 | `/auth/**` (이메일 인증·가입·로그인·토큰 재발급·가입용 기관 목록)만 허용. 나머지는 전부 `401 AUTH_REQUIRED`. 프론트는 로그인 페이지 외 모든 라우트에서 로그인 페이지로 이동 |
-| 🏢 의뢰자 | 장비·시험정보 조회, 본인 상담/시험조건/의뢰/시뮬레이션만 조회·수정. 기업·기관·대학 회원 누구나 의뢰자가 될 수 있음. 단, **자기 소속 조직이 보유한 장비에는 의뢰할 수 없음** (`400 VALIDATION_FAILED`, `details.field=equipmentId`) — 매칭 추천에서도 자기 조직 장비는 빠짐 |
-| 🏛 장비 보유 조직 구성원 | 장비·시험정보 조회, **소속 조직 장비 등록·수정**, 소속 조직 장비로 들어온 의뢰 검토·보완요청·예약 확정. 기업·기관·대학 어느 유형이든 소속 조직 기준으로 판단 (역할 `COMPANY_USER`/`INSTITUTION_MANAGER`는 가입 유형 표시) |
-| 👑 플랫폼 관리자 | **전체(마스터)**. 모든 조회·수정, 회원·기관 승인, 초기 데이터 적재. 관리자가 대신 처리한 상태 변경도 `request_status_history.changed_by`에 관리자 id로 남음 |
+| 🏢 의뢰자 | 장비·시험정보 조회, 본인 상담/시험조건/의뢰/시뮬레이션만 조회·수정. 기업·기관·대학 회원 누구나 의뢰자가 될 수 있음. 단, **자기 소속 조직이 보유한 장비에는 의뢰할 수 없음** (`400 VALIDATION_FAILED`, `details.field=equipmentId`). 매칭 추천에서도 자기 조직 장비는 빠짐 |
+| 🏛 장비 보유 조직 구성원 | 장비·시험정보 조회, 소속 조직 장비 등록·수정, 소속 조직 장비로 들어온 의뢰 검토·보완요청·예약 확정. 기업·기관·대학 어느 유형이든 소속 조직 기준으로 판단 (역할 `COMPANY_USER`/`INSTITUTION_MANAGER`는 가입 유형 표시) |
+| 👑 플랫폼 관리자 | 전체(마스터). 모든 조회·수정, 회원·기관 승인, 초기 데이터 적재. 관리자가 대신 처리한 상태 변경도 `request_status_history.changed_by`에 관리자 id로 남음 |
 
 - 소유권 체크: `user.organization_id == equipment.institution_id` (의뢰는 `test_requests.institution_id`) 일 때만 수정 가능, 아니면 `403 FORBIDDEN`. 역할·조직 유형은 보지 않으므로 기업 회원도 자기 조직 장비를 등록·관리할 수 있음
 - `institution_id`·`/institutions` 라는 이름은 그대로지만 뜻은 "장비 보유 조직"(기업·기관·대학). `GET /institutions`에는 승인된 기관·대학 전부와, 활성 장비가 1대 이상인 기업이 나옴 (`orgType`으로 구분)
@@ -98,7 +98,7 @@
 - **사업자등록번호**: 숫자 10자리인지만 확인하고(하이픈 있어도 됨, `123-45-67890` 형식으로 저장) 진위 확인은 관리자가 승인할 때 합니다.
 - **같은 이름의 조직**: 이미 있으면 `409 ORGANIZATION_ALREADY_EXISTS`. 단, 미승인 조직이고 승인 대기·활성 회원이 없으면(거절된 신청만 남은 경우) 그 조직을 다시 쓰고 사업자번호·주소·연락처를 새 입력으로 바꿉니다.
 
-> 가입 화면에서 기관을 고르려면 로그인 전에 기관 목록이 필요합니다. 그래서 `GET /auth/institutions`를 `/auth` 아래에 두고 유형·이름·지역만 반환합니다. 대학(`UNIVERSITY`)도 기관과 같은 방식으로 가입하므로 이 목록에 함께 나옵니다.
+> 가입 화면에서 기관을 고르려면 로그인 전에 기관 목록이 필요하므로 `GET /auth/institutions`를 `/auth` 아래에 두고 유형·이름·지역만 반환합니다. 대학(`UNIVERSITY`)도 기관과 같은 방식으로 가입하므로 이 목록에 함께 나옵니다.
 
 ```json
 // ① POST /auth/email-verifications { "email": "a@company.com" } → 200
@@ -157,7 +157,7 @@
 // PATCH /users/me { "name"?: "김담당", "phone"?: "042-000-0009" } → 200 (GET 과 같은 형식, 보낸 값만 수정)
 ```
 
-> 시연 계정(V3 seed): `admin@astra.demo`, `company@astra.demo`, `manager1@astra.demo`, `manager2@astra.demo`, `pending@astra.demo`(PENDING). 비밀번호는 팀 채팅으로 공유합니다.
+> 시연 계정(V3 seed): `admin@astra.demo`, `company@astra.demo`, `manager1@astra.demo`, `manager2@astra.demo`, `pending@astra.demo`(PENDING), V8 추가 `company2@astra.demo`, `univ1@astra.demo`. 비밀번호는 모두 `12345678` (V9).
 
 > 토큰: access 토큰은 `Authorization: Bearer` 헤더로 보냅니다(유효 1시간). refresh 토큰은 유효 14일이고, 서버는 원문 대신 해시만 `refresh_tokens.token_hash`에 저장합니다.
 
@@ -464,7 +464,7 @@ availability를 보내면 서버가 availabilityUpdatedAt/By를 기록하고 알
 > 설계 원칙(PPT 12p): AI 추출값은 `source=AI_EXTRACTED`, 불확실하면 `UNCONFIRMED`로 저장하고 사용자가 직접 수정 가능해야 함.
 > `missing`은 그 시험유형의 `test_condition_rules` 중 `is_required=true`인데 값이 없는 조건입니다. AI는 정해진 조건 키 목록 안에서만 추출합니다.
 
-structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 시험의 test_condition_rules에서 동적으로 만듭니다. 프롬프트에 spec_definitions와 condition_aliases를 함께 전달합니다. 예: 무게·중량→VIBRATION의 sample_mass, 가진→test_types.keywords의 VIBRATION. 모르는 유형·키·단위, 근거 없는 값은 서버에서 `AI_UPSTREAM_ERROR`로 거부하며 잘못된 응답을 성공 결과로 저장하지 않습니다. 허용된 값 중 불확실한 조건은 UNCONFIRMED로 남깁니다. chat_messages.metadata와 match_condition_checks에 추출·조건별 판정 근거를 보관합니다.
+structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 시험의 test_condition_rules에서 동적으로 만듭니다. 프롬프트에 spec_definitions와 condition_aliases를 함께 전달합니다. 예: 무게·중량→VIBRATION의 sample_mass, 가진→test_types.keywords의 VIBRATION. 조건은 항목마다 따로 검사합니다. 모르는 키·단위나 원문에 없는 숫자는 그 항목만 버리고, 근거 문장이 원문과 정확히 일치하지 않으면 UNCONFIRMED 로 낮춥니다(℃·도·%·배 같은 단위 표기와 "2,400" 같은 숫자는 기준 단위로 맞춤). 응답 구조 자체가 깨졌을 때만 `AI_UPSTREAM_ERROR`이고, 잘못된 응답을 성공 결과로 저장하지 않습니다. 허용된 값 중 불확실한 조건은 UNCONFIRMED로 남깁니다. chat_messages.metadata와 match_condition_checks에 추출·조건별 판정 근거를 보관합니다.
 
 ---
 
@@ -521,7 +521,7 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 |---|---|---|---|---|
 | POST | `/test-requests` | 🏢 | 의뢰 생성(DRAFT) `{ equipmentId, requirementId?, matchResultId? }`. 소속 조직 보유 장비면 `400 VALIDATION_FAILED` | 9 |
 | POST | `/test-requests/ai-draft` | 🏢 | AI 의뢰서 초안 생성 → DRAFT + revision(isAiGenerated) | 8 |
-| GET | `/test-requests` | 🏢 🏛 | 목록 — `?box=SENT` 내가 보낸 의뢰 / `?box=RECEIVED` 우리 조직 장비로 들어온 의뢰(제출된 것만). `box`를 안 보내면 `INSTITUTION_MANAGER`는 RECEIVED, 그 외는 SENT (관리자는 전체). `?status=UNDER_REVIEW` | 9 |
+| GET | `/test-requests` | 🏢 🏛 | 목록: `?box=SENT` 내가 보낸 의뢰 / `?box=RECEIVED` 우리 조직 장비로 들어온 의뢰(제출된 것만). `box`를 안 보내면 `INSTITUTION_MANAGER`는 RECEIVED, 그 외는 SENT (관리자는 전체). `?status=UNDER_REVIEW` | 9 |
 | GET | `/test-requests/{id}` | 🏢 🏛 | 상세 (현재 상태, 최신 revision, 열린 보완요청, 예약) | 9 |
 | PUT | `/test-requests/{id}/draft` | 🏢 | 작업본 revision 내용 저장 (DRAFT 또는 SUPPLEMENT_REQUESTED) | 8 |
 | POST | `/test-requests/{id}/submit` | 🏢 | 제출 (DRAFT→SUBMITTED) | 9 |
@@ -533,7 +533,7 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 | GET | `/test-requests/{id}/attachments` | 🏢 🏛 | 첨부 목록 | |
 | DELETE | `/attachments/{id}` | 업로더 | 첨부 삭제 | |
 
-**의뢰서 본문 `content` (JSONB) 스키마 — 프론트/백 공통 계약**
+**의뢰서 본문 `content` (JSONB) 스키마 (프론트/백 공통 계약)**
 (질량·주파수·크기 같은 수치 조건은 모두 `conditions[]`에 조건 키로 넣고, `sample`에는 시료 이름·수량·준비일만 둡니다.)
 
 선택 객체 `serviceRequirements`의 허용 키는 accreditedRequired(공인성적서 필요), operatorSupportRequested(운용 인력 지원 요청), securityOrExportControlled(보안·수출통제 협의 대상)입니다. 값은 boolean/null이며 생략·null은 미확인, false는 요청하지 않음입니다. 그 외 키·숫자/문자 값은 `400 VALIDATION_FAILED`. AI 초안은 명시적으로 확인한 accredited_required만 accreditedRequired로 옮기고 나머지는 추측하지 않습니다.
@@ -647,7 +647,7 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
              { "step": "DRAFT",   "status": "PENDING", "message": null } ],
   "requirementId": 7, "matchRunId": null, "draftRequestId": null }
 ```
-> 필수 조건이 `MISSING`이면 `status=WAITING_USER`로 멈추고, 프론트는 조건 입력 화면으로 유도 → 입력 후 같은 run을 `POST /ai/auto-runs/{id}/resume`. 마지막 결과는 **DRAFT 의뢰서까지만** 생성 (자동 제출 금지 — 사용자 승인 필수).
+> 필수 조건이 `MISSING`이면 `status=WAITING_USER`로 멈추고, 프론트는 조건 입력 화면으로 유도한 뒤 입력이 끝나면 같은 run을 `POST /ai/auto-runs/{id}/resume`로 재개합니다. 마지막 결과는 **DRAFT 의뢰서까지만** 생성합니다(자동 제출 금지, 사용자 승인 필수).
 
 ---
 
@@ -689,7 +689,7 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 | POST | `/notifications/read-all` | 로그인 | 모두 읽음 |
 
 > 의뢰·예약 칸은 BE-B 의 `RequestDashboardQuery`, 최근 상담은 BE-C 의 `ChatSessionQuery` 구현이 있을 때만 채워집니다.
-> 구현 전에는 0·빈 목록이고 `dataAvailable` 이 `false` → 프론트는 그 칸을 "준비 중"으로 표시합니다. 목록 칸은 최대 5개.
+> 구현 전에는 0·빈 목록이고 `dataAvailable` 이 `false`이므로, 프론트는 그 칸을 "준비 중"으로 표시합니다. 목록 칸은 최대 5개.
 
 > 응답 형식은 `role`이 아니라 `view`로 구분합니다. 기업 회원도 `?view=PROVIDER`로 자기 조직이 받은 의뢰를, 기관·대학 회원도 `?view=REQUESTER`로 자기가 보낸 의뢰를 볼 수 있습니다.
 
@@ -711,7 +711,7 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
   "pendingReview": [ /* actionRequired 와 같은 형식 (SUBMITTED·RESUBMITTED) */ ],
   "upcomingReservations": [ { "reservationId": 4, "requestId": 15, "requestNo": "REQ-20261105-0001", "equipmentId": 48,
                               "equipmentName": "진동시험기", "startAt": "2026-11-20T09:00:00+09:00", "endAt": "..." } ],
-  "equipmentNeedsUpdate": { "total": 13, "notConfirmed": 13, "outdated": 0 },  // 기관 확인 전 / 마지막 갱신 90일 경과
+  "equipmentNeedsUpdate": { "total": 13, "notConfirmed": 13, "outdated": 0 },  // total = 장비 목록 needsUpdate 수 (기관 확인 전·정보 90일 경과·가용 상태 확인 필요 중 하나). notConfirmed·outdated 는 사유별 수라 합이 total 과 다를 수 있음
   "equipmentStats": { "total": 339, "byRegion": { ... } },
   "dataAvailable": { "requests": false } }
 

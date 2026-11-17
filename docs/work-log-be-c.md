@@ -30,7 +30,7 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 - 실제 `.env`와 비밀값은 읽거나 변경하지 않음
 
 **확인**
-- `./gradlew test --tests 'kr.astra.llm.*' --tests 'kr.astra.chat.*' --console=plain`: **47개 통과**, 전체 소스·테스트 컴파일 성공
+- `./gradlew test --tests 'kr.astra.llm.*' --tests 'kr.astra.chat.*' --console=plain`: 47개 통과, 전체 소스·테스트 컴파일 성공
 - 신규 Gemini 로컬 HTTP 대역 테스트 7개: 요청 스키마·메타데이터, SSE 공백·thought 제외, 잘림·차단·JSON·HTTP 오류, 스트림 종료·연결 중단, 키 누락, 헤더 수신 후 본문 타임아웃, 중단 시 interrupt 보존
 - 제공자 선택 테스트 3개: Gemini 단일 Bean, Claude 복귀·기존 설정 호환, 잘못된 제공자 값에서 자동 fallback 금지
 - 기존 Claude HTTP 대역 및 상담·조건 추출·설명·초안 테스트 포함. 실제 유료 API 호출·실제 Gemini 품질 평가는 하지 않음
@@ -60,7 +60,7 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 - BE-A 운영 코드 변경 없음. 기존 `DashboardSearchApiTest`의 상담 미연결 기대값·설명만 연결 완료에 맞춤
 
 **확인**
-- `./gradlew test --tests 'kr.astra.chat.*' --console=plain`: **18개 통과** (기존 8 + 조회·활동 시각 10)
+- `./gradlew test --tests 'kr.astra.chat.*' --console=plain`: 18개 통과 (기존 8 + 조회·활동 시각 10)
 - Spring 컨텍스트에서 구현체가 하나만 등록되고 대시보드가 요약과 연결 여부를 받는 것을 대역 검증
 - `./gradlew test --tests 'kr.astra.ChatSessionQueryIntegrationTest' --tests 'kr.astra.DashboardSearchApiTest.기업_요약*' --console=plain`: 3개 모두 Docker 환경 부재로 컨텍스트 초기화 실패. DB 정렬·제한·활동 시각 저장 및 실제 HTTP는 미검증
 
@@ -82,10 +82,10 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 - 직접 초안 API는 결과 조회 계약이 없는 상태에서 저장 후 실패하는 고아 초안을 만들지 않도록 저장 전에 오류 반환. 응답 명세 축소·가짜 requestNo/revision 없음
 - 자동 추진 ANALYZE → SEARCH → MATCH → DRAFT 단계와 결과 저장, 필수값 누락·미확인 시 `WAITING_USER`, 같은 실행 재개, 취소·단계 중복 실행 방지
 - 단계 부작용과 체크포인트를 같은 트랜잭션에 저장. 재시작 시 PENDING/RUNNING 복구 경로 구현
-- 초안 ID만으로 DRAFT·AI revision을 확인했다고 처리하지 않음. ID만 반환되면 보존 후 `FAILED`, 확인 없이 `SUCCEEDED`로 전환하지 않음
+- 초안 ID만 반환되면 DRAFT·AI revision 확인으로 보지 않고 보존 후 `FAILED` 처리. 확인 없이 `SUCCEEDED`로 전환하지 않음
 
 **확인**
-- 당시 BE-C 선택 검증 **62개 통과**: 상담·조건·매칭·LLM·초안·자동 추진 범위
+- 당시 BE-C 선택 검증 62개 통과: 상담·조건·매칭·LLM·초안·자동 추진 범위
 - `BeCPersistenceTest` 4개는 Docker 환경 부재로 초기화 실패. 실제 DB 잠금·롤백·매핑 및 재시작 복구 미검증
 - 이후 사용자 작업으로 `PipelineWorkerTest.java`·`BeCPersistenceTest.java`가 작업 트리에서 삭제됨. 해당 삭제를 복원하거나 후속 커밋에 포함하지 않았음. 62개는 삭제 이전 검증 기록임
 

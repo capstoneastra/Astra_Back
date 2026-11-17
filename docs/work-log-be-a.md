@@ -14,17 +14,144 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 | 통합 1차 | BE-C 병합 후 통합 점검, SSE 끊김 수정 | ✅ | PR #10 (2026-11-09) |
 | 추가 | 비교표 이용 조건(비용·기간), 정지 계정 즉시 차단, 기존 서비스(ZEUS)와의 차이 | ✅ | PR #11 (2026-11-09) |
 | 6주차 | 배포, 통합 테스트, 시연 시나리오 확인 | 🔶 진행 중 | 배포는 VM 정해지면. BE-B 구현은 PR #13 (2026-11-10) 병합됨 |
-| 안정화 | 인증·토큰·메일·장비 조회의 동시성·성능 수정 9건 — 윤준수, 2026-11-16 | ✅ | PR #14 (2026-11-16) |
-| 7 | 기업·기관·대학 간 장비 공유로 확장 (교수님 피드백) + 가상 조직·시연 장비 268대 — 윤준수, 2026-11-17 | ✅ | `test` 브랜치 push 완료 (PR 대기) |
+| 안정화 | 인증·토큰·메일·장비 조회의 동시성·성능 수정 9건 (윤준수, 2026-11-16) | ✅ | PR #14 (2026-11-16) |
+| 7 | 기업·기관·대학 간 장비 공유로 확장 (교수님 피드백) + 가상 조직·시연 장비 268대 (윤준수, 2026-11-17) | ✅ | PR #15 · PR #16 (2026-11-17) |
+| 8 | 시연 계정 비밀번호 재설정 (V9, 모두 `12345678`), 2026-11-17 | ✅ | `957db90` |
+| 통합 2차 | V8·V9 이후 시연 시나리오 전체를 실제 서버에서 재점검, 2026-11-18 | ✅ | `d3198ce` |
+| 9 | 통합 2차에서 찾은 AI 초안·매칭·상담 문제 수정 (BE-C 코드, 윤준수가 수정), 2026-11-18 | ✅ | 41e12c0 |
+| 10 | 전체 코드 점검 후 과부하·오류 위험 수정 (BE-A·B·C 전 영역), 2026-11-18 | ✅ | `9eea6e3`~`acb47d5` (push, PR 전) |
 
-**지금 남은 것** (2026-11-17 기준, 7번 작업)
-- `test` → main PR. be-b(의뢰·검토·예약)·be-c(상담·매칭·AI) 코드도 고쳤으니 해당 담당자 리뷰 요청
+**지금 남은 것** (2026-11-18 기준)
+- 7번에서 고친 be-b(의뢰·검토·예약)·be-c(상담·매칭·AI) 코드는 해당 담당자에게 확인 요청
+- AI: Gemini 무료 키 할당량(429)·과부하(503) → API 결제 연결 필요. 연결 후 `ConditionMappingEvaluationTest` 정식 모델로 재측정 (아래 8번 참고)
+- BE-C 전달: 조건 추출 검증이 단위 환산(GHz→Hz 등) 응답을 통째로 거부, 실패 원인 로그 없음, AI 상담 답변에 DB 장비 정보 미포함
 - Swagger 로 직접 호출 확인 (이번에는 자동 테스트만 함)
 - FE 공지: `orgType` 필드, `?box=SENT|RECEIVED`, `?view=REQUESTER|PROVIDER`(응답 형식은 `view`로 구분), 가입 폼 대학 선택, 역할로 숨기던 의뢰·장비 관리 메뉴 노출
 - 실제 VM 배포 (VM 정해지면), `POST /admin/equipment/import`(P2, 미구현)
-- BE-C 대화 → 시험조건 502·자동 추진 ANALYZE 실패 (11-09 통합 점검에서 발견, 이후 해결 여부 BE-C 확인 필요)
+- ~~BE-C 대화 → 시험조건 502·자동 추진 ANALYZE 실패~~ → 2026-11-18 재점검에서 둘 다 동작 확인
+- ~~BE-C 전달 (통합 2차) 3건~~ → 9번에서 수정. BE-C 담당자에게 수정 내용 확인 요청 필요
+- ~~자동 추진 DRAFT 단계 FAILED~~ → 10번에서 수정
+- 10번에서 BE-B·BE-C 코드도 많이 바꿈: 두 담당자에게 바뀐 파일 목록(아래 10번) 확인 요청
+- `findCandidateIds`(매칭 후보 목록)는 아직 상한 없음. 장비가 크게 늘면 LIMIT 검토
+- `application.yml` 의 Gemini 기본 모델 `gemini-3.8-flash` 가 503 과부하 상태. 시연 서버 `.env` 에 `GEMINI_MODEL` 을 명시해 둘 것
 
 11-09 에 남았던 것 중 끝난 것: `feature/be-a` PR(→ PR #11), 공인시험·운용 인력·보안 정보 필드(→ V6, BE-C 주현욱 2026-11-14), BE-B 의뢰·예약·알림 구현(→ PR #13)
+
+---
+
+## 2026-11-18 · 10번: 전체 코드 점검과 과부하·오류 위험 수정
+
+**왜**: 시연·운영 중 서버가 멈추거나 500 이 나는 곳을 미리 찾으려고 전체 코드(약 15,000줄)를 영역별로 점검. 범위는 사용자가 "전부(규모 대비 항목 포함)"로 정함. BE-B·BE-C 코드도 윤준수가 수정
+
+**가장 컸던 것**
+- DB 연결 풀 고갈: 의뢰 목록·상세가 장비마다 연결을 하나 더 열었고(`REQUIRES_NEW`), 매칭은 AI 호출(최대 45초) 동안 연결을 쥐고 있었음. 기본 풀 10개라 동시 요청 10개쯤이면 로그인까지 멈출 수 있었음 → 같은 트랜잭션에서 한 번에 조회, 매칭은 AI 호출을 트랜잭션 밖으로
+- 상담 한 번에 AI 3번 호출 → 시험유형을 알면 판별 생략, 조건 추출이 실패해도 답변은 이어감
+- 조건 추출이 항목 하나만 틀려도 전체 502 → 항목별로 버리거나 UNCONFIRMED 로 낮춤, ℃·도·%·배·"2,400"·GHz 환산 허용
+
+**영역별로 한 것**
+- 설정(`application.yml`): DB 연결 풀 20(`DB_POOL_SIZE`), 연결 대기 10초, 목록 size 상한 100, 메일 서버 타임아웃 5초
+- 인증·회원·공통: 로그인 기록이 관리자 정지를 덮어쓰던 문제(`users.version`, V10), 72바이트 넘는 비밀번호 500 → 400, 프레임워크 4xx·DB 제약 위반이 500 으로 나가던 것, JWT 필터의 DB 오류 응답 형식, 없는 이메일 로그인도 BCrypt 비교(가입 여부 노출 방지), 인증 메일·로그인 IP 제한(`astra.rate-limit.*`, 기본 메일 IP당 분당 5·전체 60, 로그인 IP당 20), 같은 이메일 동시 요청 잠금, 중복 코드(`Hashes`, `BusinessException.invalidField`) 정리
+- 장비·대시보드: 90일 갱신 알림을 기관별 요약 1건·100대씩 나눠 처리, "갱신 필요" 기준을 한 곳으로(대시보드 수 = 목록 needsUpdate 수), 검색의 트랜잭션 제거, 관리자 이관 시 행 잠금, 공백 장비명 400, 시험유형·사양 사전 메모리 캐시
+- 의뢰·예약·시뮬레이션: 일정 확정·취소 동시 처리 시 취소된 일정이 확정되던 문제(`reservations.version`, V11, 잠근 뒤 조회), 지난 시각 일정 확정 거부, 보완 항목 null 로 의뢰가 멈추던 문제, 대시보드·제출본 목록 반복 조회 제거, 시뮬레이션 넘침 입력 500 → 400·입력값 크기 제한
+- AI·상담·자동 추진·매칭: AI 작업 스레드를 상담(16)·자동 추진(2)으로 분리, 동시 AI 호출 8개 제한(`astra.ai.*`), Gemini 429 는 "잠시 후 다시" 429 로·503 은 1회 재시도·상태 코드 로그, 조건 분석은 AI 실패 시 기본 질문, 상담 기록에 프롬프트 전체 대신 해시만 저장, 매칭 후보별 반복 조회를 한 번에, 자동 추진 초안 단계 성공 처리(`confirmReceipt`), 서버 종료 중이던 자동 추진은 재시작 후 이어서, 실패한 질문은 다음 대화에서 제외
+
+**방법**: 영역별 에이전트 4개가 각자 별도 작업 폴더(git worktree)에서 테스트 먼저 쓰고(실패 확인) 수정 → 이 폴더로 합침 → 작업 폴더 삭제
+
+**확인**
+- 전체 테스트 317개 통과(실제 AI 평가 1개 기본 건너뜀). 오늘 아침 229개에서 88개 늘어남
+- 새 DB 실제 서버: 1~18번·S1~S6 다시 통과, 상담 JSON·SSE 첫 시도 성공, AI 초안 201, 매칭 면책 문구 1번. Google 503·429 는 로그에 상태 코드가 남고 429 로 응답하는 것 확인
+
+**주의**
+- Flyway V10(`users.version`)·V11(`reservations.version`) 추가
+- 테스트용 `src/test/resources/application.properties` 에서 IP 제한을 크게 풀어 둠(테스트는 모두 같은 IP)
+- 시연 때 여러 명이 한 공유기(같은 IP)로 접속해 로그인을 반복하면 IP당 분당 20회 제한에 걸릴 수 있음. 필요하면 `.env` 에 `astra.rate-limit.login-per-ip-per-minute=100` 처럼 적어 올리기 (`.env` 는 속성 파일로 읽히므로 이 이름 그대로)
+
+**커밋** (`feature/be-a` push 완료, PR 전): `9eea6e3` 설정 · `43bb3ac` 인증·회원·공통 · `a5c29eb` 장비·대시보드 · `28dbdab` 의뢰·예약·시뮬레이션 · `5c413c7` AI·상담·매칭 · `acb47d5` 문서
+
+**바뀐 파일: BE-A (내 담당)**
+- 설정: `src/main/resources/application.yml`, 테스트 `PageSizeLimitTest`
+- 인증·회원·관리자·공통: `auth/controller/AuthController`, `auth/dto/SignupRequest`, `auth/repository/EmailVerificationRepository`, `auth/service/AuthService`·`EmailVerificationService`·`AuthRateLimiter`(새), `user/entity/User`, `user/repository/UserRepository`, `user/service/UserService`·`RefreshTokenService`, `admin/service/AdminOrganizationService`, `global/config/SecurityConfig`, `global/exception/BusinessException`·`GlobalExceptionHandler`, `global/security/JwtAuthenticationFilter`·`FilterErrorWriter`(새)·`Hashes`(새)·`TokenBucketRateLimiter`(새), `global/validation/PasswordPolicy`(새)·`BcryptPassword`(새), `db/migration/V10__user_version.sql`(새)
+- 장비·대시보드·시험유형: `equipment/entity/Equipment`, `equipment/dto/EquipmentInputs`, `equipment/repository/EquipmentJdbcRepository`, `equipment/service/EquipmentCommandService`·`EquipmentUpdateReminder`·`SearchService`·`SpecDefinitionService`, `testtype/service/TestTypeService`, `dashboard/service/DashboardService`, `dashboard/dto/DashboardResponses`
+- 테스트: `AuthHardeningTest`, `UserConcurrencyTest`, `auth/service/AuthRateLimiterTest`, `global/exception/GlobalExceptionHandlerTest`, `global/security/HashesTest`·`JwtAuthenticationFilterTest`·`TokenBucketRateLimiterTest`, `user/service/UserServiceAuthenticateTest`, `EquipmentManageTest`, `equipment/service/EquipmentUpdateReminderTest`·`SearchServiceTransactionTest`·`SpecDefinitionServiceTest`, `testtype/service/TestTypeServiceCacheTest`, `dashboard/service/DashboardServiceTest`, `src/test/resources/application.properties`(새)
+
+**바뀐 파일: 다른 담당 영역 (담당자 확인 필요)**
+- BE-A 파일이지만 BE-C 매칭용으로 추가: `equipment/service/EquipmentQueryService`·`EquipmentQueryServiceImpl`·`EquipmentService`(일괄 조회 메서드), `EquipmentJdbcRepository.countCandidates`
+- BE-B: `request/`(`RequestViews`, `RequestCommandService`, `RequestQueryService`, `TestRequestServiceImpl`, `TestRequestRevisionRepository`), `review/`(`ReviewService`, `ReviewInputs`, `SupplementRequestRepository`), `reservation/`(`Reservation`, `ReservationRepository`, `ReservationService`), `simulation/`(`SimulationEngine`, `SimulationService`), `V11__reservation_version.sql`
+- BE-C: `llm/`(`AiTaskExecutor`, `LlmConcurrencyLimiter`(새), `GeminiLlmClient`, `AnthropicLlmClient`, `PromptLoader`, `AiDraftService`, `AiFallback`(새), `ConditionExtractionService`, `RequirementAnalysisService`, `StructuredJson`), `chat/`(`ChatService`, `ChatPersistence`), `aipipeline/`(`PipelineRun`, `PipelineService`, `PipelineWorker`), `matching/MatchingService`, `requirement/`(`ConditionValidator`, `UnitConverter`)
+
+---
+
+## 2026-11-18 · 9번: AI 의뢰서 초안·매칭·상담 응답 수정
+
+**왜**: 통합 2차 점검에서 ① AI 의뢰서 초안 API 가 항상 500 ② AI 설명이 실패하면 매칭 전체가 502 ③ 추천 이유 면책 문구 중복, 상담 응답에 프롬프트 노출. BE-C 담당 코드지만 시연 전이라 윤준수가 수정 (사용자 결정)
+
+**한 것**
+- `AiDraftService.createForApi`: BE-B 가 추가한 `getDraftReceipt` 로 응답을 채움. AI 호출은 트랜잭션 밖, 저장과 결과 조회만 한 트랜잭션(`TransactionOperations`)이라 AI 대기 중 DB 연결을 잡지 않고, 실패하면 고아 DRAFT 가 남지 않음
+- 같은 곳: 의뢰서 `content.conditions` 를 Java 객체 대신 `key` 를 가진 JSON 객체로 저장. 그대로 두면 BE-B `RequestContent.validate` 가 400 으로 거부함 (점검 중 실제 서버에서 발견)
+- `MatchingService`: `AI_UPSTREAM_ERROR` 면 경고 로그만 남기고 설명 없이 규칙 판정 결과로 응답. AI 설명에 면책 문구가 들어 있으면 지우고 끝에 한 번만 붙임
+- `ChatResponse.Message`: `prompt`·`promptInput`·`rawResponse` 는 DB(감사용)에만 두고 API 응답에서 뺌 (최상위와 `conversation` 안 모두)
+- Swagger: AI 의뢰 초안 설명을 실제 동작으로 고침
+
+**확인**
+- 새 테스트 7개(500 을 기대하던 기존 테스트 1개 대체): `AiDraftServiceTest` 3개(영수증 응답, AI 실패 시 저장 안 함, 조건 JSON 형식), `MatchingServiceTest` 2개(AI 실패 시 규칙 결과, 면책 문구 1번), `ChatMessageResponseTest` 2개. 모두 수정 전 실패를 확인한 뒤 고침
+- 전체 테스트 235개 통과(실제 AI 평가 1개는 기본 건너뜀)
+- 새 DB 실제 서버(`gemini-3.5-flash-lite`): 매칭 200·면책 문구 1번, AI 초안 201 `DRAFT`·`isAiGenerated=true` → 제출하면 manager1 접수함에 보임, AI 실패(502) 요청은 의뢰를 남기지 않음, 상담 응답에 `promptInput`·`rawResponse` 없음
+
+**바뀐 파일 (`41e12c0`)**: `src/main/java/kr/astra/llm/service/AiDraftService.java`, `src/main/java/kr/astra/llm/controller/AiDraftController.java`, `src/main/java/kr/astra/matching/service/MatchingService.java`, `src/main/java/kr/astra/chat/dto/ChatResponse.java`, `src/test/java/kr/astra/llm/AiDraftServiceTest.java`, `src/test/java/kr/astra/matching/MatchingServiceTest.java`, `src/test/java/kr/astra/chat/ChatMessageResponseTest.java`(새), `docs/demo-scenario.md`, 이 파일
+
+---
+
+## 2026-11-18 · 문서 문장 정리 (humanizer)
+
+**한 것**: 저장소의 md 문서 11개 중 10개에서 AI 문체(문장 잇는 대시 "—", 꾸밈용 굵은 글씨, 화살표로 문장 잇기, 같은 말 반복)를 걷어 냄. README, api-spec, team-guide, PR 템플릿, 작업 기록 3개(BE-A·B·C), demo-scenario, data-dictionary, backend-hardening-handoff. GLOSSARY 는 고칠 곳 없음
+
+**안 바꾼 것**: 코드 블록·인라인 코드·경로·API·숫자·날짜·표 구조·상태 표시·제목(README 첫 줄 대시만 콜론으로). 상태 변화를 나타내는 화살표(DRAFT → SUBMITTED 등)와 실제 오해를 바로잡는 "X가 아니라 Y" 문장은 유지. `src/main/resources/prompts/*.md` 는 AI 프롬프트라 제외
+
+**확인**: 바꾸기 전후의 인라인 코드·숫자·링크·코드 블록·제목을 스크립트로 비교해 차이 없음
+
+**남은 것**: team-guide 표에 원래부터 글자가 빠진 칸 2곳(376행 `/revisions/{no}` "특정 제출본 ( 이면…", 432행 `/ai/auto-runs` "시작 또는 → 202"). 내용을 아는 사람이 채워야 함
+
+---
+
+## 2026-11-18 · 통합 2차: 시연 시나리오 실제 서버 재점검
+
+**왜**: V8 에서 조직·장비 데이터가 바뀌고 V9 로 시연 계정 비밀번호가 생겨서, "백엔드는 이 순서로 된다"를 실제 서버로 다시 확인해 프론트 문제와 구분하려고
+
+**방법**: 기존 로컬 DB 는 두고 임시 PostgreSQL(5433)에 새 DB 를 만들어 V1~V9 적용 → `bootRun` → 시연 계정 6개 `12345678` 로그인 → `demo-scenario.md` 1~18번과 S1~S6 을 실제 HTTP 로 호출 (메일은 `MAIL_HOST` 를 비워 서버 로그 코드로 가입). 끝나고 임시 DB 삭제
+
+**결과** (자세한 건 `demo-scenario.md` 확인 칸)
+- 로그인·가입·승인·대시보드·검색·장비 상세/비교/유사·시험 정보·의뢰 작성/제출/검토/보완/재제출/예약 확정/중복 예약 409·시뮬레이션·관리자 대시보드·조직 간 공유 S1~S6: 전부 기대대로
+- AI 단계: 기본 모델 `gemini-3.8-flash` 503, `gemini-3.5-flash` 429 → `GEMINI_MODEL=gemini-3.5-flash-lite` 로 재실행. 상담(고정구 질량 되물음)·대화 → 시험조건·조건 분석·매칭·자동 추진(`WAITING_USER`) 동작. 상담·매칭은 가끔 502 (AI 응답 검증 실패, 재시도하면 성공)
+- 10번 AI 의뢰서 초안: API 는 있지만 `AiDraftService.createForApi` 가 항상 500 을 던짐 → BE-C 전달
+- 점검표 기대값을 V8 데이터에 맞게 고침: 검색 4대 → 20대(상한), 매칭 상위 5대에 다솜대학교 장비 2대 포함·0044 는 밖, 시험 정보 가능 조직 3곳 → 9곳, 주요 장비 소속 "대전TP" → 미리내우주환경시험센터
+
+**점검하다 알게 된 것 (코드 수정 안 함)**
+- 로컬 `.env` 의 `JWT_SECRET` 이 비어 있어 임시 키로 실행됨 (재시작하면 로그인 풀림)
+- `POST /requirements` 조건마다 `status` 가 필수 (없으면 400). FE 공지가 필요할 수 있음
+- `POST /ai/auto-runs` 본문 필드는 `inputText` 또는 `chatSessionId`
+
+**바뀐 파일 (`d3198ce`)**: `docs/demo-scenario.md`, 이 파일
+
+---
+
+## 2026-11-17 · 8번: 시연 계정 비밀번호 재설정
+
+**왜**: V3·V8 시연 계정 해시의 원문을 아는 사람이 없어 프론트·시연에서 로그인할 수 없었음
+
+**한 것**
+- `V9__demo_account_password.sql`: 시연 계정 7개(admin, company, company2, manager1, manager2, univ1, pending `@astra.demo`)의 비밀번호를 `12345678` 해시로 교체. V3·V8 은 그대로
+- 시연 전용 계정이라 공개해도 되는 값으로 정함(윤준수). README 시연 계정, api-spec §1, demo-scenario 준비물에 비밀번호 표기
+- `AuthFlowTest`: 시연 계정 6개 `12345678` 로그인 200, `pending` 은 403 `ACCOUNT_NOT_ACTIVE`
+
+**확인**: 테스트 229개 통과(1개는 실제 AI 평가라 기본 건너뜀)
+
+**같은 날 확인한 것 (코드 변경 없음)**
+- 실제 AI 조건 매핑 평가(`ASTRA_RUN_LLM_EVAL=true`): `gemini-3.5-flash` 는 429·503 으로 25개 모두 호출 실패. 한도가 남은 `gemini-3.5-flash-lite` 로 19/25 완전 일치. 응답이 온 19개는 전부 정확, 나머지 6개(GHz 3건, -70°C, 중량 표현, 배터리 전압·전류)는 호출 오류. 조건 추출 검증이 환산된 값을 원문에서 못 찾아 거부했을 가능성이 큼 (로그가 없어 확정 못 함)
+- Gemini 구독(앱)과 API 사용량은 결제가 별도라서 API 키 프로젝트에 Google Cloud 결제 연결 필요
+
+**주의**: 운영 서버에 그대로 배포하면 관리자 계정도 `12345678` 로 로그인됨. 외부 공개 전에 관리자 비밀번호는 바꾸는 것을 권장
+
+**바뀐 파일 (`957db90`, 문서는 `d3198ce`)**: `src/main/resources/db/migration/V9__demo_account_password.sql`(새), `src/test/java/kr/astra/AuthFlowTest.java`, `README.md`, `docs/api-spec.md`, `docs/demo-scenario.md`, 이 파일
 
 ---
 
@@ -32,9 +159,9 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 
 **작업자**: 윤준수 (BE-A) · **작업일**: 2026-11-17 · **브랜치**: `test` (커밋 8개, 아래 1~8)
 
-**배경**: 교수님 피드백 — 기업 → 기관 한 방향이 아니라 기업 ↔ 기업, 기관 ↔ 기관, 대학 ↔ 기업처럼 누구나 장비를 빌려주고 빌리는 플랫폼으로 확장. 시연 데이터도 가상 조직 + 실제 판매 모델 장비로 교체
+**배경**: 교수님 피드백. 기업 → 기관 한 방향이 아니라 기업 ↔ 기업, 기관 ↔ 기관, 대학 ↔ 기업처럼 누구나 장비를 빌려주고 빌리는 플랫폼으로 확장. 시연 데이터도 가상 조직 + 실제 판매 모델 장비로 교체
 
-**설계**: 조직 유형과 권한을 분리. 역할(`COMPANY_USER`/`INSTITUTION_MANAGER`)과 DB 컬럼명(`institution_id`)은 그대로 두고(JWT·FE·테스트 영향 최소화), **권한은 소속 조직으로만 판단**. 한 의뢰에서 누가 의뢰자이고 누가 보유 조직인지는 그 의뢰의 `requester_id`·`institution_id`로 정해짐
+**설계**: 조직 유형과 권한을 분리. 역할(`COMPANY_USER`/`INSTITUTION_MANAGER`)과 DB 컬럼명(`institution_id`)은 그대로 두고(JWT·FE·테스트 영향 최소화), 권한은 소속 조직으로만 판단. 한 의뢰에서 누가 의뢰자이고 누가 보유 조직인지는 그 의뢰의 `requester_id`·`institution_id`로 정해짐
 
 **1. 대학 유형** (V7, `da79be1`)
 - `OrgType.UNIVERSITY` 추가. 대학은 기관과 같은 방식으로 가입·승인 (`organization.orgType`, 생략 시 INSTITUTION)
@@ -54,7 +181,7 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 **5. 대시보드 전환** (`607980f`): `GET /dashboard/summary?view=REQUESTER|PROVIDER`, 응답에 `view` 추가. FE 는 응답 형식을 `role`이 아니라 `view`로 구분해야 함
 
 **6. 시연 데이터 교체** (V8, `9836ee5`)
-- 기존 기관 9곳은 삭제하지 않고 **가상 이름으로 변경**(id 유지 → 기존 의뢰·계정 그대로). 대학 부설 2곳은 UNIVERSITY 로
+- 기존 기관 9곳은 삭제하지 않고 가상 이름으로 변경(id 유지 → 기존 의뢰·계정 그대로). 대학 부설 2곳은 UNIVERSITY 로
 - 새 가상 조직 6곳(기관 1·대학 2·기업 3, 사천·창원·고흥), 시연 계정 `univ1@astra.demo`(대학)·`company2@astra.demo`(장비 보유 기업)
 - 새 장비 268대(`ASTRA-DEMO-xxxx`): 제조사·모델명·사양은 실제 판매 모델(제조사 페이지·데이터시트로 확인, 출처 링크 포함), 보유 조직·요금·가동률·가용 상태는 가상 → 전부 `isMock=true`. 확인한 사양 REAL, 추정치 MOCK/DEMO_ONLY
 - 제외·조정: 주파수 사양이 없는 충격 시험기 4종 제외, 맞는 시험유형이 없는 질량특성 측정기·초음파 탐상기 6대는 SUPPORT
@@ -83,7 +210,7 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 - 마이그레이션 `V7__university_org_type.sql`, `V8__mock_organizations_and_equipment.sql`
 - 테스트: `AccessGuardTest`, `AuthFlowTest`, `AdminOrganizationTest`, `EquipmentManageTest`, `EquipmentApiTest`, `DashboardSearchApiTest`, `DatabaseSchemaTest`, `DemoScenarioTest`
 
-*BE-B 영역 (허영재) — 윤준수 수정*
+*BE-B 영역 (허영재): 윤준수 수정*
 - `request/dto/RequestBox`(새): 보낸/받은 의뢰 구분 enum
 - `request/controller/TestRequestController`: 목록에 `box` 파라미터, 설명 문구
 - `request/service/RequestQueryService`: 목록을 역할 대신 `box`로 분기 (기본값은 기존 동작)
@@ -94,7 +221,7 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 - `review/dto/ReviewInputs`, `review/controller/ReviewController`, `reservation/controller/ReservationController`: 설명 문구만
 - 테스트 `RequestWorkflowTest`: 기관 → 다른 기관 의뢰, 기관 → 기업 장비 의뢰 끝까지, 대학 ↔ 기업 시연 계정 시나리오 추가
 
-*BE-C 영역 (주현욱) — 윤준수 수정*
+*BE-C 영역 (주현욱): 윤준수 수정*
 - `chat/service/ChatPersistence`, `chat/service/ChatSessionQueryService`: 상담의 기업 전용 제한 해제 (본인 데이터만 보는 규칙은 그대로)
 - `requirement/service/RequirementApplicationService`: 시험조건의 기업 전용 제한 5곳 해제
 - `aipipeline/service/PipelineStore`: 자동 추진의 기업 전용 제한 해제
@@ -102,7 +229,7 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 - `matching/service/MatchingService`: 자기 소속 조직 장비를 추천 후보에서 제외
 - 테스트: `PipelineStateTest`, `RequirementServiceTest`(기관 계정의 본인 데이터 허용으로 기대값 변경), `ChatSessionQueryTest`, `ChatSessionQueryIntegrationTest`(대시보드 시그니처 변경 반영), `MatchingServiceTest`(자기 조직 추천 제외 테스트 추가)
 
-*문서*: `README.md`, `docs/api-spec.md`(권한·장비·의뢰·대시보드 — BE-B·BE-C 절 포함), `docs/demo-scenario.md`(§1-1 추가, 기관 이름), `docs/design/schema.sql`, `docs/design/erd.dbml`, `docs/design/tools/gen_v8.py`·`equipment_catalog.json`(새), 이 파일
+*문서*: `README.md`, `docs/api-spec.md`(권한·장비·의뢰·대시보드, BE-B·BE-C 절 포함), `docs/demo-scenario.md`(§1-1 추가, 기관 이름), `docs/design/schema.sql`, `docs/design/erd.dbml`, `docs/design/tools/gen_v8.py`·`equipment_catalog.json`(새), 이 파일
 
 ---
 
@@ -131,21 +258,21 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 
 ## 2026-11-09 · 비교표 이용 조건 · 정지 계정 즉시 차단 · 기존 서비스와의 차이
 
-**1. 비교표에 비용·기간·가용성 추가** (`POST /equipment/compare`) — 시험 실무자 피드백 "일정과 비용을 사전에 비교하기 어렵다"
+**1. 비교표에 비용·기간·가용성 추가** (`POST /equipment/compare`): 시험 실무자 피드백 "일정과 비용을 사전에 비교하기 어렵다"
 - 응답에 `usage`(장비별 접근 범위·요금 원문·금액·단위·소요 기간·가동률·가용 상태·기관 확인 상태·정보 갱신일) 추가. 기존 필드는 그대로 (추가만)
 - 요청에 선택 `testType` → `usage[].testTypeEstimate`(그 시험의 예상 비용·소요일, 그 장비가 못 하면 `supported=false`), 없는 코드는 400
 - seed 장비는 요금·예상 비용이 대부분 비어 있어 null(화면에 "정보 없음"), 기관이 입력하면 채워짐
 
 **3. 정지 계정 즉시 차단** (`global/security` 변경 → 팀 공지 필요)
 - `AccountStatusChecker`(global) + `UserAccountStatusCache`(user, 30초 캐시): JWT 필터가 요청마다 계정 상태 확인
-- 승인·거절·정지·해제 시 **DB 커밋 직후** 캐시 삭제 (커밋 전에 지우면 다른 요청이 옛 상태를 다시 캐시할 수 있어서)
+- 승인·거절·정지·해제 시 DB 커밋 직후 캐시 삭제 (커밋 전에 지우면 다른 요청이 옛 상태를 다시 캐시할 수 있어서)
 - 정지·거절·승인 대기 → 보호된 API 403 `ACCOUNT_NOT_ACTIVE`, 계정 없음 → 401 `AUTH_REQUIRED`, 공개 API 는 그대로. 새 에러 코드 없음
-- 이전 기록(3번 덩어리)의 "정지해도 access 토큰은 최대 1시간 유효"는 **해결됨**. api-spec §0-4·§12, Swagger 설명도 고침
+- 이전 기록(3번 덩어리)의 "정지해도 access 토큰은 최대 1시간 유효"는 해결됨. api-spec §0-4·§12, Swagger 설명도 고침
 
 **4. 기존 서비스와의 차이** (README §1, 계획서 개요)
-- ZEUS(과기정통부, 국가 R&D 장비)가 **2026-07-27 부터 AI 검색 시범 운영**(연구 목적 자연어 → 가까운 이용 가능 장비 추천 → 예약, 12월 정식 예정) → "자연어로 장비 찾기"는 차별점이 아님
+- ZEUS(과기정통부, 국가 R&D 장비)가 2026-07-27 부터 AI 검색 시범 운영(연구 목적 자연어 → 가까운 이용 가능 장비 추천 → 예약, 12월 정식 예정) → "자연어로 장비 찾기"는 차별점이 아님
 - 보도(데일리안·아시아경제)에 없는 ZEUS 기능은 단정하지 않음. ASTRA 차별점은 조건별 충족·미충족 근거, 사양·요금·기간 비교, 의뢰서 → 기관 검토·보완 → 예약 흐름, 시연 데이터·기관 확인 표시
-- 발표 때 "자연어 검색"보다 **"조건별 근거 + 시험 의뢰 흐름"**을 강조하는 게 좋음
+- 발표 때 "자연어 검색"보다 "조건별 근거 + 시험 의뢰 흐름"을 강조하는 게 좋음
 
 **확인**
 - 테스트 188개 통과 (새로 4개: 비교표 이용 조건 2, 즉시 차단 2), BE-C 88개 포함
@@ -159,20 +286,20 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 
 ## 2026-11-09 · BE-C 병합 후 통합 점검 + SSE 끊김 버그 수정
 
-**상황**: PR #9 (BE-C: AI 상담·시험조건·매칭·자동 추진) main 병합 → `feature/be-a` 에 fast-forward 로 받음. 합친 코드 전체 **테스트 182개 통과** (BE-A 94 + BE-C 88)
+**상황**: PR #9 (BE-C: AI 상담·시험조건·매칭·자동 추진) main 병합 → `feature/be-a` 에 fast-forward 로 받음. 합친 코드 전체 테스트 182개 통과 (BE-A 94 + BE-C 88)
 
 **BE-C 가 BE-A·공통 파일에서 바꾼 것** (확인함, 문제 없음)
 - `ChatSessionQuery` 주석 보충(시그니처 그대로), `DashboardSearchApiTest` 의 `chats` 기대값 true 로 (상담 연결됨)
-- `application.yml`·`.env.example` 에 `AI_PROVIDER`(기본 **gemini**), `GEMINI_API_KEY`, `GEMINI_MODEL`(기본 `gemini-3.8-flash`). team-guide 는 Claude 기준이라 시연 때 어느 쪽을 쓸지 팀 합의 필요
+- `application.yml`·`.env.example` 에 `AI_PROVIDER`(기본 gemini), `GEMINI_API_KEY`, `GEMINI_MODEL`(기본 `gemini-3.8-flash`). team-guide 는 Claude 기준이라 시연 때 어느 쪽을 쓸지 팀 합의 필요
 
 **찾아서 고친 버그 (BE-A, `SecurityConfig`)**: 로그인이 필요한 SSE 스트림(AI 상담 스트리밍)이 마지막에 끊김
 - 원인: `SseEmitter` 는 응답을 마칠 때 비동기 재요청(ASYNC dispatch)을 하는데 JWT 필터는 그때 다시 돌지 않음 → Spring Security 가 비로그인으로 보고 `Access Denied` → 응답이 이미 나가는 중이라 연결이 끊김 (로그: "response is already committed")
 - 수정: `auth.dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()` (원래 요청에서 이미 인증·권한 통과)
-- `SseAsyncDispatchTest` 추가: LLM 없이 같은 구조의 테스트용 SSE 로 확인. **수정 전 코드로는 실패, 수정 후 통과**를 직접 확인
+- `SseAsyncDispatchTest` 추가: LLM 없이 같은 구조의 테스트용 SSE 로 확인. 수정 전 코드로는 실패, 수정 후 통과하는 것을 직접 확인
 - BE-C 테스트는 실제 서버(비동기 재요청)를 거치지 않아 드러나지 않았던 것으로 보임
 
 **실제 서버 통합 점검 (Gemini)**
-- `gemini-3.8-flash`(기본값): Google 쪽 **503 UNAVAILABLE "high demand"** (일시적 과부하) → 모든 AI 단계 502. 키는 정상 (모델 목록 조회됨)
+- `gemini-3.8-flash`(기본값): Google 쪽 503 UNAVAILABLE "high demand" (일시적 과부하) → 모든 AI 단계 502. 키는 정상 (모델 목록 조회됨)
 - 이번 실행에만 `--astra.ai.gemini-model=gemini-3.5-flash` 로 다시 확인 (`.env` 는 그대로)
   - ✅ AI 상담 JSON (약 10초): 진동시험 추천, 시료 15kg·주파수 20~2000Hz 추출, 고정구 무게 되물음
   - ✅ AI 상담 SSE: delta 이벤트 … `done` 까지 끝까지 수신 (보안 수정 후)
@@ -184,7 +311,7 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 
 **BE-C(주현욱 님)께 전달할 것**
 1. 대화 → 시험조건, 자동 추진 ANALYZE 가 `gemini-3.5-flash` 에서 2~3초 만에 502
-2. Gemini 실패 시 HTTP 상태·오류 메시지를 로그에 남기기 (키 제외) — 지금은 원인을 알 수 없음
+2. Gemini 실패 시 HTTP 상태·오류 메시지를 로그에 남기기 (키 제외). 지금은 원인을 알 수 없음
 3. 503(과부하)은 잠깐 뒤 재시도하거나 다른 모델로 바꾸는 처리 고려, 기본 모델 `gemini-3.8-flash` 는 현재 과부하가 잦음
 
 **커밋**: `1cff75f`(SSE 수정) `704f385`(문서) · PR #10 병합
@@ -231,9 +358,9 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 
 **한 것**
 - `global/config/CorsConfig`: 허용 주소 = 환경변수 `CORS_ALLOWED_ORIGINS` (쉼표로 여러 개, `http://localhost:*` 패턴 가능, 끝의 `/` 무시)
-  - 기본 `http://localhost:5173`. `.env.example` 을 그대로 복사해 **빈 값**이 들어가도 기본 주소를 씀 (`${이름:기본값}` 은 빈 문자열일 때 기본값을 안 쓰기 때문)
+  - 기본 `http://localhost:5173`. `.env.example` 을 그대로 복사해 빈 값이 들어가도 기본 주소를 씀 (`${이름:기본값}` 은 빈 문자열일 때 기본값을 안 쓰기 때문)
   - 메서드 GET·POST·PUT·PATCH·DELETE·OPTIONS, 헤더 전부 허용, `Content-Disposition` 노출, credentials 안 씀(쿠키 없음, Bearer 헤더), 사전 요청 캐시 1시간
-- `SecurityConfig`: `http.cors(...)` → Spring Security 앞단에서 처리되어 **401·403 응답에도 CORS 헤더** (FE 가 401 을 읽고 로그인 화면으로 보낼 수 있음)
+- `SecurityConfig`: `http.cors(...)` → Spring Security 앞단에서 처리되어 401·403 응답에도 CORS 헤더 (FE 가 401 을 읽고 로그인 화면으로 보낼 수 있음)
 - `application.yml` `astra.cors.allowed-origins`, `.env.example` 에 `CORS_ALLOWED_ORIGINS` 설명
 
 **검토한 것 (계획서 대조)**
@@ -248,7 +375,7 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 
 **문서**: api-spec §0-2 규칙 표에 CORS 줄, team-guide 실행 환경, README 실행하기·테스트 표·현재 상태
 
-**팀 공지**: FE — 실제 서버 연결 시 기본 허용 주소는 `http://localhost:5173`, 다른 주소면 알려 주거나 서버 `.env` 의 `CORS_ALLOWED_ORIGINS` 에 추가. 쿠키 없이 `Authorization` 헤더만 쓰면 됨
+**팀 공지**: (FE 대상) 실제 서버 연결 시 기본 허용 주소는 `http://localhost:5173`, 다른 주소면 알려 주거나 서버 `.env` 의 `CORS_ALLOWED_ORIGINS` 에 추가. 쿠키 없이 `Authorization` 헤더만 쓰면 됨
 
 **커밋**: `a6c92da` `7cb3c2e` `82db710` · PR #7 병합
 
@@ -315,7 +442,7 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 - 서버를 띄워 manager1 토큰으로 HTTP 확인: 등록 → `ASTRA-EQ-0072`, 다른 기관 수정 403, 이력 CREATE→UPDATE→SPECS_UPDATE→CONFIRM, 비활성화 후 404, 유사·중복·비교 정상
 
 **남은 것·주의**
-- ~~정지한 계정의 access 토큰은 만료(최대 1시간)까지 유효~~ → **2026-11-09 해결** (다음 요청부터 바로 403)
+- ~~정지한 계정의 access 토큰은 만료(최대 1시간)까지 유효~~ → 2026-11-09 해결 (다음 요청부터 바로 403)
 - `POST /admin/equipment/import`(P2) 미구현 (seed 로 적재돼 있음), 90일 경과 알림은 4번 덩어리에서 구현함
 - 로컬 DB 에 확인용 비활성 장비 `ASTRA-EQ-0072` 가 남아 있음 (`docker compose down -v` 로 초기화 가능)
 
@@ -337,7 +464,7 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 
 **내부 인터페이스**: `EquipmentQueryService.findCandidates·getSpecs` 구현(BE-C), `TestTypeService.getConditionRules(code)`. `TestConditionRule` 엔티티는 BE-A 가 `testtype` 패키지에 읽기 전용으로 만듦(BE-C 와 합의)
 
-**DB**: `V5__fill_institution_region.sql` — 원본에 지역이 없던 진주뿌리기술지원센터와 장비 31대에 '진주' 채움
+**DB**: `V5__fill_institution_region.sql`: 원본에 지역이 없던 진주뿌리기술지원센터와 장비 31대에 '진주' 채움
 
 **문서 수정**: api-spec 예시를 seed 실제 값으로 맞춤(장비 48 주파수 라벨, 진동시험 가능 기관에 기술지원센터 추가)
 
@@ -359,5 +486,5 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 
 - 회원가입·로그인·JWT(access 1시간, refresh 14일)·재발급·로그아웃, `GET/PATCH /users/me`
 - `AccessGuard`(권한 체크 유틸), JWT 필터, 로그인 필수(`require-login=true`)
-- `V3__demo_accounts.sql`: 시연 계정 5개 (admin, company, manager1, manager2, pending — `@astra.demo`)
+- `V3__demo_accounts.sql`: 시연 계정 5개 (admin, company, manager1, manager2, pending `@astra.demo`)
 - 에러 코드 3개 추가: `INVALID_CREDENTIALS`, `EMAIL_ALREADY_EXISTS`, `ORGANIZATION_ALREADY_EXISTS`

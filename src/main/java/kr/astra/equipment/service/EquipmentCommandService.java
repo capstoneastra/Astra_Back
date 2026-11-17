@@ -64,7 +64,7 @@ import tools.jackson.databind.json.JsonMapper;
 public class EquipmentCommandService {
 
     /** 마지막 갱신 후 이 기간이 지나면 "정보 갱신 필요" */
-    static final Duration UPDATE_INTERVAL = Duration.ofDays(90);
+    static final Duration UPDATE_INTERVAL = Duration.ofDays(Equipment.UPDATE_INTERVAL_DAYS);
 
     private final EquipmentRepository equipmentRepository;
     private final EquipmentSpecRepository specRepository;
@@ -118,7 +118,7 @@ public class EquipmentCommandService {
         InstitutionInfo institution = organizationService.findVerifiedEquipmentOwner(institutionId).orElseThrow();
         List<SpecInput> specs = request.specs() == null ? List.of() : request.specs();
         List<TestTypeInput> testTypes = request.testTypes() == null ? List.of() : request.testTypes();
-        validateSpecs(specs, "specs");
+        List<SpecInput> normalized = validateSpecs(specs, "specs");
         validateTestTypes(testTypes, "testTypes");
         requireTestType(request.equipmentType(), testTypes.isEmpty());
 
@@ -131,7 +131,7 @@ public class EquipmentCommandService {
         }
         equipmentRepository.saveAndFlush(e);
         e.assignExternalId();
-        saveSpecs(e, specs);
+        saveSpecs(e, specs, normalized);
         saveTestTypes(e.getId(), testTypes);
         equipmentRepository.flush();
 
@@ -166,7 +166,7 @@ public class EquipmentCommandService {
     /** PUT /equipment/{id}/specs: REAL 사양만 통째로 교체 (MOCK 은 그대로) → 사양 검증 상태 VERIFIED */
     public EquipmentDetailResponse replaceSpecs(CurrentUser user, Long equipmentId, List<SpecInput> specs) {
         Equipment e = findOwned(user, equipmentId);
-        validateSpecs(specs, "specs");
+        List<SpecInput> normalized = validateSpecs(specs, "specs");
         List<Map<String, Object>> before = specSummaries(
                 specRepository.findAllByEquipmentIdAndSourceTypeOrderByIdAsc(equipmentId, SpecSourceType.REAL));
         String beforeSpecStatus = e.getSpecVerificationStatus().name();
@@ -174,7 +174,7 @@ public class EquipmentCommandService {
 
         specRepository.deleteByEquipmentIdAndSourceType(equipmentId, SpecSourceType.REAL);
         e = equipmentRepository.findById(equipmentId).orElseThrow(); // delete 쿼리 후 영속성 컨텍스트가 비워짐
-        saveSpecs(e, specs);
+        saveSpecs(e, specs, normalized);
         e.changeSpecVerificationStatus(specs.isEmpty() ? SpecVerificationStatus.NOT_VERIFIED
                 : SpecVerificationStatus.VERIFIED);
         e.markVerifiedByInstitution(user.userId(), OffsetDateTime.now());
@@ -236,7 +236,8 @@ public class EquipmentCommandService {
     public EquipmentDetailResponse transfer(CurrentUser admin, Long equipmentId, Long targetInstitutionId,
                                             String reason) {
         AccessGuard.requireAdmin(admin);
-        Equipment e = equipmentRepository.findByIdAndActiveTrue(equipmentId)
+        // 다른 변경과 같이 행을 잠가 동시 수정이 전체 컬럼 UPDATE 로 되돌려지지 않게 함
+        Equipment e = equipmentRepository.lockActive(equipmentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EQUIPMENT_NOT_FOUND));
         if (organizationService.findVerifiedEquipmentOwner(targetInstitutionId).isEmpty()) {
             throw invalidField("institutionId", "승인된 조직만 선택할 수 있습니다.");
@@ -305,7 +306,9 @@ public class EquipmentCommandService {
                 e.availabilityNeedsConfirmation(now));
     }
 
-    private void validateSpecs(List<SpecInput> specs, String path) {
+    /** 검증하면서 사양 사전 단위로 바꾼 값을 돌려줌 (저장할 때 다시 바꾸지 않도록) */
+    private List<SpecInput> validateSpecs(List<SpecInput> specs, String path) {
+        List<SpecInput> normalized = new ArrayList<>(specs.size());
         Set<String> keys = new HashSet<>();
         for (int i = 0; i < specs.size(); i++) {
             SpecInput s = specs.get(i);
@@ -320,9 +323,10 @@ public class EquipmentCommandService {
             if (!keys.add(s.key())) {
                 throw invalidField(at + ".key", "같은 사양 키가 두 번 있습니다: " + s.key());
             }
-            try { specDefinitions.normalize(s); }
+            try { normalized.add(specDefinitions.normalize(s)); }
             catch (BusinessException ex) { throw invalidField(at + ".key", ex.getMessage()); }
         }
+        return normalized;
     }
 
     private void requireTestType(EquipmentType type, boolean empty) {
@@ -354,15 +358,16 @@ public class EquipmentCommandService {
         }
     }
 
-    private void saveSpecs(Equipment e, List<SpecInput> specs) {
-        specRepository.saveAll(specs.stream()
-                .map(input -> {
-                    SpecInput s = specDefinitions.normalize(input);
-                    EquipmentSpec spec = EquipmentSpec.real(e.getId(), s.key(), s.label(), s.value(), s.min(), s.max(), s.valueText(), s.unit());
-                    spec.preserveOriginalUnit(input.unit());
-                    return spec;
-                })
-                .toList());
+    /** @param normalized validateSpecs 가 돌려준 값 (specs 와 같은 순서) */
+    private void saveSpecs(Equipment e, List<SpecInput> specs, List<SpecInput> normalized) {
+        List<EquipmentSpec> rows = new ArrayList<>(specs.size());
+        for (int i = 0; i < specs.size(); i++) {
+            SpecInput s = normalized.get(i);
+            EquipmentSpec spec = EquipmentSpec.real(e.getId(), s.key(), s.label(), s.value(), s.min(), s.max(), s.valueText(), s.unit());
+            spec.preserveOriginalUnit(specs.get(i).unit());
+            rows.add(spec);
+        }
+        specRepository.saveAll(rows);
         specRepository.flush();
     }
 

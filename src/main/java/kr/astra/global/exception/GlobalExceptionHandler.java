@@ -4,16 +4,20 @@ import java.util.List;
 import java.util.Map;
 import kr.astra.global.response.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.core.PropertyReferenceException;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -67,10 +71,46 @@ public class GlobalExceptionHandler {
         return respond(ErrorCode.METHOD_NOT_ALLOWED, ErrorCode.METHOD_NOT_ALLOWED.defaultMessage(), null);
     }
 
+    /**
+     * 위에서 따로 잡지 않은 예외.
+     * <ul>
+     *   <li>클라이언트가 연결을 끊음 → 쓸 곳이 없으므로 본문 없이 debug 로그만</li>
+     *   <li>Spring MVC 의 4xx(ErrorResponse: Content-Type·Accept 불일치, 경로 변수 누락 등) → 상태별 기존 코드, warn</li>
+     *   <li>서비스가 변환하지 않은 DB 제약 위반 → 대부분 동시 요청 경합이라 409 VERSION_CONFLICT (다시 시도)</li>
+     *   <li>그 외 → 500 INTERNAL_ERROR</li>
+     * </ul>
+     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnexpected(Exception e) {
+        if (e instanceof AsyncRequestNotUsableException) {
+            log.debug("클라이언트 연결 끊김: {}", e.getMessage());
+            return null;
+        }
+        if (e instanceof DataIntegrityViolationException) {
+            log.warn("변환되지 않은 DB 제약 위반", e);
+            return respond(ErrorCode.VERSION_CONFLICT, ErrorCode.VERSION_CONFLICT.defaultMessage(), null);
+        }
+        if (e instanceof ErrorResponse er && er.getStatusCode().isError()) {
+            ErrorCode code = codeOf(er.getStatusCode());
+            if (code != ErrorCode.INTERNAL_ERROR) {
+                log.warn("요청 처리 실패 ({}): {}", er.getStatusCode().value(), e.getMessage());
+                return respond(code, code.defaultMessage(), null);
+            }
+        }
         log.error("처리되지 않은 예외", e);
         return respond(ErrorCode.INTERNAL_ERROR, ErrorCode.INTERNAL_ERROR.defaultMessage(), null);
+    }
+
+    /** 프레임워크 상태 코드 → 기존 에러 코드 (api-spec §0-3 에 없는 코드는 만들지 않음) */
+    private static ErrorCode codeOf(HttpStatusCode status) {
+        return switch (status.value()) {
+            case 401 -> ErrorCode.AUTH_REQUIRED;
+            case 403 -> ErrorCode.FORBIDDEN;
+            case 404 -> ErrorCode.NOT_FOUND;
+            case 405 -> ErrorCode.METHOD_NOT_ALLOWED;
+            case 429 -> ErrorCode.TOO_MANY_REQUESTS;
+            default -> status.is4xxClientError() ? ErrorCode.VALIDATION_FAILED : ErrorCode.INTERNAL_ERROR;
+        };
     }
 
     private ResponseEntity<ApiResponse<Void>> respond(ErrorCode code, String message, Object details) {

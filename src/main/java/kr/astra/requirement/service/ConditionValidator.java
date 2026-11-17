@@ -42,10 +42,11 @@ public class ConditionValidator {
                     || rule.valueType() == ConditionValueType.RANGE && !(range || number)
                     || rule.valueType() == ConditionValueType.TEXT && !text) throw invalid();
             try {
-                if (text && !Objects.equals(c.unit(), rule.unit())) throw invalid();
-                BigDecimal value = UnitConverter.convert(c.value(), c.unit(), rule.unit());
-                BigDecimal min = UnitConverter.convert(c.min(), c.unit(), rule.unit());
-                BigDecimal max = UnitConverter.convert(c.max(), c.unit(), rule.unit());
+                String unit = UnitConverter.canonical(c.unit(), rule.unit()); // ℃·도→°C, %→%RH, 배·X→x 등
+                if (text && !Objects.equals(unit, rule.unit())) throw invalid();
+                BigDecimal value = UnitConverter.convert(c.value(), unit, rule.unit());
+                BigDecimal min = UnitConverter.convert(c.min(), unit, rule.unit());
+                BigDecimal max = UnitConverter.convert(c.max(), unit, rule.unit());
                 // Negative temperature/voltage are meaningful; physical sizes, mass and frequency are not.
                 if (Set.of("kg", "mm", "Hz", "GHz", "kN", "N", "kgf", "x", "samples/day", "%RH").contains(
                         rule.unit() == null ? "" : rule.unit())) {

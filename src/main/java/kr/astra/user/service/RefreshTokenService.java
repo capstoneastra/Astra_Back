@@ -1,11 +1,8 @@
 package kr.astra.user.service;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.OffsetDateTime;
-import java.util.HexFormat;
 import java.util.Optional;
+import kr.astra.global.security.Hashes;
 import kr.astra.user.entity.RefreshToken;
 import kr.astra.user.repository.RefreshTokenRepository;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +21,7 @@ public class RefreshTokenService {
     private final RefreshTokenRepository refreshTokenRepository;
 
     public void save(Long userId, String rawToken, OffsetDateTime expiresAt) {
-        refreshTokenRepository.save(new RefreshToken(userId, hash(rawToken), expiresAt));
+        refreshTokenRepository.save(new RefreshToken(userId, Hashes.sha256(rawToken), expiresAt));
     }
 
     /**
@@ -34,7 +31,7 @@ public class RefreshTokenService {
      */
     public Optional<Long> consume(String rawToken) {
         OffsetDateTime now = OffsetDateTime.now();
-        return refreshTokenRepository.findByTokenHashForUpdate(hash(rawToken))
+        return refreshTokenRepository.findByTokenHashForUpdate(Hashes.sha256(rawToken))
                 .filter(token -> token.isUsable(now))
                 .map(token -> {
                     token.revoke(now);
@@ -45,7 +42,7 @@ public class RefreshTokenService {
     /** 로그아웃: 본인 토큰이면 폐기. 이미 없거나 폐기된 토큰이면 아무것도 하지 않음 */
     public void revoke(Long userId, String rawToken) {
         OffsetDateTime now = OffsetDateTime.now();
-        refreshTokenRepository.findByTokenHash(hash(rawToken))
+        refreshTokenRepository.findByTokenHash(Hashes.sha256(rawToken))
                 .filter(token -> token.getUserId().equals(userId))
                 .ifPresent(token -> token.revoke(now));
     }
@@ -53,14 +50,5 @@ public class RefreshTokenService {
     /** 계정 정지 시: 그 사용자의 refresh 토큰 전부 폐기 → 토큰 재발급이 바로 막힘 */
     public void revokeAll(Long userId) {
         refreshTokenRepository.revokeAllByUserId(userId, OffsetDateTime.now());
-    }
-
-    static String hash(String rawToken) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(rawToken.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 을 사용할 수 없습니다.", e);
-        }
     }
 }

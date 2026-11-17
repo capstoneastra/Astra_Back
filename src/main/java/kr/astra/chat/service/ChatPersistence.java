@@ -21,7 +21,13 @@ public class ChatPersistence {
     private final ChatSessionRepository sessions;
     private final ChatMessageRepository messages;
     private final RequirementApplicationService requirements;
-    public record Transcript(Long ownerId, Long lastMessageId, List<ChatResponse.Message> messages, String userText) {}
+    /** @param knownTestType 세션의 기존 시험조건 유형, 없으면 직전 AI 응답의 suggestedTestType (둘 다 없으면 null) */
+    public record Transcript(Long ownerId, Long lastMessageId, List<ChatResponse.Message> messages, String userText,
+            String knownTestType) {
+        public Transcript(Long ownerId, Long lastMessageId, List<ChatResponse.Message> messages, String userText) {
+            this(ownerId, lastMessageId, messages, userText, null);
+        }
+    }
     public record Turn(Long sessionId, ChatResponse.Message userMessage, Transcript transcript) {}
 
     @Transactional
@@ -43,11 +49,27 @@ public class ChatPersistence {
         if (history.size() > 100) throw new BusinessException(ErrorCode.VALIDATION_FAILED,
                 "대화가 너무 깁니다. 새 상담을 시작해 주세요.",null);
         Collections.reverse(history);
-        String text = history.stream().filter(m -> m.getRole() == ChatRole.USER).map(ChatMessage::getContent)
+        Long lastId = history.isEmpty() ? null : history.getLast().getId(); // 동시 변경 확인은 걸러내기 전 마지막 ID 로
+        // 응답을 못 받은(FAILED) 질문은 재전송 시 같은 문장이 중복되므로 추출·상담 입력에서 뺌
+        List<ChatMessage> usable = history.stream().filter(m -> !failed(m)).toList();
+        String text = usable.stream().filter(m -> m.getRole() == ChatRole.USER).map(ChatMessage::getContent)
                 .collect(java.util.stream.Collectors.joining("\n"));
         if (text.length() > 50000) throw new BusinessException(ErrorCode.VALIDATION_FAILED, "대화가 너무 깁니다. 새 상담을 시작해 주세요.",null);
-        return new Transcript(s.getUserId(),history.isEmpty() ? null : history.getLast().getId(),
-                history.stream().map(ChatResponse.Message::of).toList(),text);
+        return new Transcript(s.getUserId(),lastId,usable.stream().map(ChatResponse.Message::of).toList(),text,
+                knownTestType(user,id,usable));
+    }
+    private static boolean failed(ChatMessage m) {
+        return m.getRole() == ChatRole.USER && m.getMetadata() != null && "FAILED".equals(m.getMetadata().get("state"));
+    }
+    /** 기존 시험조건의 유형이 우선 (다른 유형이 추출되어 저장이 막히지 않게), 없으면 직전 AI 응답이 제안한 유형 */
+    private String knownTestType(CurrentUser user, Long sessionId, List<ChatMessage> history) {
+        var existing = requirements.forSession(user,sessionId);
+        if (existing != null && existing.isPresent()) return existing.get().testTypeCode();
+        for (ChatMessage m : history.reversed()) {
+            if (m.getRole() != ChatRole.ASSISTANT || m.getMetadata() == null) continue;
+            return m.getMetadata().get("suggestedTestType") instanceof String type && !type.isBlank() ? type : null;
+        }
+        return null;
     }
     @Transactional
     public Turn begin(CurrentUser user, Long id, String content) {

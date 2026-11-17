@@ -61,6 +61,11 @@ class AnthropicLlmClientTest {
         assertThatThrownBy(() -> client.complete(request())).isInstanceOfSatisfying(BusinessException.class,
                 e -> { assertThat(e.getErrorCode()).isEqualTo(ErrorCode.AI_UPSTREAM_ERROR); assertThat(e.getMessage()).doesNotContain("upstream detail"); });
     }
+    @Test void rateLimitIsTooManyRequests() {
+        status=429; body="{\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"upstream detail\"}}";
+        assertThatThrownBy(() -> client.complete(request())).isInstanceOfSatisfying(BusinessException.class,
+                e -> { assertThat(e.getErrorCode()).isEqualTo(ErrorCode.TOO_MANY_REQUESTS); assertThat(e.getMessage()).doesNotContain("upstream detail"); });
+    }
     String event(String name,String data) { return "event: "+name+"\ndata: "+data+"\n\n"; }
     String stream(boolean stopped) {
         return event("message_start","{\"type\":\"message_start\",\"message\":"+message("null","[]")+"}")

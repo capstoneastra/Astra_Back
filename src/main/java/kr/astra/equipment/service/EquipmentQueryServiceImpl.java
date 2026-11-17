@@ -1,5 +1,7 @@
 package kr.astra.equipment.service;
 
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -43,6 +45,44 @@ public class EquipmentQueryServiceImpl implements EquipmentQueryService {
                         names.get(e.getInstitutionId()), e.getRegion(), e.isMock(), e.getAvailability(),
                         e.availabilityNeedsConfirmation(java.time.OffsetDateTime.now())))
                 .toList();
+    }
+
+    /** 매칭 결과 요약을 장비 수와 무관하게 쿼리 2번(장비·기관명)으로 */
+    @Override
+    public Map<Long, EquipmentCandidate> findSummaries(Collection<Long> equipmentIds) {
+        if (equipmentIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Equipment> active = equipmentRepository.findAllById(equipmentIds).stream().filter(Equipment::isActive).toList();
+        Map<Long, String> names = equipmentService.institutionNames(active.stream()
+                .map(Equipment::getInstitutionId).collect(Collectors.toSet()));
+        java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
+        return active.stream().collect(Collectors.toMap(Equipment::getId,
+                e -> new EquipmentCandidate(e.getId(), e.getExternalId(), e.getName(), e.getInstitutionId(),
+                        names.get(e.getInstitutionId()), e.getRegion(), e.isMock(), e.getAvailability(),
+                        e.availabilityNeedsConfirmation(now))));
+    }
+
+    @Override
+    public long countCandidates(String testTypeCode, String region, Long excludedInstitutionId) {
+        return jdbcRepository.countCandidates(testTypeCode, region, excludedInstitutionId);
+    }
+
+    /** 여러 장비 사양을 쿼리 1번으로 (장비별로 REAL 이 먼저) */
+    @Override
+    public Map<Long, List<EquipmentSpecView>> getSpecs(Collection<Long> equipmentIds) {
+        Map<Long, List<EquipmentSpecView>> result = new LinkedHashMap<>();
+        equipmentIds.forEach(id -> result.put(id, List.of()));
+        if (equipmentIds.isEmpty()) {
+            return result;
+        }
+        specRepository.findAllByEquipmentIdInOrderByIdAsc(equipmentIds).stream()
+                .collect(Collectors.groupingBy(s -> s.getEquipmentId(), LinkedHashMap::new, Collectors.toList()))
+                .forEach((id, specs) -> result.put(id, EquipmentService.orderRealFirst(specs).stream()
+                        .map(s -> new EquipmentSpecView(s.getSpecKey(), s.getLabel(), s.getValueNum(), s.getMinNum(),
+                                s.getMaxNum(), s.getValueText(), s.getUnit(), s.getSourceType()))
+                        .toList()));
+        return result;
     }
 
     /** 사양 전체 (같은 키면 REAL 이 먼저). 없는 장비면 빈 목록 */

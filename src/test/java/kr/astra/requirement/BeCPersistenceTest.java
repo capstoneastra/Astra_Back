@@ -38,6 +38,7 @@ class BeCPersistenceTest {
     @Autowired ChatPersistence chats;
     @Autowired MatchingService matching;
     @Autowired PipelineStore pipelines;
+    @Autowired kr.astra.equipment.service.EquipmentQueryService equipmentQuery;
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager transactions;
     @org.springframework.test.context.bean.override.mockito.MockitoBean
@@ -68,6 +69,13 @@ class BeCPersistenceTest {
         assertThat(jdbc.queryForObject("select requirement_snapshot ->> 'testTypeCode' from match_runs where id = ?",String.class,match.id()))
                 .isEqualTo("VIBRATION");
         assertThat(matching.history(owner,requirement.id(),org.springframework.data.domain.PageRequest.of(0,20)).content()).hasSize(1);
+        // 후보 수(자동 추진 SEARCH)는 목록을 다 만들지 않고 같은 조건으로 셈. 소속 기관 장비는 매칭과 똑같이 제외
+        long all=matching.countCandidates(owner,"VIBRATION",null);
+        assertThat(all).isEqualTo(equipmentQuery.findCandidates("VIBRATION",null).size()).isPositive();
+        Long institution=equipmentQuery.findCandidates("VIBRATION",null).getFirst().institutionId();
+        long own=equipmentQuery.findCandidates("VIBRATION",null).stream().filter(e -> institution.equals(e.institutionId())).count();
+        assertThat(matching.countCandidates(new CurrentUser(owner.userId(),UserRole.INSTITUTION_MANAGER,institution),"VIBRATION",null))
+                .isEqualTo(all-own);
         assertThat(requirements.confirm(owner,requirement.id()).status()).isEqualTo(RequirementStatus.CONFIRMED);
     }
     @Test void conversationMetadataAndSessionLinkPersist() {

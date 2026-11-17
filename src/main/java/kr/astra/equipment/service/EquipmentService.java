@@ -59,6 +59,27 @@ public class EquipmentService {
                 .map(t -> t.accreditedOn(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")))).orElse(null);
     }
 
+    /**
+     * 여러 장비의 공인 여부를 쿼리 1번으로 (매칭용). 값 의미는 accredited(Long, String) 과 같고,
+     * 기관 미확인(null)인 장비는 맵에 넣지 않으므로 get(id) 가 null 을 돌려줍니다.
+     */
+    public Map<Long, Boolean> accredited(java.util.Collection<Long> equipmentIds, String testType) {
+        Map<Long, Boolean> result = new java.util.HashMap<>();
+        if (equipmentIds.isEmpty()) {
+            return result;
+        }
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul"));
+        testTypeLinkRepository.findAllByEquipmentIdIn(equipmentIds).stream()
+                .filter(t -> t.getTestTypeCode().equals(testType))
+                .forEach(t -> {
+                    Boolean accredited = t.accreditedOn(today);
+                    if (accredited != null) {
+                        result.put(t.getEquipmentId(), accredited);
+                    }
+                });
+        return result;
+    }
+
     /** GET /equipment. q 가 있으면 이름이 비슷한 순서가 먼저, 그다음 sort (기본 externalId) */
     public PageResponse<EquipmentSummaryResponse> search(EquipmentSearchCondition condition, Pageable pageable) {
         Page<Long> ids = jdbcRepository.search(condition, pageable, orderBy(pageable.getSort()));

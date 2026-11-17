@@ -10,7 +10,7 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 | 3 | 검토 시작·보완 요청·보완 제출·통과·반려·완료 (§6) | ✅ 코드 / 확인 ⏳ |
 | 4 | 예약 제안·대안·확정·취소·장비 달력, 중복 예약 이중 방어 (§7) | ✅ 코드 / 확인 ⏳ |
 | 5 | 알림 생성(`NotificationService`)·목록·읽음 (§10, §13) | ✅ 코드 / 확인 ⏳ |
-| 6 | 가상 시뮬레이션 — 계산형 9종 + 규칙형 4종 (§9) | ✅ 코드 / 확인 ⏳ |
+| 6 | 가상 시뮬레이션: 계산형 9종 + 규칙형 4종 (§9) | ✅ 코드 / 확인 ⏳ |
 | 7 | 대시보드 `RequestDashboardQuery` 구현 (BE-A 연결) | ✅ 코드 / 확인 ⏳ |
 | - | 첨부파일 (P2) | ⏳ 파일 저장소 미정 (TODO: 로컬 / S3 호환) |
 
@@ -63,7 +63,7 @@ simulation/   SimulationModel·Preset·Run, SimulationEngine(계산), Simulation
 
 **BE-C (주현욱)**
 - `TestRequestService.createDraft()` 구현 완료. `@Transactional` 기본(REQUIRED)이라 호출한 쪽 트랜잭션에 참여 → 호출 쪽이 롤백하면 의뢰도 롤백 (작업 로그 "같은 트랜잭션 참여 확인" 답변)
-- 요청하신 **결과 조회 계약 추가**: `TestRequestService.getDraftReceipt(requestId)` → `DraftReceipt(requestId, requestNo, status, version, revisionNo, aiGenerated, content)`. 기존 `createDraft` 시그니처는 그대로
+- 요청하신 결과 조회 계약 추가: `TestRequestService.getDraftReceipt(requestId)` → `DraftReceipt(requestId, requestNo, status, version, revisionNo, aiGenerated, content)`. 기존 `createDraft` 시그니처는 그대로
 - `AiDraftService.createForApi` 는 아직 `RECEIPT_PENDING` 을 던지므로, `create()` 뒤에 `getDraftReceipt(id)` 로 응답을 채우면 시연 10단계가 이어집니다. 예:
   ```java
   var prepared = prepare(actor, input);
@@ -77,7 +77,7 @@ simulation/   SimulationModel·Preset·Run, SimulationEngine(계산), Simulation
 **BE-A (윤준수)**
 - `RequestDashboardQuery`·`NotificationService` 구현이 생겨서 대시보드 의뢰 칸과 90일 갱신 알림이 실제로 동작합니다
 - 그래서 `DashboardSearchApiTest` 의 기업 요약 `dataAvailable.requests` 기대값을 `false → true` 로 한 줄 바꿨습니다 (리뷰 부탁)
-- 요청: 비활성 장비도 이름을 볼 수 있는 조회(예: `EquipmentService.findRefs(Collection<Long>)` — id·externalId·name·isMock, 없으면 빠짐)가 있으면 좋겠습니다. 지금은 `getDetail` 이 404 를 던질 때 트랜잭션이 rollback-only 가 되는 것을 피하려고 `RequestViews` 에서 별도 트랜잭션(REQUIRES_NEW)으로 감싸 호출합니다
+- 요청: 비활성 장비도 이름을 볼 수 있는 조회(예: `EquipmentService.findRefs(Collection<Long>)`, id·externalId·name·isMock, 없으면 빠짐)가 있으면 좋겠습니다. 지금은 `getDetail` 이 404 를 던질 때 트랜잭션이 rollback-only 가 되는 것을 피하려고 `RequestViews` 에서 별도 트랜잭션(REQUIRES_NEW)으로 감싸 호출합니다
 
 **FE (연지·홍인)**
 - 상세 응답 `availableActions` (예: `["SUBMIT","CANCEL"]`) 로 버튼을 노출하면 됩니다. 값은 `RequestAction` 이름: SUBMIT, START_REVIEW, REQUEST_SUPPLEMENT, RESPOND_SUPPLEMENT, ACCEPT, REJECT, CONFIRM_RESERVATION, COMPLETE, CANCEL
@@ -88,7 +88,7 @@ simulation/   SimulationModel·Preset·Run, SimulationEngine(계산), Simulation
 
 - **확정된 예약 취소**: §11 표에 CONFIRMED → SCHEDULING 되돌리기가 없어서 지금은 확정된 일정 취소를 막았습니다 (409). 필요하면 전이 추가 여부 결정
 - **취소 알림**: §13 에 의뢰 취소 알림 종류가 없어 보내지 않습니다. 필요하면 `REQUEST_CANCELED` 추가 (enum·FE 공지)
-- **첨부파일 저장소** (로컬 / S3 호환) — 정해지면 §5 첨부 3개 구현
+- **첨부파일 저장소** (로컬 / S3 호환): 정해지면 §5 첨부 3개 구현
 
 ### 확인 방법
 

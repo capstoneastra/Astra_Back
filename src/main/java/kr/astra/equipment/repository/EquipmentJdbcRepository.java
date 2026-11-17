@@ -119,6 +119,31 @@ public class EquipmentJdbcRepository {
                 + " ORDER BY e.external_id", params, Long.class);
     }
 
+    /**
+     * findCandidateIds 와 같은 조건의 후보 수 (자동 추진 SEARCH 단계용).
+     * excludedInstitutionId 가 있으면 그 기관 장비는 뺌 (매칭에서 자기 소속 조직 장비를 빼는 것과 같은 기준)
+     */
+    public long countCandidates(String testTypeCode, String region, Long excludedInstitutionId) {
+        MapSqlParameterSource params = new MapSqlParameterSource("testType", testTypeCode);
+        String filters = "";
+        if (StringUtils.hasText(region)) {
+            params.addValue("region", region.trim());
+            filters += " AND e.region = :region";
+        }
+        if (excludedInstitutionId != null) {
+            params.addValue("excluded", excludedInstitutionId);
+            filters += " AND e.institution_id <> :excluded";
+        }
+        Long count = jdbc.queryForObject("""
+                SELECT count(*) FROM equipment e
+                WHERE e.is_active
+                  AND e.availability NOT IN ('UNAVAILABLE', 'MAINTENANCE')
+                  AND EXISTS (SELECT 1 FROM equipment_test_types ett
+                              WHERE ett.equipment_id = e.id AND ett.test_type_code = :testType)""" + filters,
+                params, Long.class);
+        return count == null ? 0 : count;
+    }
+
     /** 기관 id → 활성 장비 수 */
     public Map<Long, Long> countByInstitution() {
         Map<Long, Long> result = new LinkedHashMap<>();
@@ -281,14 +306,20 @@ public class EquipmentJdbcRepository {
                 new InstitutionVerificationRow(rs.getLong("institution_id"), rs.getLong("n"), rs.getLong("verified")));
     }
 
-    /** 한 기관의 갱신 필요 장비 수: 기관 확인 전 / 마지막 갱신 90일 경과 / 둘 중 하나라도 (전체) */
+    /**
+     * 한 기관의 갱신 필요 장비 수. total 은 기관 장비 목록의 needsUpdate 와 같은 기준:
+     * 기관 확인 전 / 마지막 갱신 days 일 경과 / 가용 상태 확인 필요(Equipment.availabilityNeedsConfirmation) 중 하나라도.
+     */
     public record NeedsUpdateRow(long total, long notConfirmed, long outdated) {
     }
 
     public NeedsUpdateRow countNeedsUpdate(Long institutionId, int days) {
         return jdbc.queryForObject("""
                 SELECT count(*) FILTER (WHERE verification_status <> 'INSTITUTION_VERIFIED'
-                                           OR info_updated_at < now() - make_interval(days => :days)) total,
+                                           OR info_updated_at < now() - make_interval(days => :days)
+                                           OR availability = 'UNKNOWN' OR availability_updated_at IS NULL
+                                           OR availability_updated_by IS NULL
+                                           OR availability_updated_at < now() - make_interval(days => :days)) total,
                        count(*) FILTER (WHERE verification_status <> 'INSTITUTION_VERIFIED') not_confirmed,
                        count(*) FILTER (WHERE info_updated_at < now() - make_interval(days => :days)) outdated
                 FROM equipment WHERE is_active AND institution_id = :id""", Map.of("id", institutionId, "days", days),
@@ -305,22 +336,42 @@ public class EquipmentJdbcRepository {
     public record ReminderRow(Long equipmentId, Long institutionId, String name) {
     }
 
+    /** 알림 대상 조건: 상태 확인(미확인 장비는 생성) 후 days 일이 지났고 이번 확인 주기에 알림을 보내지 않은 활성 장비 */
+    private static final String JUST_OUTDATED = """
+            is_active
+              AND COALESCE(availability_updated_at, created_at) < now() - make_interval(days => :days)
+              AND availability_reminded_at IS NULL""";
+
+    /** 알림 대상 장비가 있는 기관 id (잠그지 않음) */
+    public List<Long> findReminderInstitutionIds(int days) {
+        return jdbc.queryForList("SELECT DISTINCT institution_id FROM equipment WHERE " + JUST_OUTDATED
+                + " ORDER BY institution_id", Map.of("days", days), Long.class);
+    }
+
+    /** 한 기관의 알림 대상 장비 수 (요약 알림 문구용, 잠그지 않음) */
+    public long countJustOutdated(int days, Long institutionId) {
+        Long n = jdbc.queryForObject("SELECT count(*) FROM equipment WHERE " + JUST_OUTDATED
+                + " AND institution_id = :institutionId", Map.of("days", days, "institutionId", institutionId), Long.class);
+        return n == null ? 0 : n;
+    }
+
     /**
-     * 상태 확인(미확인 장비는 생성) 후 days 일이 지났고 이번 확인 주기에 알림을 보내지 않은 장비.
-     * 행 잠금 + SKIP LOCKED로 동시에 실행되는 작업끼리 같은 장비를 보내지 않는다.
+     * 한 기관의 알림 대상 장비 최대 limit 대. 행 잠금 + SKIP LOCKED 로 동시에 실행되는 작업끼리 같은 장비를 보내지 않고,
+     * limit 으로 한 트랜잭션이 잠그는 행 수를 제한한다 (예약·장비 수정의 lockActive 를 오래 막지 않도록).
      */
-    public List<ReminderRow> findJustOutdated(int days) {
-        return jdbc.query("""
-                SELECT id, institution_id, name FROM equipment
-                WHERE is_active
-                  AND COALESCE(availability_updated_at, created_at) < now() - make_interval(days => :days)
-                  AND availability_reminded_at IS NULL
-                ORDER BY external_id FOR UPDATE SKIP LOCKED""", Map.of("days", days),
+    public List<ReminderRow> findJustOutdated(int days, Long institutionId, int limit) {
+        return jdbc.query("SELECT id, institution_id, name FROM equipment WHERE " + JUST_OUTDATED
+                        + " AND institution_id = :institutionId ORDER BY external_id LIMIT :limit FOR UPDATE SKIP LOCKED",
+                Map.of("days", days, "institutionId", institutionId, "limit", limit),
                 (rs, i) -> new ReminderRow(rs.getLong("id"), rs.getLong("institution_id"), rs.getString("name")));
     }
 
-    public void markAvailabilityReminded(Long equipmentId) {
-        jdbc.update("UPDATE equipment SET availability_reminded_at = now() WHERE id = :id", Map.of("id", equipmentId));
+    public void markAvailabilityReminded(List<Long> equipmentIds) {
+        if (equipmentIds.isEmpty()) {
+            return;
+        }
+        jdbc.update("UPDATE equipment SET availability_reminded_at = now() WHERE id IN (:ids)",
+                Map.of("ids", equipmentIds));
     }
 
     /**

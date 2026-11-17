@@ -9,16 +9,16 @@
 ### 백엔드
 | 구분 | 선택 | 이유 |
 |---|---|---|
-| 언어 | **Java 21 (LTS)** | 자료·라이브러리가 가장 많고 팀원 설치 문제가 적음. 가상 스레드 정식 지원 |
-| 프레임워크 | **Spring Boot 4.1.x** (현재 4.1.2) | 무료 보안 지원이 2027년 7월까지라 캡스톤 기간을 덮음. 3.5는 2026년 6월에 무료 지원 종료, 4.0은 2026년 12월 종료 |
-| 빌드 | **Gradle 9.x** (Wrapper 9.8.2 고정, Java 툴체인 21) | 각자 설치한 Gradle 말고 `./gradlew`로만 빌드 |
-| DB | **PostgreSQL 16** | 설계(`schema.sql`)가 PostgreSQL 기준 (JSONB, pg_trgm) |
+| 언어 | Java 21 (LTS) | 자료·라이브러리가 가장 많고 팀원 설치 문제가 적음. 가상 스레드 정식 지원 |
+| 프레임워크 | Spring Boot 4.1.x (현재 4.1.2) | 무료 보안 지원이 2027년 7월까지라 캡스톤 기간을 덮음. 3.5는 2026년 6월에 무료 지원 종료, 4.0은 2026년 12월 종료 |
+| 빌드 | Gradle 9.x (Wrapper 9.8.2 고정, Java 툴체인 21) | 각자 설치한 Gradle 말고 `./gradlew`로만 빌드 |
+| DB | PostgreSQL 16 | 설계(`schema.sql`)가 PostgreSQL 기준 (JSONB, pg_trgm) |
 | ORM | Spring Data JPA (+ 검색만 native query) | JSONB 컬럼은 `@JdbcTypeCode(SqlTypes.JSON)` |
-| DB 변경 관리 | **Flyway** | `schema.sql` → `V1__init.sql`, `seed.sql` → `V2__seed.sql` |
+| DB 변경 관리 | Flyway | `schema.sql` → `V1__init.sql`, `seed.sql` → `V2__seed.sql` |
 | 인증 | Spring Security 7 + JWT (jjwt 0.13.0), access 토큰(1시간) + refresh 토큰(14일) | refresh 토큰은 해시만 `refresh_tokens`에 저장하고, 재발급할 때마다 새 토큰으로 교체 |
-| API 문서 | **springdoc-openapi 3.2.0 (Swagger UI)**, Spring Boot 4 지원 계열 | 코드가 곧 명세. FE는 `/swagger-ui`에서 바로 확인·호출 |
-| AI | **Anthropic Java SDK** `com.anthropic:anthropic-java:3.6.0`, 모델 `claude-opus-5-5` | 공식 SDK. 조건 추출은 structured outputs(JSON 스키마)로 받음 |
-| 테스트 | JUnit 5 + **Testcontainers (PostgreSQL 16)** | 테스트마다 실제 DB를 띄워 마이그레이션·제약조건까지 검증 (Docker 필요) |
+| API 문서 | springdoc-openapi 3.2.0 (Swagger UI), Spring Boot 4 지원 계열 | 코드에서 명세를 자동 생성. FE는 `/swagger-ui`에서 바로 확인·호출 |
+| AI | Anthropic Java SDK `com.anthropic:anthropic-java:3.6.0`, 모델 `claude-opus-5-5` | 공식 SDK. 조건 추출은 structured outputs(JSON 스키마)로 받음 |
+| 테스트 | JUnit 5 + Testcontainers (PostgreSQL 16) | 테스트마다 실제 DB를 띄워 마이그레이션·제약조건까지 검증 (Docker 필요) |
 | 기타 | Lombok, Bean Validation, Actuator(헬스체크) | |
 
 #### 버전 맞추기
@@ -42,14 +42,14 @@ java {
 ### 프론트엔드 (연지 · 홍인)
 | 구분 | 선택 |
 |---|---|
-| 기본 | **React 18 + TypeScript + Vite** |
+| 기본 | React 18 + TypeScript + Vite |
 | 라우팅 / 서버 상태 | React Router, TanStack Query, axios |
 | 스타일 | Tailwind CSS |
-| 목서버 | **MSW** (백엔드 API 완성 전까지 `api-spec.md` 예시 응답으로 개발) |
+| 목서버 | MSW (백엔드 API 완성 전까지 `api-spec.md` 예시 응답으로 개발) |
 | 차트 | Recharts (시뮬레이션 그래프, 대시보드) |
 
 ### 실행 환경
-- 로컬: Docker Desktop을 켜고 `./gradlew bootRun` (또는 IntelliJ 실행) → `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고 Flyway가 아직 적용 안 된 마이그레이션(V1~)을 순서대로 적용. Swagger: http://localhost:8080/swagger-ui.html
+- 로컬: Docker Desktop을 켜고 `./gradlew bootRun` (또는 IntelliJ 실행)하면 `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고, Flyway가 아직 적용 안 된 마이그레이션(V1~)을 순서대로 적용. Swagger: http://localhost:8080/swagger-ui.html
 - FE 연동: 브라우저에서 백엔드를 부르려면 서버 `.env`의 `CORS_ALLOWED_ORIGINS`에 FE 주소가 있어야 함 (기본 `http://localhost:5173`, 쉼표로 여러 개, `http://localhost:*` 패턴 가능). 콘솔에 "blocked by CORS policy"가 뜨면 이 값을 확인
 - 테스트: `./gradlew test` (Testcontainers가 테스트용 DB를 따로 띄움)
 - 시연: 클라우드 VM 1대에서 `docker compose -f compose.prod.yaml up -d --build` (PostgreSQL + 앱, `SPRING_PROFILES_ACTIVE=prod`). 필수 `.env`: `DB_PASSWORD`, `JWT_SECRET`(32자 이상). 안 되면 노트북 로컬 시연. 시연 순서·점검은 `docs/demo-scenario.md`
@@ -58,7 +58,7 @@ java {
 ### AI 사용 기준 (BE-C 참고)
 | 용도 | 방식 |
 |---|---|
-| 상담 채팅 | 스트리밍 응답 → SSE로 프론트 전달, effort `low` |
+| 상담 채팅 | 스트리밍 응답을 SSE로 프론트에 전달, effort `low` |
 | 조건 추출·누락 분석 | structured outputs로 JSON 강제 (`requirement_conditions` 형태). 키는 해당 시험유형의 `test_condition_rules` 목록 안에서만 추출, effort `medium` |
 | 추천 이유 문장 | 매칭은 규칙 기반 코드가 판단하고, LLM은 결과를 문장으로만 설명 |
 | 의뢰서 초안 | 조건 + 장비 정보로 `content` JSON 생성 (structured outputs) |
@@ -111,7 +111,7 @@ equipment/
 └── dto/          ~Request, ~Response
 ```
 
-- **도메인 패키지 = 담당자.** 다른 사람 패키지를 고쳐야 하면 그 사람에게 말하고 PR 리뷰를 받습니다.
+- 도메인 패키지마다 담당자가 정해져 있습니다. 다른 사람 패키지를 고쳐야 하면 그 사람에게 말하고 PR 리뷰를 받습니다.
 - `global/`은 모두가 쓰니까 BE-A가 1주차에 먼저 만들고, 이후 변경은 BE 3명 모두에게 공지합니다.
 - 다른 도메인 기능은 그 도메인의 `service`만 호출합니다. 남의 repository를 직접 쓰지 않습니다.
 - **뼈대(폴더 구조, Gradle, Flyway, `global/`, 빈 도메인 패키지, 내부 인터페이스 껍데기)는 BE-A가 만들어 `main`에 먼저 푸시**하고, 그 뒤로는 모두 PR로만 `main`에 병합합니다.
@@ -123,7 +123,7 @@ equipment/
 ### 브랜치 (GitHub Flow: `main` 하나 + 기능 브랜치)
 | 브랜치 | 용도 |
 |---|---|
-| `main` | 유일한 기본 브랜치이자 **최종 결과물**. 항상 빌드·테스트가 통과하는 상태를 유지 |
+| `main` | 유일한 기본 브랜치이자 최종 결과물. 항상 빌드·테스트가 통과하는 상태를 유지 |
 | `feature/#12-equipment-search` | 이슈(또는 담당 기능 묶음) 하나당 브랜치 하나, `main`에서 따서 `main`으로 PR (`fix/`, `refactor/` 도 같은 형식). 병합 후 같은 브랜치를 계속 써도 됨 (아래 "병합 후" 참고) |
 
 - `main`에 직접 push 금지. 모든 변경은 PR로만 병합
@@ -214,7 +214,7 @@ chore: Flyway 설정 추가
 | BE-B | BE-A | `RequestDashboardQuery` (대시보드 의뢰·예약 집계: 상태별 수, 처리할 의뢰, 검토 대기, 다가오는 예약). 인터페이스는 BE-A가 `request/service`에 만들어 둠, 구현하면 대시보드에 자동 반영 |
 | BE-C | BE-A | `ChatSessionQuery.findRecent(userId, limit)` (대시보드 최근 상담), `ConditionExtractor.extract(text)` (`/search` 문장 → 시험유형·조건). 인터페이스는 BE-A가 만들어 둠, 구현 전에는 빈 목록·키워드 해석으로 동작 |
 
-> 인터페이스와 DTO만 먼저 만들어 두고 구현은 각자 채웁니다. 그래야 서로 기다리지 않습니다.
+> 인터페이스와 DTO만 먼저 만들어 두고 구현은 각자 채우면 서로 기다리지 않아도 됩니다.
 
 > 사람별 할 일, 담당 API 목록, 주의할 점은 5번에 있습니다.
 
@@ -337,8 +337,8 @@ chore: Flyway 설정 추가
 - 핵심은 상태 전이입니다. 모든 상태 변경이 한 메서드(`changeStatus`)를 거치게 하고, 그 안에서 전이 가능 여부 검증 → 상태 갱신 → 이력 저장 → 알림을 한 트랜잭션으로 처리하세요.
 - 보완 제출 때 새 revision을 만들고 `current_revision_no`를 올리는 부분이 PPT 12p "제출본 이력 분리"의 시연 포인트입니다.
 - 시뮬레이션은 장비 데이터 README 정책대로 결과마다 DEMO 경고 문구를 반드시 넣으세요.
-- **중복 예약 방지는 필수입니다.** 두 겹으로 막습니다.
-- 1차 방어 (서비스 코드): 제안·확정 전에 `existsConfirmedOverlap(equipmentId, startAt, endAt)` 조회 (`start_at < :endAt AND end_at > :startAt AND status='CONFIRMED'`) → 겹치면 `RESERVATION_OVERLAP`
+- 중복 예약은 반드시 막아야 하며, 아래 두 겹으로 막습니다.
+- 1차 방어 (서비스 코드): 제안·확정 전에 `existsConfirmedOverlap(equipmentId, startAt, endAt)` 조회 (`start_at < :endAt AND end_at > :startAt AND status='CONFIRMED'`)하고, 겹치면 `RESERVATION_OVERLAP`
 - 2차 방어 (DB 제약): 동시에 확정하는 경우는 코드 검사로 못 막으니 `ex_resv_no_overlap`이 막습니다. `saveAndFlush()` 후 `DataIntegrityViolationException`을 잡아서 SQLSTATE `23P01`이면 `RESERVATION_OVERLAP`, `23505`이면 `RESERVATION_ALREADY_CONFIRMED`로 바꿔 409를 반환하세요.
 - 보완 요청 생성도 같은 방식입니다. OPEN 요청이 이미 있으면 `SUPPLEMENT_ALREADY_OPEN` (DB 유니크 인덱스가 최종 방어).
 
@@ -346,7 +346,7 @@ chore: Flyway 설정 추가
 
 | 우선 | Method | URL | 권한 | 설명 |
 |---|---|---|---|---|
-| P0 | GET | `/test-requests` | 🏢 🏛 | 목록 — 기업: 내 의뢰 / 기관: 우리 기관 접수함. |
+| P0 | GET | `/test-requests` | 🏢 🏛 | 목록 (기업: 내 의뢰 / 기관: 우리 기관 접수함) |
 | P0 | GET | `/test-requests/{id}` | 🏢 🏛 | 상세 (현재 상태, 최신 revision, 열린 보완요청, 예약) |
 | P0 | PUT | `/test-requests/{id}/draft` | 🏢 | 작업본 revision 내용 저장 (DRAFT 또는 SUPPLEMENT_REQUESTED) |
 | P0 | POST | `/test-requests/{id}/submit` | 🏢 | 제출 (DRAFT→SUBMITTED) |
@@ -443,6 +443,6 @@ AI 상담부터 장비 추천, 의뢰서 초안까지 맡습니다. API 수는 �
 - [ ] 프론트엔드 저장소 생성, 브랜치 보호 설정, Projects 보드
 - [ ] 팀 채팅 방: `#일반`, `#api`, `#스탠드업`
 - [ ] Anthropic API 키 발급, 사용 한도 설정, 공유
-- [ ] 조건 규칙(`test_condition_rules`) 초안 검토·확정 (예: 진동시험 = `sample_mass` ≤ `max_payload`, `fixture_mass` ≤ `max_fixture_mass`, `frequency` 범위 포함) — 매칭의 기준
+- [ ] 조건 규칙(`test_condition_rules`) 초안 검토·확정 (예: 진동시험 = `sample_mass` ≤ `max_payload`, `fixture_mass` ≤ `max_fixture_mass`, `frequency` 범위 포함). 매칭의 기준이 됨
 - [x] 시연 계정 정하기: 기업 1, 기관 담당자 2, 관리자 1, 승인 대기 1 (V3 seed, `README` 시연 계정 표)
 - [ ] 시연 시나리오 1개 확정 (예: 위성 전장품 15kg, 20~2000Hz 진동시험)

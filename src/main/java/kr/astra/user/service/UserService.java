@@ -5,11 +5,14 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import kr.astra.global.exception.BusinessException;
 import kr.astra.global.exception.DbConstraints;
 import kr.astra.global.exception.ErrorCode;
+import kr.astra.global.validation.PasswordPolicy;
 import kr.astra.organization.service.OrganizationService;
 import kr.astra.user.dto.UserAccount;
 import kr.astra.user.dto.UserAdminView;
@@ -44,6 +47,9 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final UserAccountStatusCache statusCache;
 
+    /** 없는 이메일 로그인 때 비교할 해시 (처음 쓸 때 같은 인코더로 만듦) */
+    private volatile String dummyHash;
+
     /** 이메일은 앞뒤 공백을 지우고 소문자로 저장·비교합니다. */
     public static String normalizeEmail(String email) {
         return email == null ? null : email.trim().toLowerCase(Locale.ROOT);
@@ -60,6 +66,9 @@ public class UserService {
     @Transactional
     public UserAccount register(Long organizationId, String email, String rawPassword, String name, String phone,
                                 UserRole role) {
+        if (!PasswordPolicy.withinBcryptLimit(rawPassword)) {
+            throw BusinessException.invalidField("password", PasswordPolicy.TOO_LONG_MESSAGE);
+        }
         checkEmailAvailable(email);
         String normalized = normalizeEmail(email);
         User user = User.signUp(organizationId, normalized, passwordEncoder.encode(rawPassword), name.trim(),
@@ -80,14 +89,31 @@ public class UserService {
      */
     @Transactional
     public UserAccount authenticate(String email, String rawPassword) {
-        User user = userRepository.findByEmail(normalizeEmail(email))
-                .filter(u -> passwordEncoder.matches(rawPassword, u.getPasswordHash()))
-                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS));
+        Optional<User> found = userRepository.findByEmail(normalizeEmail(email));
+        if (found.isEmpty()) {
+            // 없는 이메일도 같은 비용의 BCrypt 비교를 해서 응답 시간으로 가입 여부가 드러나지 않게 함
+            passwordEncoder.matches(rawPassword, dummyHash());
+            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+        }
+        User user = found.get();
+        if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
+            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+        }
         if (!user.isActive()) {
             throw new BusinessException(ErrorCode.ACCOUNT_NOT_ACTIVE, notActiveDetails(user));
         }
-        user.recordLogin(OffsetDateTime.now());
+        // 엔티티 전체가 아니라 이 컬럼만 갱신: 그 사이 관리자가 바꾼 상태를 덮어쓰지 않음
+        userRepository.updateLastLoginAt(user.getId(), OffsetDateTime.now());
         return UserAccount.from(user);
+    }
+
+    private String dummyHash() {
+        String hash = dummyHash;
+        if (hash == null) {
+            hash = passwordEncoder.encode(UUID.randomUUID().toString());
+            dummyHash = hash;
+        }
+        return hash;
     }
 
     /** 토큰 재발급 시: 계정이 지워졌으면 401 AUTH_REQUIRED, 정지·거절되었으면 403 ACCOUNT_NOT_ACTIVE */
@@ -134,9 +160,8 @@ public class UserService {
     public Page<UserAdminView> searchForAdmin(UserRole role, UserStatus status, Pageable pageable) {
         pageable.getSort().forEach(order -> {
             if (!ADMIN_SORTABLE.contains(order.getProperty())) {
-                String reason = "정렬할 수 없는 필드입니다. 가능: " + String.join(", ", ADMIN_SORTABLE.stream().sorted().toList());
-                throw new BusinessException(ErrorCode.VALIDATION_FAILED, reason,
-                        Map.of("fields", List.of(Map.of("field", "sort", "reason", reason))));
+                throw BusinessException.invalidField("sort",
+                        "정렬할 수 없는 필드입니다. 가능: " + String.join(", ", ADMIN_SORTABLE.stream().sorted().toList()));
             }
         });
         return userRepository.search(role, status, pageable).map(UserAdminView::from);
@@ -169,9 +194,7 @@ public class UserService {
     @Transactional
     public UserAdminView changeStatus(Long userId, Long adminId, UserStatus status) {
         if (status != UserStatus.ACTIVE && status != UserStatus.SUSPENDED) {
-            String reason = "정지(SUSPENDED) 또는 해제(ACTIVE)만 할 수 있습니다.";
-            throw new BusinessException(ErrorCode.VALIDATION_FAILED, reason,
-                    Map.of("fields", List.of(Map.of("field", "status", "reason", reason))));
+            throw BusinessException.invalidField("status", "정지(SUSPENDED) 또는 해제(ACTIVE)만 할 수 있습니다.");
         }
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "회원을 찾을 수 없습니다.", null));

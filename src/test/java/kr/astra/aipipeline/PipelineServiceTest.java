@@ -23,7 +23,7 @@ class PipelineServiceTest {
             assertThat(SecurityContextHolder.getContext().getAuthentication().getPrincipal()).isEqualTo(user);
             return null;
         }).when(worker).run(user,9L);
-        when(executor.submit(any())).thenAnswer(i -> { ((Runnable)i.getArgument(0)).run(); return null; });
+        when(executor.submitPipeline(any())).thenAnswer(i -> { ((Runnable)i.getArgument(0)).run(); return null; });
         service.start(user,null,"시험");
         verify(worker).run(user,9L);
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();

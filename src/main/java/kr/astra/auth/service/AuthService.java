@@ -2,8 +2,9 @@ package kr.astra.auth.service;
 
 import io.jsonwebtoken.JwtException;
 import java.time.OffsetDateTime;
+import static kr.astra.global.exception.BusinessException.invalidField;
+
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import kr.astra.auth.dto.LoginRequest;
 import kr.astra.auth.dto.SignupRequest;
@@ -166,11 +167,5 @@ public class AuthService {
                 OffsetDateTime.now().plusSeconds(jwtProvider.refreshValiditySeconds()));
         return new TokenResponse(accessToken, refreshToken, jwtProvider.accessValiditySeconds(),
                 TokenResponse.LoginUser.from(account));
-    }
-
-    /** @Valid 실패와 같은 형식: details.fields[{field, reason}] */
-    private static BusinessException invalidField(String field, String reason) {
-        return new BusinessException(ErrorCode.VALIDATION_FAILED, reason,
-                Map.of("fields", List.of(Map.of("field", field, "reason", reason))));
     }
 }

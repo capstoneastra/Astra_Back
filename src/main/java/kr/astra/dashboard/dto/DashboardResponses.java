@@ -86,7 +86,10 @@ public final class DashboardResponses {
     public record InstitutionRef(Long id, String name) {
     }
 
-    /** 갱신 필요 장비 수: total = 둘 중 하나라도 해당 (기관 확인 전 / 마지막 갱신 90일 경과) */
+    /**
+     * 갱신 필요 장비 수: total = 기관 장비 목록에서 needsUpdate 인 장비 수
+     * (기관 확인 전 / 마지막 갱신 90일 경과 / 가용 상태 확인 필요 중 하나라도). notConfirmed·outdated 는 그중 사유별 수
+     */
     public record NeedsUpdate(long total, long notConfirmed, long outdated) {
     }
 
