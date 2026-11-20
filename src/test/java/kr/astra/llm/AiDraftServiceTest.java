@@ -48,7 +48,7 @@ class AiDraftServiceTest {
         when(detail.id()).thenReturn(48L); when(detail.externalId()).thenReturn("ASTRA-48"); when(detail.name()).thenReturn("시험기");
         when(detail.testTypes()).thenReturn(List.of("VIBRATION"));
         when(equipment.getDetail(48L)).thenReturn(detail);
-        when(users.getMe(1L)).thenReturn(new UserMeResponse(1L,"test@example.com","시험자",null,UserRole.COMPANY_USER,UserStatus.ACTIVE,null,null,null));
+        when(users.getMe(1L)).thenReturn(new UserMeResponse(1L,"test@example.com","시험자",null,null,UserRole.COMPANY_USER,UserStatus.ACTIVE,null,null,null));
         when(matching.validateSelection(user,7L,48L,31L)).thenReturn(mock(MatchResponse.Result.class));
         when(provider.getIfAvailable()).thenReturn(requests); when(provider.getObject()).thenReturn(requests);
         when(llm.complete(any())).thenReturn(new LlmClient.Reply("{\"notes\":\"기관 확인 필요\",\"aiNotes\":[\"사용자 확인 필요\"]}","test-model","test-id",1,1));

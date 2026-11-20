@@ -53,12 +53,47 @@ public class RequestContent {
         return jsonMapper.readValue(json, MAP);
     }
 
+    /** 제출할 때 꼭 있어야 하는 것: 이용 희망 기간, 실사용자, 회계 담당자 (회의 결정 2026-11). 사람은 이름 + 전화 또는 이메일 */
+    private static final List<String> REQUIRED_PEOPLE = List.of("actualUser", "accounting");
+
+    /**
+     * 제출 전 필수 항목 확인. 임시 저장(draft)은 비어 있어도 되고, 제출할 때만 검사합니다.
+     * 빠진 항목은 400 VALIDATION_FAILED, details.missingItems = ["accounting.name", "accounting.contact", ...]
+     */
+    public void requireForSubmit(Map<String, Object> content) {
+        List<String> missing = new ArrayList<>();
+        for (String key : REQUIRED_PEOPLE) {
+            Map<?, ?> person = content.get(key) instanceof Map<?, ?> m ? m : Map.of();
+            if (blank(person.get("name"))) {
+                missing.add(key + ".name");
+            }
+            if (blank(person.get("phone")) && blank(person.get("email"))) {
+                missing.add(key + ".contact");
+            }
+        }
+        Map<?, ?> schedule = content.get("schedule") instanceof Map<?, ?> m ? m : Map.of();
+        for (String date : List.of("desiredStartDate", "desiredEndDate")) {
+            if (blank(schedule.get(date))) {
+                missing.add("schedule." + date);
+            }
+        }
+        if (!missing.isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED,
+                    "제출 전에 이용 희망 기간과 실사용자·회계 담당자의 이름·연락처를 입력해 주세요.",
+                    Map.of("missingItems", missing));
+        }
+    }
+
+    private static boolean blank(Object value) {
+        return !(value instanceof String s) || s.isBlank();
+    }
+
     /** 객체로 묶여야 하는 항목(applicant, test, sample, schedule, equipment)과 conditions 배열 형식만 검사 */
     public void validate(Map<String, Object> content) {
         if (content == null) {
             throw invalid("content", "의뢰서 본문이 없습니다.");
         }
-        for (String key : List.of("applicant", "test", "sample", "schedule", "equipment")) {
+        for (String key : List.of("applicant", "actualUser", "accounting", "test", "sample", "schedule", "equipment")) {
             Object v = content.get(key);
             if (v != null && !(v instanceof Map)) {
                 throw invalid("content." + key, key + " 은(는) 객체여야 합니다.");

@@ -19,7 +19,8 @@ RUN ./gradlew bootJar --no-daemon -x test \
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-RUN groupadd --system astra && useradd --system --gid astra --home /app astra
+RUN groupadd --system astra && useradd --system --gid astra --home /app astra \
+    && mkdir -p /app/data/uploads && chown -R astra:astra /app/data
 COPY --from=build --chown=astra:astra /workspace/app.jar app.jar
 USER astra
 

@@ -65,14 +65,14 @@ public class UserService {
     /** 회원가입. 이미 있는 이메일이면 409 EMAIL_ALREADY_EXISTS */
     @Transactional
     public UserAccount register(Long organizationId, String email, String rawPassword, String name, String phone,
-                                UserRole role) {
+                                UserRole role, String researcherNo) {
         if (!PasswordPolicy.withinBcryptLimit(rawPassword)) {
             throw BusinessException.invalidField("password", PasswordPolicy.TOO_LONG_MESSAGE);
         }
         checkEmailAvailable(email);
         String normalized = normalizeEmail(email);
         User user = User.signUp(organizationId, normalized, passwordEncoder.encode(rawPassword), name.trim(),
-                phone, role);
+                phone, role, researcherNo);
         try {
             return UserAccount.from(userRepository.saveAndFlush(user));
         } catch (DataIntegrityViolationException e) {

@@ -68,6 +68,8 @@ public class AiDraftService {
         Map<String,Object> content = new LinkedHashMap<>();
         content.put("applicant",fields("companyName",applicant.organization() == null ? null : applicant.organization().name(),
                 "contactName",applicant.name(),"phone",applicant.phone(),"email",applicant.email()));
+        content.put("actualUser",fields("name",applicant.name(),"phone",applicant.phone(),"email",applicant.email()));
+        content.put("accounting",new LinkedHashMap<>()); // 회계 담당자는 제출 전에 사용자가 입력
         content.put("test",fields("testTypeCode",snapshot.testTypeCode(),"purpose",snapshot.purpose()));
         content.put("sample",fields("name",snapshot.sampleName(),"quantity",snapshot.sampleQuantity()));
         // 의뢰서 본문은 JSON 객체 계약(api-spec §5): 조건마다 key 를 가진 객체, 값이 없는 칸은 생략

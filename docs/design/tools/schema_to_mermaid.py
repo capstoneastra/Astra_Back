@@ -21,8 +21,8 @@ DOMAINS = [
     ("AI 상담 · 시험조건 · 매칭 · 자동 추진", ["chat_sessions", "chat_messages", "test_requirements",
                                       "requirement_conditions", "match_runs", "match_results",
                                       "match_condition_checks", "ai_pipeline_runs"]),
-    ("시험 의뢰 · 검토 · 보완 · 예약", ["test_requests", "test_request_revisions", "request_status_history",
-                                "supplement_requests", "attachments", "reservations"]),
+    ("시험 의뢰 · 검토 · 보완 · 예약 · 결과", ["test_requests", "test_request_revisions", "request_status_history",
+                                "supplement_requests", "attachments", "reservations", "test_results"]),
     ("가상 시뮬레이션", ["simulation_models", "simulation_presets", "simulation_runs"]),
 ]
 SKIP_COLS = {"created_at", "updated_at"}

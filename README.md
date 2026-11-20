@@ -33,9 +33,9 @@
 - **의뢰 과정에서 정보와 상태가 엇갈린다.** 접수 → 보완 요청 → 재제출 → 일정 확정을 거치는 동안 누가 무엇을 고쳤는지 추적하기 어렵습니다.
 
 ### ASTRA가 하는 일
-지역 시험장비를 한곳에 모으고, **AI 상담으로 시험 조건을 정리 → 조건에 맞는 장비를 근거와 함께 비교 → 의뢰서 초안 작성 → 장비 보유 조직의 검토·보완·예약**까지 하나의 흐름으로 잇습니다.
+지역 시험장비를 한곳에 모으고, **AI 상담으로 시험 조건을 정리 → 조건에 맞는 장비를 근거와 함께 비교 → 의뢰서 초안 작성 → 장비 보유 조직의 검토·보완·일정 확정 → 시험 대행과 결과·성적서 전달**까지 하나의 흐름으로 잇습니다.
 
-**기업·시험기관·대학 누구나 장비를 빌려주고 빌릴 수 있습니다.** 기업 ↔ 기관, 기업 ↔ 기업, 기관 ↔ 기관, 대학 ↔ 기업처럼 어느 조합이든 한 플랫폼에서 의뢰가 오갑니다. 한 조직이 어떤 의뢰에서는 의뢰자, 다른 의뢰에서는 장비 보유 조직이 됩니다.
+**장비를 빌려주는 것이 아니라, 장비를 가진 조직이 대신 시험하고 결과값과 성적서를 보내 주는 방식입니다.** 기업·시험기관·대학 누구나 시험을 맡기거나 맡을 수 있고, 기업 ↔ 기관, 기업 ↔ 기업, 기관 ↔ 기관, 대학 ↔ 기업처럼 어느 조합이든 한 플랫폼에서 의뢰가 오갑니다. 한 조직이 어떤 의뢰에서는 의뢰자, 다른 의뢰에서는 장비 보유 조직이 됩니다.
 
 ### 기존 서비스와의 차이
 
@@ -45,7 +45,7 @@
 
 | | ZEUS AI 검색 (보도 기준) | ASTRA |
 |---|---|---|
-| 대상 | 국가 R&D 예산으로 구축된 연구시설·장비 | 우주항공 시험·생산 장비. 기업·시험기관·대학이 서로 빌려주고 빌림 (시연 데이터: 가상 조직 16곳, 장비 339대) |
+| 대상 | 국가 R&D 예산으로 구축된 연구시설·장비 | 우주항공 시험·생산 장비. 기업·시험기관·대학이 서로 시험을 맡기고 대행함 (시연 데이터: 가상 조직 16곳, 장비 339대) |
 | 찾는 방식 | 연구 목적 입력 → 가까운 이용 가능 장비 추천 | 시험 조건(시료 질량, 주파수 범위 등)을 정리하고, 시험유형별 규칙으로 장비 사양과 조건마다 충족·미충족·미확인을 판정 |
 | 결과에 담기는 것 | 추천 장비와 예약 | 조건별 근거 표(요구 20~2000Hz vs 장비 5~1800Hz → 미충족), 사양·요금·기간 비교표, 시연 데이터(MOCK)·기관 확인 여부 표시 |
 | 이후 흐름 | 장비 예약 | 의뢰서 초안 → 제출 → 기관 기술 검토·보완 요청 → 재제출(제출본 이력 분리) → 일정 확정 |
@@ -94,11 +94,14 @@ flowchart LR
     subgraph INSTITUTION["장비 보유 조직 (기업·기관·대학)"]
         F["기술 검토"]
         H["일정 협의·예약 확정"]
+        R["시험 수행<br/>결과·성적서 등록"]
     end
     E --> F
-    F -- "보완 요청" --> G
+    F -- "보완·추가 정보 요청" --> G
     G --> F
     F -- "검토 통과" --> H
+    H --> R
+    R -- "결과·성적서 전달" --> COMPANY
 ```
 
 버튼 하나로 **조건 분석 → 장비 검색 → 적합성 비교 → 의뢰서 초안**까지 자동으로 진행하는 기능(AI 자동 추진)도 있습니다. 단, 제출은 항상 사용자가 직접 확인한 뒤에 합니다.
@@ -160,7 +163,7 @@ API 92개의 상세 명세와 우선순위(P0 시연 필수 / P1 / P2)는 [`docs
 
 ## 5. ERD
 
-테이블 31개. 아래 그림은 `docs/design/schema.sql`에서 자동 생성했습니다. 도메인별 상세는 펼쳐서 보세요 (`created_at`, `updated_at` 컬럼은 생략).
+테이블 32개. 아래 그림은 `docs/design/schema.sql`에서 자동 생성했습니다. 도메인별 상세는 펼쳐서 보세요 (`created_at`, `updated_at` 컬럼은 생략).
 
 <!-- ERD:START (python docs/design/tools/schema_to_mermaid.py 출력으로 교체) -->
 
@@ -223,6 +226,8 @@ erDiagram
     simulation_models ||--o{ simulation_runs : ""
     users ||--o{ notifications : ""
     test_requests |o--o{ notifications : ""
+    test_requests ||--o{ test_results : ""
+    users ||--o{ test_results : ""
 ```
 
 <details>
@@ -252,12 +257,14 @@ erDiagram
         varchar password_hash
         varchar name
         varchar phone
+        varchar researcher_no
         varchar role "COMPANY_USER / INSTITUTION_MANAGER / ADMIN"
         varchar status "ACTIVE / PENDING / REJECTED / SUSPENDED"
         bigint approved_by FK
         timestamptz approved_at
         varchar reject_reason
         timestamptz last_login_at
+        bigint version
     }
     refresh_tokens {
         bigint id PK
@@ -555,7 +562,7 @@ erDiagram
 </details>
 
 <details>
-<summary><b>시험 의뢰 · 검토 · 보완 · 예약</b> (6개 테이블)</summary>
+<summary><b>시험 의뢰 · 검토 · 보완 · 예약 · 결과</b> (7개 테이블)</summary>
 
 ```mermaid
 erDiagram
@@ -576,6 +583,9 @@ erDiagram
         date desired_end_date
         timestamptz submitted_at
         timestamptz closed_at
+        bigint estimated_fee
+        varchar estimated_fee_note
+        timestamptz estimated_fee_updated_at
         int version
     }
     test_request_revisions {
@@ -605,6 +615,7 @@ erDiagram
         text message
         jsonb items
         date due_date
+        varchar kind "SUPPLEMENT / ADDITIONAL_INFO"
         varchar status "OPEN / RESPONDED / CLOSED"
         int response_revision_no
         text response_message
@@ -619,6 +630,7 @@ erDiagram
         varchar mime_type
         bigint size_bytes
         bigint uploaded_by FK
+        varchar category "GENERAL / RESULT_REPORT"
     }
     reservations {
         bigint id PK
@@ -633,6 +645,16 @@ erDiagram
         varchar external_system
         varchar external_ref
         varchar note
+        bigint version
+    }
+    test_results {
+        bigint id PK
+        bigint request_id FK, UK
+        text summary
+        varchar report_no
+        varchar report_url
+        bigint registered_by FK
+        timestamptz registered_at
     }
     equipment {
         bigint id PK
@@ -668,6 +690,8 @@ erDiagram
     equipment ||--o{ reservations : "equipment_id"
     users ||--o{ reservations : "proposed_by"
     users |o--o{ reservations : "confirmed_by"
+    test_requests ||--o{ test_results : "request_id"
+    users ||--o{ test_results : "registered_by"
 ```
 
 </details>
@@ -752,12 +776,16 @@ stateDiagram-v2
     UNDER_REVIEW --> SCHEDULING : 검토 통과 (보유 조직)
     UNDER_REVIEW --> REJECTED : 반려 (보유 조직)
     SCHEDULING --> CONFIRMED : 예약 확정 (보유 조직)
-    CONFIRMED --> COMPLETED : 시험 완료 (보유 조직)
+    CONFIRMED --> COMPLETED : 결과·성적서 등록 후 완료 (보유 조직)
     REJECTED --> [*]
     COMPLETED --> [*]
 ```
 
 `DRAFT`부터 `SCHEDULING`까지는 의뢰자가 언제든 취소(`CANCELED`)할 수 있습니다. 의뢰자·보유 조직은 조직 유형이 아니라 그 의뢰에서의 입장입니다 (기업이 보유 조직, 대학이 의뢰자일 수도 있음). 상태 변경은 모두 상태 갱신 + 이력 저장 + 상대방 알림을 한 트랜잭션으로 처리합니다.
+
+- 제출할 때 실사용자·회계 담당자(이름 + 연락처)가 있어야 합니다. 검토 중에 보유 조직이 **추가 정보 요청**(`kind=ADDITIONAL_INFO`)으로 책임자명·성적서 종류·시료 처리·청구 방법을 한 번 더 받고, **예상 이용료**는 보유 조직이 직접 적습니다.
+- 일정이 확정(`CONFIRMED`)된 뒤 보유 조직이 시험 결과(요약, 성적서 번호, 링크)를 등록해야 `COMPLETED` 로 넘길 수 있습니다. 성적서 파일(pdf 등, 20MB까지)도 올릴 수 있고, 의뢰자가 내려받습니다.
+- 제출할 때 이용 희망 기간도 필수입니다.
 
 ---
 
@@ -787,7 +815,8 @@ cp .env.example .env        # 필요한 값 채우기 (DB 는 기본값 그대�
 ./gradlew bootRun           # Windows: gradlew.bat bootRun
 ```
 
-- `bootRun`을 하면 `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고, Flyway가 `V1__init.sql`(테이블), `V2__seed.sql`(초기 데이터), `V3__demo_accounts.sql`(시연 계정), `V4__email_verifications.sql`(가입 이메일 인증), `V5__fill_institution_region.sql`(지역이 비어 있던 기관·장비 31대에 '진주' 채움), `V6__equipment_integrity_and_availability.sql`(사양 사전·기준 단위·가용성·정비·공인·운용·보안), `V7__university_org_type.sql`(조직 유형에 대학 추가), `V8__mock_organizations_and_equipment.sql`(가상 조직·시연 장비 268대·시연 계정 2개)을 적용합니다.
+- `bootRun`을 하면 `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고, Flyway가 `V1__init.sql`(테이블), `V2__seed.sql`(초기 데이터), `V3__demo_accounts.sql`(시연 계정), `V4__email_verifications.sql`(가입 이메일 인증), `V5__fill_institution_region.sql`(지역이 비어 있던 기관·장비 31대에 '진주' 채움), `V6__equipment_integrity_and_availability.sql`(사양 사전·기준 단위·가용성·정비·공인·운용·보안), `V7__university_org_type.sql`(조직 유형에 대학 추가), `V8__mock_organizations_and_equipment.sql`(가상 조직·시연 장비 268대·시연 계정 2개), `V9`(시연 계정 비밀번호), `V10`·`V11`(회원·예약 동시 수정 방지 version), `V12`(국가연구자번호), `V13`(추가 정보 요청 종류), `V14`(예상 이용료), `V15`(시험 결과·성적서), `V16`(첨부파일 종류: 일반 / 성적서)을 적용합니다.
+- 첨부파일·성적서 파일은 서버 디스크 `astra.storage.dir`(기본 `./data/uploads`, git 제외)에 저장합니다. 시연 서버(`compose.prod.yaml`)는 `astra-prod-uploads` 볼륨에 저장해 재배포해도 남습니다.
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - 헬스체크: http://localhost:8080/actuator/health
 - IntelliJ: **Project SDK와 Gradle JVM을 모두 21**로 맞춘 뒤 `AstraApplication`을 실행합니다.
@@ -936,7 +965,7 @@ public ApiResponse<RequestDetail> detail(@AuthenticationPrincipal CurrentUser us
 | [`docs/work-log-be-a.md`](docs/work-log-be-a.md) | BE-A 작업 기록 |
 | [`docs/work-log-be-b.md`](docs/work-log-be-b.md) | BE-B 작업 기록 (구조, 다른 담당자에게 알릴 것, 정해야 할 것) |
 | [`docs/team-guide.md`](docs/team-guide.md) | 기술 스택, 협업 규칙, 담당자별 API·주차별 계획 |
-| [`docs/design/schema.sql`](docs/design/schema.sql) | 전체 테이블 설계 (31개, V6) |
+| [`docs/design/schema.sql`](docs/design/schema.sql) | 전체 테이블 설계 (32개, V15) |
 | [`docs/design/data-dictionary.md`](docs/design/data-dictionary.md) | 컬럼·상태·단위의 의미와 변경 책임 |
 | [`docs/backend-hardening-handoff.md`](docs/backend-hardening-handoff.md) | 보완 전 수치, V6 변경 계약, 팀 공지 필요 사항과 검증 결과 |
 | [`docs/design/erd.dbml`](docs/design/erd.dbml) | ERD (dbdiagram.io에 붙여넣기) |

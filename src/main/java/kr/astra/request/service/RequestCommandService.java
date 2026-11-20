@@ -42,6 +42,7 @@ public class RequestCommandService {
     private final UserService userService;
     private final RequirementApplicationService requirementService;
     private final MatchingService matchingService;
+    private final kr.astra.request.repository.TestResultRepository resultRepository;
 
     /**
      * POST /test-requests. 시험조건(requirementId)이 있으면 조건을 의뢰서 content.conditions 에 옮겨 담습니다.
@@ -96,12 +97,58 @@ public class RequestCommandService {
         TestRequestRevision revision = workflow.currentRevision(request);
         Map<String, Object> body = content.read(revision.getContent());
         content.validate(body);
+        content.requireForSubmit(body);
         RequestContent.Schedule s = content.schedule(body);
         request.updateDraftInfo(null, s.start(), s.end());
         revision.submit(OffsetDateTime.now());
         workflow.saveRevision(revision);
         workflow.transition(request, RequestAction.SUBMIT, actor, null);
         return result(request);
+    }
+
+    /** 예상 이용료를 적을 수 있는 상태: 검토 중 ~ 일정 조율 중 (회의 결정: 검토 중에 기관이 입력) */
+    private static final java.util.Set<RequestStatus> FEE_EDITABLE = java.util.EnumSet.of(RequestStatus.UNDER_REVIEW,
+            RequestStatus.SUPPLEMENT_REQUESTED, RequestStatus.RESUBMITTED, RequestStatus.SCHEDULING);
+
+    /** PUT /test-requests/{id}/estimated-fee — 장비 보유 조직이 예상 이용료(원)와 메모를 적음 */
+    public void updateEstimatedFee(CurrentUser actor, Long requestId, RequestInputs.EstimatedFee input) {
+        TestRequest request = workflow.lock(requestId);
+        workflow.authorize(RequestAction.Party.INSTITUTION, actor, request);
+        if (!FEE_EDITABLE.contains(request.getStatus())) {
+            throw new BusinessException(ErrorCode.REQUEST_INVALID_STATUS,
+                    "예상 이용료는 검토 중부터 일정 조율 중까지 적을 수 있습니다.",
+                    Map.of("currentStatus", request.getStatus()));
+        }
+        RequestWorkflow.checkVersion(request, input.version());
+        request.updateEstimatedFee(input.amount(), input.note(), OffsetDateTime.now());
+        workflow.bumpVersion(request);
+    }
+
+    /**
+     * PUT /test-requests/{id}/result — 장비 보유 조직이 시험 결과·성적서를 등록(다시 보내면 고침).
+     * 일정 확정(CONFIRMED) 뒤에만 가능하고, 의뢰자에게 RESULT_REGISTERED 알림. 결과가 있어야 완료할 수 있음
+     */
+    public void registerResult(CurrentUser actor, Long requestId, RequestInputs.Result input) {
+        TestRequest request = workflow.lock(requestId);
+        workflow.authorize(RequestAction.Party.INSTITUTION, actor, request);
+        if (request.getStatus() != RequestStatus.CONFIRMED) {
+            throw new BusinessException(ErrorCode.REQUEST_INVALID_STATUS, "시험 일정이 확정된 의뢰에만 결과를 등록할 수 있습니다.",
+                    Map.of("currentStatus", request.getStatus()));
+        }
+        OffsetDateTime now = OffsetDateTime.now();
+        kr.astra.request.entity.TestResult result = resultRepository.findByRequestId(requestId)
+                .orElseGet(() -> new kr.astra.request.entity.TestResult(requestId, actor.userId(), now));
+        boolean first = result.getId() == null;
+        result.update(input.summary().strip(), blankToNull(input.reportNo()), blankToNull(input.reportUrl()),
+                actor.userId(), now);
+        resultRepository.saveAndFlush(result);
+        workflow.notifyRequester(request, kr.astra.notification.entity.NotificationType.RESULT_REGISTERED,
+                "[" + request.getRequestNo() + "] 시험 결과가 " + (first ? "등록" : "수정") + "되었습니다.");
+        workflow.bumpVersion(request);
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s.strip();
     }
 
     /** POST /test-requests/{id}/cancel — DRAFT~SCHEDULING → CANCELED. 열린 보완 요청·제안 중 예약은 함께 닫힘 */
@@ -122,6 +169,9 @@ public class RequestCommandService {
         Map<String, Object> c = new LinkedHashMap<>();
         c.put("applicant", fields("companyName", me.organization() == null ? null : me.organization().name(),
                 "contactName", me.name(), "phone", me.phone(), "email", me.email()));
+        // 실사용자는 보통 신청자 본인이라 미리 채움(수정 가능). 회계 담당자는 제출 전에 직접 입력
+        c.put("actualUser", fields("name", me.name(), "phone", me.phone(), "email", me.email()));
+        c.put("accounting", new LinkedHashMap<>());
         c.put("test", requirement == null ? new LinkedHashMap<>()
                 : fields("testTypeCode", requirement.testTypeCode(), "purpose", requirement.purpose()));
         c.put("sample", requirement == null ? new LinkedHashMap<>()

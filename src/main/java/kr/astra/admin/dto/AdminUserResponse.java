@@ -12,6 +12,7 @@ public record AdminUserResponse(
         String email,
         String name,
         String phone,
+        String researcherNo,
         UserRole role,
         UserStatus status,
         OrganizationAdminResponse organization,
@@ -21,7 +22,7 @@ public record AdminUserResponse(
         OffsetDateTime createdAt) {
 
     public static AdminUserResponse of(UserAdminView user, OrganizationAdminResponse organization) {
-        return new AdminUserResponse(user.id(), user.email(), user.name(), user.phone(), user.role(), user.status(),
+        return new AdminUserResponse(user.id(), user.email(), user.name(), user.phone(), user.researcherNo(), user.role(), user.status(),
                 organization, user.rejectReason(), user.approvedAt(), user.lastLoginAt(), user.createdAt());
     }
 }

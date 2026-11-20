@@ -71,6 +71,16 @@ public class TestRequest extends BaseTimeEntity {
     @Column(name = "desired_end_date")
     private LocalDate desiredEndDate;
 
+    /** 예상 이용료(원). 장비 보유 조직이 입력 */
+    @Column(name = "estimated_fee")
+    private Long estimatedFee;
+
+    @Column(name = "estimated_fee_note", length = 500)
+    private String estimatedFeeNote;
+
+    @Column(name = "estimated_fee_updated_at")
+    private OffsetDateTime estimatedFeeUpdatedAt;
+
     /** 처음 제출한 시각 (기관 접수함은 이 값이 있는 의뢰만 봄) */
     @Column(name = "submitted_at")
     private OffsetDateTime submittedAt;
@@ -118,6 +128,12 @@ public class TestRequest extends BaseTimeEntity {
         }
         this.desiredStartDate = desiredStartDate;
         this.desiredEndDate = desiredEndDate;
+    }
+
+    public void updateEstimatedFee(long amount, String note, OffsetDateTime now) {
+        this.estimatedFee = amount;
+        this.estimatedFeeNote = note == null || note.isBlank() ? null : note.strip();
+        this.estimatedFeeUpdatedAt = now;
     }
 
     public void assign(Long assigneeId) {

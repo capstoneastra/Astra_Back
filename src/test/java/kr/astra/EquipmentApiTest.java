@@ -430,6 +430,23 @@ class EquipmentApiTest {
     // ------------------------------------------------------------ BE-C 용 내부 인터페이스
 
     @Test
+    void 매칭_후보와_결과_요약에_이용_범위가_들어간다_공동활용_단독활용() {
+        // 회의 결정: 추천할 때 공동활용(EXTERNAL_ALLOWED) / 단독활용(INTERNAL_ONLY) 을 같이 보여 줌
+        String original44 = jdbc.queryForObject("SELECT access_scope FROM equipment WHERE id = 44", String.class);
+        jdbc.update("UPDATE equipment SET access_scope = 'INTERNAL_ONLY' WHERE id = 44");
+        try {
+            String scope48 = jdbc.queryForObject("SELECT access_scope FROM equipment WHERE id = 48", String.class);
+            var summaries = equipmentQueryService.findSummaries(List.of(44L, 48L));
+            assertThat(summaries.get(44L).accessScope().name()).isEqualTo("INTERNAL_ONLY");
+            assertThat(summaries.get(48L).accessScope().name()).isEqualTo(scope48);
+            assertThat(equipmentQueryService.findCandidates("VIBRATION", null)).filteredOn(c -> c.id() == 44L)
+                    .singleElement().satisfies(c -> assertThat(c.accessScope().name()).isEqualTo("INTERNAL_ONLY"));
+        } finally {
+            jdbc.update("UPDATE equipment SET access_scope = ? WHERE id = 44", original44);
+        }
+    }
+
+    @Test
     void 매칭_후보와_사양을_조회한다() {
         List<EquipmentCandidate> all = equipmentQueryService.findCandidates("VIBRATION", null);
         // 정비 중·이용 불가 장비는 후보에서 빠짐

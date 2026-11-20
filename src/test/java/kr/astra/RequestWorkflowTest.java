@@ -87,7 +87,7 @@ class RequestWorkflowTest {
         assertThat(api.send("PUT", "/api/v1/test-requests/" + id + "/draft", draftBody(v0, false), company).code())
                 .isEqualTo("VERSION_CONFLICT");
 
-        Res submitted = api.post("/api/v1/test-requests/" + id + "/submit", null, company);
+        Res submitted = api.submitRequest(id, company);
         assertThat(submitted.status()).as(submitted.body().toString()).isEqualTo(200);
         assertThat(submitted.data().path("status").asString()).isEqualTo("SUBMITTED");
         assertThat(unread("manager1@astra.demo", "REQUEST_SUBMITTED", id)).isEqualTo(1);
@@ -185,6 +185,9 @@ class RequestWorkflowTest {
         assertThat(history.get(history.size() - 1).path("toStatus").asString()).isEqualTo("CONFIRMED");
 
         // 완료
+        // 시험 대행: 결과를 등록해야 완료
+        assertThat(api.send("PUT", "/api/v1/test-requests/" + id + "/result", "{ \"summary\": \"시험 완료\" }", manager1)
+                .status()).isEqualTo(200);
         Res completed = api.post("/api/v1/test-requests/" + id + "/complete", null, manager1);
         assertThat(completed.data().path("status").asString()).isEqualTo("COMPLETED");
     }
@@ -236,7 +239,7 @@ class RequestWorkflowTest {
             // 기관 회원(manager1)이 의뢰자로 그 장비에 의뢰 → 제출
             long id = api.post("/api/v1/test-requests", "{ \"equipmentId\": " + equipmentId + " }", manager1)
                     .data().path("id").asLong();
-            assertThat(api.post("/api/v1/test-requests/" + id + "/submit", null, manager1).status()).isEqualTo(200);
+            assertThat(api.submitRequest(id, manager1).status()).isEqualTo(200);
             assertThat(unread("company@astra.demo", "REQUEST_SUBMITTED", id)).isEqualTo(1);
 
             // 보낸 의뢰 / 받은 의뢰는 box 로 나눠 본다
@@ -279,6 +282,8 @@ class RequestWorkflowTest {
             assertThat(confirmed.status()).as(confirmed.body().toString()).isEqualTo(200);
             assertThat(api.get("/api/v1/test-requests/" + id, manager1).data().path("status").asString())
                     .isEqualTo("CONFIRMED");
+            assertThat(api.send("PUT", "/api/v1/test-requests/" + id + "/result", "{ \"summary\": \"시험 완료\" }",
+                    company).status()).isEqualTo(200);
             assertThat(api.post("/api/v1/test-requests/" + id + "/complete", null, company).data().path("status")
                     .asString()).isEqualTo("COMPLETED");
         } finally {
@@ -334,7 +339,7 @@ class RequestWorkflowTest {
         Res created = api.post("/api/v1/test-requests", "{ \"equipmentId\": " + equipmentId + " }", requester);
         assertThat(created.status()).as(created.body().toString()).isEqualTo(201);
         long id = created.data().path("id").asLong();
-        Res submitted = api.post("/api/v1/test-requests/" + id + "/submit", null, requester);
+        Res submitted = api.submitRequest(id, requester);
         assertThat(submitted.status()).as(submitted.body().toString()).isEqualTo(200);
         return id;
     }
@@ -411,7 +416,7 @@ class RequestWorkflowTest {
     /** 새 의뢰를 SCHEDULING 까지 진행 (기업 작성·제출 → manager1 검토·통과) */
     private long toScheduling() throws Exception {
         long id = api.post("/api/v1/test-requests", "{ \"equipmentId\": 48 }", company).data().path("id").asLong();
-        assertThat(api.post("/api/v1/test-requests/" + id + "/submit", null, company).status()).isEqualTo(200);
+        assertThat(api.submitRequest(id, company).status()).isEqualTo(200);
         assertThat(api.post("/api/v1/test-requests/" + id + "/review/start", null, manager1).status()).isEqualTo(200);
         assertThat(api.post("/api/v1/test-requests/" + id + "/accept", null, manager1).data().path("status").asString())
                 .isEqualTo("SCHEDULING");
@@ -427,6 +432,8 @@ class RequestWorkflowTest {
     private static String content(boolean filled) {
         return """
                 { "applicant": { "companyName": "가상 A기업", "contactName": "홍길동" },
+                  "actualUser": { "name": "홍길동", "email": "company@astra.demo" },
+                  "accounting": { "name": "김회계", "phone": "02-000-0000" },
                   "test": { "testTypeCode": "VIBRATION", "purpose": "발사 환경 진동 내구성 확인" },
                   "sample": { "name": "위성 탑재 전장품", "quantity": 1 %s },
                   "conditions": [ { "key": "sample_mass", "label": "시료 질량", "value": 15, "unit": "kg", "status": "CONFIRMED" },

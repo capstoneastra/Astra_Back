@@ -56,6 +56,7 @@ public class RequestQueryService {
     private final RequestContent content;
     private final ReviewService reviewService;
     private final ReservationService reservationService;
+    private final kr.astra.request.repository.TestResultRepository resultRepository;
 
     /**
      * GET /test-requests?box=&status=
@@ -104,7 +105,11 @@ public class RequestQueryService {
         boolean ownerOrAdmin = ownerOrAdmin(actor, r);
         TestRequestRevision working = ownerOrAdmin ? workflow.nextWorkingRevision(r).orElse(null) : null;
 
-        Set<Long> userIds = RequestViews.authorIds(Stream.of(current, working));
+        Set<Long> userIds = new java.util.HashSet<>(RequestViews.authorIds(Stream.of(current, working)));
+        var result = resultRepository.findByRequestId(r.getId()).orElse(null);
+        if (result != null) {
+            userIds.add(result.getRegisteredBy());
+        }
         RequestViews.Names names = views.names(r, userIds);
         return new Detail(r.getId(), r.getRequestNo(), r.getTitle(), r.getStatus(), r.getVersion(),
                 r.getCurrentRevisionNo(), names.equipment(r.getEquipmentId()), names.org(r.getInstitutionId()),
@@ -113,7 +118,14 @@ public class RequestQueryService {
                 r.getSubmittedAt(), r.getClosedAt(), r.getCreatedAt(), r.getUpdatedAt(),
                 views.revision(current, names, true), views.revision(working, names, true),
                 reviewService.findOpen(r.getId()).orElse(null), reservationService.viewsFor(r),
-                availableActions(actor, r));
+                availableActions(actor, r),
+                r.getEstimatedFee() == null ? null
+                        : new kr.astra.request.dto.RequestResponses.EstimatedFee(r.getEstimatedFee(), r.getEstimatedFeeNote(),
+                                r.getEstimatedFeeUpdatedAt()),
+                result == null ? null
+                        : new kr.astra.request.dto.RequestResponses.ResultView(result.getSummary(), result.getReportNo(),
+                                result.getReportUrl(), names.person(result.getRegisteredBy()), result.getRegisteredAt(),
+                                result.getUpdatedAt()));
     }
 
     /** GET /test-requests/{id}/revisions — 제출본 이력 (본문 제외). 아직 제출 안 한 작업본은 의뢰자·관리자에게만 */

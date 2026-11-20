@@ -17,6 +17,7 @@ import kr.astra.user.entity.UserRole;
  *   <li>INSTITUTION_MANAGER + organizationId: 승인된 기존 기관·대학 선택 → PENDING</li>
  *   <li>INSTITUTION_MANAGER + organization(name, address, phone, orgType): 미등록 기관·대학 신청 → PENDING.
  *       orgType 은 INSTITUTION(기본값) 또는 UNIVERSITY</li>
+ *   <li>INSTITUTION_MANAGER 는 국가연구자번호(researcherNo, 숫자 8자리) 필수. 연동 없이 형식만 확인</li>
  *   <li>ADMIN: 가입 불가</li>
  * </ul>
  */
@@ -29,7 +30,8 @@ public record SignupRequest(
         @Size(max = 30) String phone,
         @NotNull UserRole role,
         Long organizationId,
-        @Valid OrganizationInput organization) {
+        @Valid OrganizationInput organization,
+        @Size(max = 20) String researcherNo) {
 
     /** 가입하면서 새로 만드는 조직 (기업, 또는 미등록 기관·대학). orgType 은 기관 담당자 신청에서만 사용 */
     public record OrganizationInput(

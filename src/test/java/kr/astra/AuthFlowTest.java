@@ -264,6 +264,35 @@ class AuthFlowTest {
     }
 
     @Test
+    void 기관_대학_담당자는_국가연구자번호_8자리를_입력해야_가입된다() throws Exception {
+        String org = "\"organizationId\": " + institutionId("가람재료시험연구원");
+        // 연동은 하지 않고 형식만 확인 (회의 결정: 목 처리)
+        Res missing = api.signupInstitutionManager(uniqueEmail(), org, "");
+        assertThat(missing.code()).isEqualTo("VALIDATION_FAILED");
+        assertThat(missing.details().path("fields").get(0).path("field").asString()).isEqualTo("researcherNo");
+        Res wrong = api.signupInstitutionManager(uniqueEmail(), org, "\"researcherNo\": \"1234-56\"");
+        assertThat(wrong.code()).isEqualTo("VALIDATION_FAILED");
+        assertThat(wrong.details().path("fields").get(0).path("field").asString()).isEqualTo("researcherNo");
+
+        String email = uniqueEmail();
+        Res ok = api.signupInstitutionManager(email, org, "\"researcherNo\": \"11223344\"");
+        assertThat(ok.status()).as(ok.body().toString()).isEqualTo(201);
+        assertThat(jdbc.queryForObject("SELECT researcher_no FROM users WHERE email = ?", String.class, email))
+                .isEqualTo("11223344");
+        // 관리자 승인 목록에서 확인할 수 있음
+        assertThat(api.get("/api/v1/admin/users?status=PENDING&size=100", adminToken()).data().toString())
+                .contains("\"researcherNo\":\"11223344\"");
+    }
+
+    @Test
+    void 기업_회원은_국가연구자번호_없이_가입한다() throws Exception {
+        String email = uniqueEmail();
+        Res res = api.signupCompany(email, "연구자번호 없는 기업 " + UUID.randomUUID(), "123-45-67890");
+        assertThat(res.status()).as(res.body().toString()).isEqualTo(201);
+        assertThat(jdbc.queryForObject("SELECT researcher_no FROM users WHERE email = ?", String.class, email)).isNull();
+    }
+
+    @Test
     void 미등록_기관으로_가입하면_승인_대기_기관이_생기고_가입용_목록에는_안_나온다() throws Exception {
         String orgName = "테스트 신규 기관 " + UUID.randomUUID();
         Res signup = api.signupInstitutionManager(uniqueEmail(), """

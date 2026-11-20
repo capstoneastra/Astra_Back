@@ -19,6 +19,12 @@ spring:
       maximum-pool-size: ${DB_POOL_SIZE:20}
       connection-timeout: 10000
 
+  servlet:
+    multipart:
+      # 첨부파일·성적서 파일 크기 상한
+      max-file-size: 20MB
+      max-request-size: 21MB
+
   data:
     web:
       pageable:

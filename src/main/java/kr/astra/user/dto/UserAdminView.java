@@ -8,11 +8,11 @@ import kr.astra.user.entity.UserStatus;
 /** 관리자 회원 관리용 사용자 정보 (admin 도메인에 넘김). Entity 대신 사용 */
 public record UserAdminView(Long id, String email, String name, String phone, UserRole role, UserStatus status,
                             Long organizationId, String rejectReason, OffsetDateTime approvedAt,
-                            OffsetDateTime lastLoginAt, OffsetDateTime createdAt) {
+                            OffsetDateTime lastLoginAt, OffsetDateTime createdAt, String researcherNo) {
 
     public static UserAdminView from(User user) {
         return new UserAdminView(user.getId(), user.getEmail(), user.getName(), user.getPhone(), user.getRole(),
                 user.getStatus(), user.getOrganizationId(), user.getRejectReason(), user.getApprovedAt(),
-                user.getLastLoginAt(), user.getCreatedAt());
+                user.getLastLoginAt(), user.getCreatedAt(), user.getResearcherNo());
     }
 }

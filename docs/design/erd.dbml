@@ -6,7 +6,7 @@ Project ASTRA { database_type: 'PostgreSQL' }
 TableGroup user_org { organizations users refresh_tokens email_verifications notifications }
 TableGroup equipment_domain { equipment equipment_specs equipment_change_logs test_types equipment_test_types test_condition_rules spec_definitions condition_aliases equipment_downtimes }
 TableGroup ai_domain { chat_sessions chat_messages test_requirements requirement_conditions match_runs match_results match_condition_checks ai_pipeline_runs }
-TableGroup request_domain { test_requests test_request_revisions request_status_history supplement_requests attachments reservations }
+TableGroup request_domain { test_requests test_request_revisions request_status_history supplement_requests attachments reservations test_results }
 TableGroup simulation_domain { simulation_models simulation_presets simulation_runs }
 
 Table organizations {
@@ -37,12 +37,14 @@ Table users {
   password_hash varchar(200) [not null]
   name varchar(50) [not null]
   phone varchar(30)
+  researcher_no varchar(20) [note: 'V12 국가연구자번호 (기관·대학 담당자만, 형식만 확인한 목 데이터)']
   role varchar(30) [not null, note: 'COMPANY_USER | INSTITUTION_MANAGER | ADMIN  — ADMIN = 중개플랫폼 관리자(마스터, 전체 권한). 회원가입 불가, 초기 세팅으로만 생성']
   status varchar(20) [not null, default: `'ACTIVE'`, note: 'ACTIVE | PENDING | REJECTED | SUSPENDED  — 기업·기관 담당자 모두 PENDING 으로 시작 → 관리자 승인 후 ACTIVE (가입 전 이메일 인증 필수)']
   approved_by bigint [ref: > users.id]
   approved_at timestamptz
   reject_reason varchar(500)
   last_login_at timestamptz
+  version bigint [not null, default: `0`, note: 'V10 낙관적 락 (관리자 정지와 로그인·내 정보 수정 경합)']
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 }
@@ -311,6 +313,9 @@ Table test_requests {
   desired_end_date date
   submitted_at timestamptz
   closed_at timestamptz
+  estimated_fee bigint [note: 'V14 예상 이용료(원). 장비 보유 조직이 입력']
+  estimated_fee_note varchar(500)
+  estimated_fee_updated_at timestamptz
   version int [not null, default: `0`, note: '낙관적 락 (동시 상태변경 방지)']
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
@@ -350,6 +355,7 @@ Table supplement_requests {
   message text [not null]
   items jsonb [not null, default: `'[]'`, note: '[{"fieldKey":"fixture_mass","label":"고정구 질량","required":true}, ...] fieldKey = 조건 키(fixture_mass) 또는 의뢰서 content 경로(sample.readyDate)']
   due_date date
+  kind varchar(20) [not null, default: `'SUPPLEMENT'`, note: 'SUPPLEMENT | ADDITIONAL_INFO  — V13 ADDITIONAL_INFO = 검토 중 추가 정보 요청 (책임자명·성적서 종류·시료 처리·청구 방법)']
   status varchar(20) [not null, default: `'OPEN'`, note: 'OPEN | RESPONDED | CLOSED']
   response_revision_no int [note: '보완 제출된 revision 번호']
   response_message text
@@ -369,6 +375,7 @@ Table attachments {
   mime_type varchar(100)
   size_bytes bigint
   uploaded_by bigint [not null, ref: > users.id]
+  category varchar(20) [not null, default: `'GENERAL'`, note: 'GENERAL | RESULT_REPORT  — V16 RESULT_REPORT = 장비 보유 조직이 일정 확정 뒤 올린 시험 성적서. 파일은 서버 디스크(astra.storage.dir)']
   created_at timestamptz [not null, default: `now()`]
 }
 
@@ -385,6 +392,7 @@ Table reservations {
   external_system varchar(50) [note: '향후 기관 예약시스템 연동']
   external_ref varchar(100)
   note varchar(500)
+  version bigint [not null, default: `0`, note: 'V11 낙관적 락 (확정·취소 경합)']
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
   indexes {
@@ -457,4 +465,15 @@ Table notifications {
   related_request_id bigint [ref: > test_requests.id]
   read_at timestamptz
   created_at timestamptz [not null, default: `now()`]
+}
+
+Table test_results {
+  id bigint [pk]
+  request_id bigint [not null, unique, ref: > test_requests.id]
+  summary text [not null]
+  report_no varchar(100)
+  report_url varchar(1000)
+  registered_by bigint [not null, ref: > users.id]
+  registered_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
 }

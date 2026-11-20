@@ -24,6 +24,7 @@ import kr.astra.request.service.RequestWorkflow;
 import kr.astra.review.dto.ReviewInputs;
 import kr.astra.review.dto.ReviewResponses.SupplementCreated;
 import kr.astra.review.dto.ReviewResponses.SupplementView;
+import kr.astra.review.entity.SupplementKind;
 import kr.astra.review.entity.SupplementRequest;
 import kr.astra.review.entity.SupplementStatus;
 import kr.astra.review.repository.SupplementRequestRepository;
@@ -54,6 +55,7 @@ public class ReviewService {
     private final RequestViews views;
     private final UserService userService;
     private final JsonMapper jsonMapper;
+    private final kr.astra.request.repository.TestResultRepository resultRepository;
 
     /** POST /test-requests/{id}/review/start — SUBMITTED/RESUBMITTED → UNDER_REVIEW, 담당자 지정 */
     public ActionResult startReview(CurrentUser actor, Long requestId, ReviewInputs.StartReview input) {
@@ -89,9 +91,17 @@ public class ReviewService {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED, "보완 기한은 오늘 이후여야 합니다.",
                     Map.of("field", "dueDate"));
         }
+        SupplementKind kind = input.kind() == null ? SupplementKind.SUPPLEMENT : input.kind();
+        String message = input.message() == null ? "" : input.message().strip();
         List<ReviewInputs.Item> items = input.items() == null ? List.of() : input.items();
+        if (kind == SupplementKind.ADDITIONAL_INFO) {
+            if (message.isEmpty()) message = ADDITIONAL_INFO_MESSAGE;
+            if (items.isEmpty()) items = ADDITIONAL_INFO_ITEMS;
+        } else if (message.isEmpty()) {
+            throw BusinessException.invalidField("message", "보완 요청 내용을 입력해 주세요.");
+        }
         SupplementRequest supplement = new SupplementRequest(requestId, request.getCurrentRevisionNo(),
-                actor.userId(), input.message().strip(), jsonMapper.writeValueAsString(items), input.dueDate());
+                actor.userId(), message, jsonMapper.writeValueAsString(items), input.dueDate(), kind);
         try {
             supplement = supplementRepository.saveAndFlush(supplement);
         } catch (DataIntegrityViolationException e) {
@@ -100,7 +110,10 @@ public class ReviewService {
             }
             throw e;
         }
-        workflow.transition(request, RequestAction.REQUEST_SUPPLEMENT, actor, input.message().strip());
+        workflow.transition(request, RequestAction.REQUEST_SUPPLEMENT, actor, message,
+                kind == SupplementKind.ADDITIONAL_INFO
+                        ? "[" + request.getRequestNo() + "] 장비 보유 조직에서 추가 정보(책임자명·성적서 종류·시료 처리·청구 방법)를 요청했습니다."
+                        : null);
         return new SupplementCreated(view(supplement, views.people(List.of(actor.userId()))),
                 RequestWorkflow.result(request));
     }
@@ -123,6 +136,7 @@ public class ReviewService {
         TestRequestRevision working = workflow.editableRevision(request, actor.userId());
         Map<String, Object> body = input.content() != null ? input.content() : content.read(working.getContent());
         content.validate(body);
+        content.requireForSubmit(body);
         List<String> missing = readItems(supplement).stream()
                 .filter(ReviewInputs.Item::required)
                 .filter(item -> !content.isFilled(body, item.fieldKey()))
@@ -163,6 +177,11 @@ public class ReviewService {
     /** POST /test-requests/{id}/complete — 시험 완료 CONFIRMED → COMPLETED */
     public ActionResult complete(CurrentUser actor, Long requestId, Integer version) {
         TestRequest request = workflow.begin(requestId, RequestAction.COMPLETE, actor, version);
+        // 시험 대행이므로 결과·성적서를 보내야 완료 (회의 결정 2026-11)
+        if (!resultRepository.existsByRequestId(requestId)) {
+            throw new BusinessException(ErrorCode.REQUEST_INVALID_STATUS, "시험 결과를 먼저 등록해 주세요.",
+                    Map.of("missing", "result"));
+        }
         workflow.transition(request, RequestAction.COMPLETE, actor, null);
         return RequestWorkflow.result(request);
     }
@@ -209,6 +228,14 @@ public class ReviewService {
                 .forEach(SupplementRequest::close);
     }
 
+    /** 추가 정보 요청 기본값 (회의 결정 2026-11: 검토 중 한 번 더 받는 4가지) */
+    static final String ADDITIONAL_INFO_MESSAGE = "시험 진행을 위해 책임자명, 성적서 종류, 시료 처리 방법, 청구 방법을 입력해 주세요.";
+    static final List<ReviewInputs.Item> ADDITIONAL_INFO_ITEMS = List.of(
+            new ReviewInputs.Item("responsible.name", "책임자명", true),
+            new ReviewInputs.Item("report.type", "성적서 종류", true),
+            new ReviewInputs.Item("sample.disposal", "시료 처리", true),
+            new ReviewInputs.Item("billing.method", "청구 방법", true));
+
     /** 저장된 보완 항목. 예전에 검증 없이 들어간 null 원소는 건너뜀 */
     private List<ReviewInputs.Item> readItems(SupplementRequest s) {
         if (s.getItems() == null || s.getItems().isBlank()) {
@@ -223,7 +250,7 @@ public class ReviewService {
 
     private SupplementView view(SupplementRequest s, RequestViews.Names names) {
         return new SupplementView(s.getId(), s.getRequestId(), s.getStatus(), s.getBasedRevisionNo(),
-                names.person(s.getRequestedBy()), s.getMessage(), readItems(s), s.getDueDate(),
+                names.person(s.getRequestedBy()), s.getKind(), s.getMessage(), readItems(s), s.getDueDate(),
                 s.getResponseRevisionNo(), s.getResponseMessage(), s.getCreatedAt(), s.getRespondedAt());
     }
 }

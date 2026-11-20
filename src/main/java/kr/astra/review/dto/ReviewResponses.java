@@ -19,6 +19,7 @@ public final class ReviewResponses {
             SupplementStatus status,
             int basedRevisionNo,
             PersonRef requestedBy,
+            kr.astra.review.entity.SupplementKind kind,
             String message,
             List<ReviewInputs.Item> items,
             LocalDate dueDate,

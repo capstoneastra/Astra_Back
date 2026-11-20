@@ -66,6 +66,13 @@ public class GlobalExceptionHandler {
         return respond(ErrorCode.NOT_FOUND, ErrorCode.NOT_FOUND.defaultMessage(), null);
     }
 
+    /** 첨부파일이 spring.servlet.multipart.max-file-size(기본 20MB)를 넘음 */
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTooLarge(org.springframework.web.multipart.MaxUploadSizeExceededException e) {
+        return respond(ErrorCode.VALIDATION_FAILED, "파일이 너무 큽니다. 파일당 최대 크기를 확인해 주세요.",
+                java.util.Map.of("field", "file"));
+    }
+
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ApiResponse<Void>> handleMethodNotAllowed(HttpRequestMethodNotSupportedException e) {
         return respond(ErrorCode.METHOD_NOT_ALLOWED, ErrorCode.METHOD_NOT_ALLOWED.defaultMessage(), null);

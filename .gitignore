@@ -41,3 +41,6 @@ out/
 
 ### 로그 ###
 *.log
+
+# 로컬 실행 시 첨부파일 저장 폴더 (astra.storage.dir 기본값)
+/data/
