@@ -21,7 +21,7 @@ GROUPS = [
     ("ai_domain", ["chat_sessions", "chat_messages", "test_requirements", "requirement_conditions",
                    "match_runs", "match_results", "match_condition_checks", "ai_pipeline_runs"]),
     ("request_domain", ["test_requests", "test_request_revisions", "request_status_history",
-                        "supplement_requests", "attachments", "reservations"]),
+                        "supplement_requests", "attachments", "reservations", "test_results"]),
     ("simulation_domain", ["simulation_models", "simulation_presets", "simulation_runs"]),
 ]
 

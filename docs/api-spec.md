@@ -117,8 +117,11 @@
 
 // POST /auth/signup (기관 담당자 - 기존 기관 선택)
 { "email": "kim@ktp.or.kr", "password": "****", "name": "김담당", "phone": "042-000-0000",
-  "role": "INSTITUTION_MANAGER", "verificationToken": "...", "organizationId": 3 }
+  "role": "INSTITUTION_MANAGER", "verificationToken": "...", "organizationId": 3, "researcherNo": "11223344" }
 // → 201 { "userId": 21, "status": "PENDING" }  관리자 승인 전에는 로그인 시 403 ACCOUNT_NOT_ACTIVE
+// researcherNo: 국가연구자번호. 기관·대학 담당자는 필수, 숫자 8자리 형식만 확인(실제 조회 없음, V12).
+//   없거나 형식이 틀리면 400 VALIDATION_FAILED (fields[0].field = "researcherNo"). 기업은 보내지 않음.
+//   GET /users/me, GET /admin/users 응답에 researcherNo 로 나옴
 
 // POST /auth/signup (기관 담당자 - 미등록 기관 신청: organizationId 대신 organization)
 { "email": "lee@newlab.re.kr", "password": "****", "name": "이담당", "phone": "055-000-0000",
@@ -497,7 +500,10 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 { "id": 3, "requirementId": 7, "algorithmVersion": "rule-v2", "createdAt": "...",
   "results": [
     { "id": 31, "rank": 1, "score": 66.7, "verdict": "PARTIAL", "usedMockData": true,
-      "equipment": { "id": 48, "externalId": "ASTRA-CAND-0048", "name": "진동시험기", "institutionName": "미리내우주환경시험센터" },
+      "equipment": { "id": 48, "externalId": "ASTRA-CAND-0048", "name": "진동시험기", "institutionName": "미리내우주환경시험센터",
+                     "availability": "AVAILABLE", "availabilityNeedsConfirmation": true, "accessScope": "EXTERNAL_ALLOWED" },
+      // availability: 예약 가능(AVAILABLE)·사용 중(BUSY)·정비 중·사용 불가·모름
+      // accessScope: EXTERNAL_ALLOWED = 공동활용, INTERNAL_ONLY = 단독활용, UNKNOWN = 확인 필요
       "reason": "주파수 범위와 시료 질량 조건을 충족합니다. 고정구 질량이 아직 정해지지 않아 기관 확인이 필요합니다.",
       "checks": [
         { "conditionKey": "frequency", "requiredText": "20~2000 Hz", "equipmentText": "10~3000 Hz", "result": "MET" },
@@ -522,9 +528,11 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 | POST | `/test-requests` | 🏢 | 의뢰 생성(DRAFT) `{ equipmentId, requirementId?, matchResultId? }`. 소속 조직 보유 장비면 `400 VALIDATION_FAILED` | 9 |
 | POST | `/test-requests/ai-draft` | 🏢 | AI 의뢰서 초안 생성 → DRAFT + revision(isAiGenerated) | 8 |
 | GET | `/test-requests` | 🏢 🏛 | 목록: `?box=SENT` 내가 보낸 의뢰 / `?box=RECEIVED` 우리 조직 장비로 들어온 의뢰(제출된 것만). `box`를 안 보내면 `INSTITUTION_MANAGER`는 RECEIVED, 그 외는 SENT (관리자는 전체). `?status=UNDER_REVIEW` | 9 |
-| GET | `/test-requests/{id}` | 🏢 🏛 | 상세 (현재 상태, 최신 revision, 열린 보완요청, 예약) | 9 |
+| GET | `/test-requests/{id}` | 🏢 🏛 | 상세 (현재 상태, 최신 revision, 열린 보완요청, 예약, `estimatedFee`, `result`) | 9 |
 | PUT | `/test-requests/{id}/draft` | 🏢 | 작업본 revision 내용 저장 (DRAFT 또는 SUPPLEMENT_REQUESTED) | 8 |
-| POST | `/test-requests/{id}/submit` | 🏢 | 제출 (DRAFT→SUBMITTED) | 9 |
+| POST | `/test-requests/{id}/submit` | 🏢 | 제출 (DRAFT→SUBMITTED). 실사용자·회계 담당자의 이름과 연락처(전화 또는 이메일)가 없으면 `400 VALIDATION_FAILED` (`details.missingItems`: `accounting.name`, `accounting.contact` 등) | 9 |
+| PUT | `/test-requests/{id}/estimated-fee` | 🏛 | 예상 이용료 입력 `{ version?, amount(원, 0 이상), note? }`. 검토 중~일정 조율 중에만. 응답은 상세(`estimatedFee`) | 9 |
+| PUT | `/test-requests/{id}/result` | 🏛 | 시험 결과·성적서 등록 `{ summary, reportNo?, reportUrl?(http/https) }`. 일정 확정(CONFIRMED) 뒤에만, 다시 보내면 수정. 의뢰자에게 `RESULT_REGISTERED` 알림. 응답은 상세(`result`) | 9 |
 | POST | `/test-requests/{id}/cancel` | 🏢 | 취소 `{ reason }` | 9 |
 | GET | `/test-requests/{id}/revisions` | 🏢 🏛 | 제출본 이력 목록 | 10 |
 | GET | `/test-requests/{id}/revisions/{no}` | 🏢 🏛 | 특정 제출본 (`?diffWith=1` 이면 변경 필드 diff 포함) | 10 |
@@ -541,8 +549,13 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 ```json
 {
   "applicant": { "companyName": "가상 A기업", "contactName": "홍길동", "phone": "010-...", "email": "..." },
+  "actualUser": { "name": "홍길동", "phone": "010-...", "email": "..." },     // 실사용자. 의뢰를 만들 때 신청자로 미리 채움, 제출 필수
+  "accounting": { "name": "김회계", "phone": "02-...", "email": "..." },      // 회계 담당자. 제출 필수 (이름 + 전화 또는 이메일)
+  "responsible": { "name": "박책임" },                                         // 아래 4개는 검토 중 추가 정보 요청으로 받음 (§6)
+  "report": { "type": "공인성적서(KOLAS)" },
+  "billing": { "method": "세금계산서" },
   "test": { "testTypeCode": "VIBRATION", "purpose": "발사 환경 진동 내구성 확인", "standard": "MIL-STD-810H (선택)" },
-  "sample": { "name": "위성 탑재 전장품", "quantity": 1, "readyDate": "2026-11-15" },
+  "sample": { "name": "위성 탑재 전장품", "quantity": 1, "readyDate": "2026-11-15", "disposal": "시험 후 반환" },
   "conditions": [ { "key": "sample_mass", "label": "시료 질량", "value": 15, "unit": "kg", "status": "CONFIRMED" },
                   { "key": "fixture_mass", "label": "고정구 질량", "value": 2, "unit": "kg", "status": "CONFIRMED" },
                   { "key": "frequency", "label": "주파수 범위", "min": 20, "max": 2000, "unit": "Hz", "status": "CONFIRMED" } ],
@@ -560,6 +573,12 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 { "requestId": 15, "requestNo": "REQ-20261105-0001", "status": "DRAFT",
   "revision": { "revisionNo": 1, "isAiGenerated": true, "content": { /* 위 스키마 */ } },
   "aiNotes": ["고정구 질량이 미확인 상태입니다. 제출 전 입력을 권장합니다."] }
+
+// GET /test-requests/{id} 상세에 붙는 두 항목 (없으면 null)
+"estimatedFee": { "amount": 1250000, "note": "진동시험 2일, 고정구 제작비 별도", "updatedAt": "2026-11-20T10:00:00+09:00" },
+"result": { "summary": "3축 진동시험 완료. 시료 외관 이상 없음", "reportNo": "KOLAS-2026-1234",
+            "reportUrl": "https://.../report-1234.pdf", "registeredBy": { "id": 3, "name": "김담당" },
+            "registeredAt": "...", "updatedAt": "..." }
 ```
 
 ---
@@ -569,12 +588,12 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 | Method | URL | 권한 | 설명 |
 |---|---|---|---|
 | POST | `/test-requests/{id}/review/start` | 🏛 | 검토 시작 (SUBMITTED/RESUBMITTED→UNDER_REVIEW), 담당자 지정 |
-| POST | `/test-requests/{id}/supplements` | 🏛 | 보완 요청 (→SUPPLEMENT_REQUESTED). 답변 대기 중인 요청이 있으면 `409 SUPPLEMENT_ALREADY_OPEN` |
+| POST | `/test-requests/{id}/supplements` | 🏛 | 보완 요청 (→SUPPLEMENT_REQUESTED). `kind`: `SUPPLEMENT`(기본, message 필수) 또는 `ADDITIONAL_INFO`(추가 정보 요청, message·items 생략 시 기본값). 답변 대기 중인 요청이 있으면 `409 SUPPLEMENT_ALREADY_OPEN` |
 | GET | `/test-requests/{id}/supplements` | 🏢 🏛 | 보완 요청 목록 |
 | POST | `/supplements/{id}/respond` | 🏢 | 보완 제출 → 새 revision 생성, (→RESUBMITTED) |
 | POST | `/test-requests/{id}/accept` | 🏛 | 기술 검토 통과 (→SCHEDULING) |
 | POST | `/test-requests/{id}/reject` | 🏛 | 반려 `{ reason }` (→REJECTED) |
-| POST | `/test-requests/{id}/complete` | 🏛 | 시험 완료 처리 (CONFIRMED→COMPLETED) |
+| POST | `/test-requests/{id}/complete` | 🏛 | 시험 완료 처리 (CONFIRMED→COMPLETED). 결과(`PUT .../result`)가 없으면 `409 REQUEST_INVALID_STATUS` |
 
 ```json
 // POST /test-requests/{id}/supplements
@@ -584,6 +603,11 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
              { "fieldKey": "sample.readyDate", "label": "시료 준비 완료일", "required": true } ],
   "dueDate": "2026-11-12" }
 // fieldKey: 조건 키(fixture_mass) 또는 의뢰서 content 경로(sample.readyDate)
+
+// 추가 정보 요청 (검토 중, 회의 결정 2026-11). items 를 비우면 아래 4개가 필수 항목으로 들어감
+{ "kind": "ADDITIONAL_INFO" }
+// items = responsible.name(책임자명), report.type(성적서 종류), sample.disposal(시료 처리), billing.method(청구 방법)
+// 의뢰자 알림 제목은 "추가 정보(…)를 요청했습니다". 응답 supplement 에 "kind" 가 포함됨
 
 // POST /supplements/{id}/respond
 { "version": 4, "message": "요청하신 정보 보완했습니다.",
@@ -822,6 +846,7 @@ UNDER_REVIEW ──reject──▶ REJECTED        (DRAFT~SCHEDULING 에서 기�
 | 검토 통과 / 반려 | 의뢰자 | `REQUEST_ACCEPTED` / `REQUEST_REJECTED` |
 | 일정 제안 / 대안 제안 | 상대방 | `RESERVATION_PROPOSED` |
 | 예약 확정 | 의뢰자 | `RESERVATION_CONFIRMED` |
+| 시험 결과·성적서 등록/수정 | 의뢰자 | `RESULT_REGISTERED` |
 | AI 자동추진 완료/대기 | 실행자 | `AI_RUN_DONE` / `AI_RUN_WAITING` |
 | 회원 가입 신청 (기업·기관 담당자) | 관리자 전원 | `USER_APPROVAL_REQUESTED` |
 | 가입 승인 / 거절 | 신청자 | `USER_APPROVED` / `USER_REJECTED` |

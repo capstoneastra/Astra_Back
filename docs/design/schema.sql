@@ -1,6 +1,6 @@
 -- =====================================================================
 -- ASTRA 우주항공 시험장비 공동활용 플랫폼 - 초기 DB 스키마 (PostgreSQL 16)
--- V6 반영 (2026-11-14). 운영 DB 변경은 db/migration의 새 버전으로만 적용
+-- V15 까지 반영 (2026-11-20). 운영 DB 변경은 db/migration의 새 버전으로만 적용
 --
 -- 규칙
 --  * PK: BIGSERIAL id (외부 노출 코드는 별도 컬럼: external_id, request_no 등)
@@ -45,6 +45,7 @@ CREATE TABLE users (
     password_hash     VARCHAR(200) NOT NULL,
     name              VARCHAR(50)  NOT NULL,
     phone             VARCHAR(30),
+    researcher_no     VARCHAR(20),                   -- V12 국가연구자번호 (기관·대학 담당자만, 형식만 확인한 목 데이터)
     role              VARCHAR(30)  NOT NULL CHECK (role IN ('COMPANY_USER','INSTITUTION_MANAGER','ADMIN')),
                       -- ADMIN = 중개플랫폼 관리자(마스터, 전체 권한). 회원가입 불가, 초기 세팅으로만 생성
     status            VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','PENDING','REJECTED','SUSPENDED')),
@@ -53,6 +54,7 @@ CREATE TABLE users (
     approved_at       TIMESTAMPTZ,
     reject_reason     VARCHAR(500),
     last_login_at     TIMESTAMPTZ,
+    version           BIGINT       NOT NULL DEFAULT 0,   -- V10 낙관적 락 (관리자 정지와 로그인·내 정보 수정 경합)
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
@@ -372,6 +374,9 @@ CREATE TABLE test_requests (
     desired_end_date  DATE,
     submitted_at      TIMESTAMPTZ,
     closed_at         TIMESTAMPTZ,
+    estimated_fee     BIGINT       CHECK (estimated_fee >= 0),   -- V14 예상 이용료(원). 장비 보유 조직이 입력
+    estimated_fee_note VARCHAR(500),
+    estimated_fee_updated_at TIMESTAMPTZ,
     version           INT          NOT NULL DEFAULT 0,   -- 낙관적 락 (동시 상태변경 방지)
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ  NOT NULL DEFAULT now()
@@ -418,6 +423,8 @@ CREATE TABLE supplement_requests (
                       -- [{"fieldKey":"fixture_mass","label":"고정구 질량","required":true}, ...]
                       -- fieldKey = 조건 키(fixture_mass) 또는 의뢰서 content 경로(sample.readyDate)
     due_date          DATE,
+    kind              VARCHAR(20)  NOT NULL DEFAULT 'SUPPLEMENT' CHECK (kind IN ('SUPPLEMENT','ADDITIONAL_INFO')),
+                      -- V13 ADDITIONAL_INFO = 검토 중 추가 정보 요청 (책임자명·성적서 종류·시료 처리·청구 방법)
     status            VARCHAR(20)  NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','RESPONDED','CLOSED')),
     response_revision_no INT,                        -- 보완 제출된 revision 번호
     response_message  TEXT,
@@ -457,6 +464,7 @@ CREATE TABLE reservations (
     external_system   VARCHAR(50),                    -- 향후 기관 예약시스템 연동
     external_ref      VARCHAR(100),
     note              VARCHAR(500),
+    version           BIGINT       NOT NULL DEFAULT 0,   -- V11 낙관적 락 (확정·취소 경합)
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
     CHECK (end_at > start_at),
@@ -592,3 +600,17 @@ CREATE TRIGGER tr_reservation_downtime BEFORE INSERT OR UPDATE ON reservations
 
 CREATE TRIGGER tr_downtime_reservation BEFORE INSERT OR UPDATE ON equipment_downtimes
     FOR EACH ROW EXECUTE FUNCTION guard_equipment_schedule();
+
+-- =====================================================================
+-- V15: 시험 결과·성적서. 장비 보유 조직이 시험 후 등록, 의뢰당 1건. 결과가 있어야 COMPLETED
+-- =====================================================================
+CREATE TABLE test_results (
+    id            BIGSERIAL PRIMARY KEY,
+    request_id    BIGINT        NOT NULL UNIQUE REFERENCES test_requests(id) ON DELETE CASCADE,
+    summary       TEXT          NOT NULL,
+    report_no     VARCHAR(100),
+    report_url    VARCHAR(1000),
+    registered_by BIGINT        NOT NULL REFERENCES users(id),
+    registered_at TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ   NOT NULL DEFAULT now()
+);

@@ -19,9 +19,13 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 | 8 | 시연 계정 비밀번호 재설정 (V9, 모두 `12345678`), 2026-11-17 | ✅ | `957db90` |
 | 통합 2차 | V8·V9 이후 시연 시나리오 전체를 실제 서버에서 재점검, 2026-11-18 | ✅ | `d3198ce` |
 | 9 | 통합 2차에서 찾은 AI 초안·매칭·상담 문제 수정 (BE-C 코드, 윤준수가 수정), 2026-11-18 | ✅ | 41e12c0 |
-| 10 | 전체 코드 점검 후 과부하·오류 위험 수정 (BE-A·B·C 전 영역), 2026-11-18 | ✅ | `9eea6e3`~`acb47d5` (push, PR 전) |
+| 10 | 전체 코드 점검 후 과부하·오류 위험 수정 (BE-A·B·C 전 영역), 2026-11-18 | ✅ | PR #17 |
+| 11 | 회의 결정 반영: 시험 대행, 의뢰 항목 2단계, 예상 이용료, 결과·성적서, 연구자번호, 공동/단독활용 (BE-A·B·C), 2026-11-20 | ✅ | 커밋 전 |
 
-**지금 남은 것** (2026-11-18 기준)
+**지금 남은 것** (2026-11-20 기준)
+- FE 공지(11번): 기관·대학 가입에 `researcherNo` 필수, 의뢰서 `actualUser`·`accounting` 제출 필수, 추가 정보 요청(`kind`), 예상 이용료·결과 등록 화면, 매칭 결과 `accessScope` 배지, 완료 전 결과 등록
+- 결과·성적서 파일 업로드: 저장소(서버 디스크 / S3 호환) 정한 뒤. 지금은 성적서 번호·링크만
+- 예상 이용료 입력 시 의뢰자 알림 없음 (필요하면 알림 종류 추가)
 - 7번에서 고친 be-b(의뢰·검토·예약)·be-c(상담·매칭·AI) 코드는 해당 담당자에게 확인 요청
 - AI: Gemini 무료 키 할당량(429)·과부하(503) → API 결제 연결 필요. 연결 후 `ConditionMappingEvaluationTest` 정식 모델로 재측정 (아래 8번 참고)
 - BE-C 전달: 조건 추출 검증이 단위 환산(GHz→Hz 등) 응답을 통째로 거부, 실패 원인 로그 없음, AI 상담 답변에 DB 장비 정보 미포함
@@ -36,6 +40,29 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 - `application.yml` 의 Gemini 기본 모델 `gemini-3.8-flash` 가 503 과부하 상태. 시연 서버 `.env` 에 `GEMINI_MODEL` 을 명시해 둘 것
 
 11-09 에 남았던 것 중 끝난 것: `feature/be-a` PR(→ PR #11), 공인시험·운용 인력·보안 정보 필드(→ V6, BE-C 주현욱 2026-11-14), BE-B 의뢰·예약·알림 구현(→ PR #13)
+
+---
+
+## 2026-11-20 · 11번: 팀 회의 결정 반영
+
+**왜**: 팀 회의(2026-11-20)에서 서비스 성격을 "장비 대여"가 아니라 "기관이 대신 시험하고 결과·성적서를 보내 주는 방식"으로 정하고, 의뢰 항목·가입 항목을 추가하기로 함. BE-B·BE-C 영역도 윤준수가 구현(사용자 결정)
+
+**한 것** (단계마다 테스트 먼저 → 수정 → 전체 테스트)
+1. 국가연구자번호: 기관·대학 담당자 가입에 `researcherNo` 필수, 숫자 8자리 형식만 확인(목). `users.researcher_no`(V12). 내 정보·관리자 회원 목록에 노출. 기업은 없음
+2. 매칭 결과 장비에 `accessScope`(EXTERNAL_ALLOWED = 공동활용, INTERNAL_ONLY = 단독활용, UNKNOWN). 예약 가능/사용 중은 기존 `availability`
+3. 의뢰서 `actualUser`(실사용자, 신청자로 미리 채움)·`accounting`(회계 담당자). 제출할 때 이름 + 연락처 필수, 없으면 400 `missingItems`. AI 초안도 같은 칸을 채움
+4. 추가 정보 요청: 보완 요청에 `kind`(SUPPLEMENT / ADDITIONAL_INFO, V13). ADDITIONAL_INFO 는 책임자명·성적서 종류·시료 처리·청구 방법 4항목과 안내 문구가 기본, 알림 문구도 "추가 정보". 검토 중에만(기존 보완 흐름 그대로)
+5. 예상 이용료: `PUT /test-requests/{id}/estimated-fee`, 장비 보유 조직만, 검토 중~일정 조율 중. 상세 `estimatedFee`(V14)
+6. 시험 결과·성적서: `test_results` 표(V15), `PUT /test-requests/{id}/result`(일정 확정 뒤, 요약·성적서 번호·http(s) 링크, 다시 보내면 수정), 의뢰자 알림 `RESULT_REGISTERED`, 상세 `result`. **결과가 없으면 완료 409**
+7. 문서: README(시험 대행 문구, 핵심 흐름·상태 설명, V9~V15, 테이블 32개), ERD(README·`erd.dbml`, 생성 도구에 `test_results` 등록), `schema.sql`(V10~V15), api-spec(§1·§4·§5·§6·§13), 시연 점검표(11-1·13-1·15-1)
+
+**확인**: 전체 테스트 328개 통과(오늘 시작 317개, 실제 AI 평가 1개 기본 건너뜀). 새 테스트: `AuthFlowTest` 2개, `EquipmentApiTest` 1개, `RequestHardeningTest` 8개. 기존 테스트는 제출 전 회계 담당자 입력(`TestApi.submitRequest`), 완료 전 결과 등록을 거치게 수정
+
+**주의**
+- 화면 계약이 바뀜: 기관·대학 가입, 의뢰 제출, 의뢰 완료가 새 필수 항목 없이는 실패함 → FE 공지 필요
+- 테스트하려면 Docker Desktop 이 켜져 있어야 함 (오늘 꺼져 있어서 처음에 전부 실패했음)
+
+**바뀐 파일 (커밋 전)**: `git status` 참고. 마이그레이션 V12~V15, auth·user·admin(연구자번호), equipment·matching(accessScope), request·review·notification(의뢰 항목·추가 정보·이용료·결과), llm(AI 초안 칸), 테스트, README·api-spec·demo-scenario·schema.sql·erd.dbml·ERD 도구, 이 파일
 
 ---
 

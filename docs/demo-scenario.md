@@ -40,15 +40,18 @@
 | 9 | 시험 정보 안내 | BE-A | company | `GET /test-types/VIBRATION` | V6 기준 조건 5개: 필수 3개(시료 질량·고정구 질량·주파수), 선택 2개(가진 축·공인성적서 필요 여부). 가능 조직 9곳(V8 이후) | ✅ 2026-11-18 |
 | 10 | AI 의뢰서 초안 | BE-C (+BE-B) | company | `POST /test-requests/ai-draft {requirementId, equipmentId: 48, matchResultId}` | `DRAFT` 의뢰 + 1번 제출본(`isAiGenerated=true`), 자동 제출 안 함 | ✅ 2026-11-18 201 `DRAFT` + 1번 제출본 `isAiGenerated=true`, 이어서 제출하면 manager1 접수함에 보임. AI 응답 실패(502) 때는 의뢰가 남지 않음. 가끔 502 라 재시도 필요할 수 있음 |
 | 11 | 의뢰서 수정·제출 | BE-B | company | `PUT /test-requests/{id}/draft`, `POST /test-requests/{id}/submit` | `DRAFT → SUBMITTED`, 기관 담당자에게 알림 | ✅ 2026-11-18 (manager1 알림 1건) |
+| 11-1 | 제출 전 필수 항목 | BE-B | company | `POST /test-requests/{id}/submit` | 실사용자(신청자로 미리 채워짐)·회계 담당자 이름과 연락처가 없으면 400 `missingItems`. 채우면 `SUBMITTED` | ✅ 자동 점검 2026-11-20 |
 | 12 | 기관 담당자 대시보드·장비 확인 | BE-A (+BE-B) | manager1 | `GET /dashboard/summary`, `GET /institutions/me/equipment`, `POST /equipment/48/confirm` | 소속 기관·갱신 필요 장비 수(13대) 표시, 검토 대기에 제출한 의뢰, 장비 48 확인 → `INSTITUTION_VERIFIED`. manager2 는 이 의뢰 403 | ✅ 2026-11-18 |
 | 13 | 검토 시작·보완 요청 | BE-B | manager1 | `POST /test-requests/{id}/review/start`, `POST /test-requests/{id}/supplements` (예: 시료 준비 완료일) | `UNDER_REVIEW → SUPPLEMENT_REQUESTED`, 기업에게 알림 | ✅ 2026-11-18 |
+| 13-1 | 추가 정보 요청·예상 이용료 | BE-B | manager1 → company | `POST /test-requests/{id}/supplements {kind: ADDITIONAL_INFO}`, `PUT /test-requests/{id}/estimated-fee` | 책임자명·성적서 종류·시료 처리·청구 방법 4항목 요청 → 기업이 채워 재제출. 기관이 예상 이용료 입력 → 기업 상세에 표시 | ✅ 자동 점검 2026-11-20 |
 | 14 | 보완 제출 | BE-B | company | `POST /supplements/{id}/respond` | 새 제출본(revision 2) 생성, `RESUBMITTED`. 제출본 이력이 분리돼 보임 | ✅ 2026-11-18 |
 | 15 | 검토 통과·예약 확정 | BE-B | manager1 | `POST /test-requests/{id}/accept`, `POST /test-requests/{id}/reservations`, `POST /reservations/{id}/confirm` | `SCHEDULING → CONFIRMED`. 같은 시간 중복 예약은 409 `RESERVATION_OVERLAP` | ✅ 2026-11-18 (이력 DRAFT→…→CONFIRMED 8단계) |
+| 15-1 | 시험 결과·성적서 전달 | BE-B | manager1 → company | `PUT /test-requests/{id}/result`, `POST /test-requests/{id}/complete` | 결과 없이 완료하면 409. 결과(요약·성적서 번호·링크) 등록 → 기업에 `RESULT_REGISTERED` 알림, 상세 `result` → 완료 | ✅ 자동 점검 2026-11-20 |
 | 16 | (선택) 가상 시뮬레이션 | BE-B | company | `POST /simulation/runs {presetId: SIM-0048}` | 결과 그래프 + "가상 시연 모델" 경고 (DEMO) | ✅ 2026-11-18 (점 51개 + 경고 문구) |
 | 17 | (선택) AI 자동 추진 | BE-C | company | `POST /ai/auto-runs` | 조건 분석 → 검색 → 매칭 → 초안까지 단계별 진행, 누락 시 `WAITING_USER` | ✅ 2026-11-18 `{inputText}` 로 시작 202 → 고정구 질량 누락이라 ANALYZE 에서 `WAITING_USER` (이어서 진행은 미확인) |
 | 18 | 관리자 대시보드 | BE-A (+BE-B) | admin | `GET /dashboard/summary`, `GET /dashboard/equipment-stats` | 승인 대기 회원·기관 수, 기관별 장비 확인 비율, 전체 의뢰 상태별 개수 | ✅ 2026-11-18 |
 
-### 1-1. 조직 간 장비 공유 (기업·기관·대학 누구나 빌려주고 빌림)
+### 1-1. 조직 간 시험 대행 (기업·기관·대학 누구나 시험을 맡기고 맡음)
 
 | # | 단계 | 계정 | API | 기대 결과 | 확인 |
 |---|---|---|---|---|---|
