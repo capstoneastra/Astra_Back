@@ -43,7 +43,7 @@ public class EquipmentQueryServiceImpl implements EquipmentQueryService {
         return ids.stream().map(byId::get)
                 .map(e -> new EquipmentCandidate(e.getId(), e.getExternalId(), e.getName(), e.getInstitutionId(),
                         names.get(e.getInstitutionId()), e.getRegion(), e.isMock(), e.getAvailability(),
-                        e.availabilityNeedsConfirmation(java.time.OffsetDateTime.now())))
+                        e.availabilityNeedsConfirmation(java.time.OffsetDateTime.now()), accessScope(e)))
                 .toList();
     }
 
@@ -60,7 +60,11 @@ public class EquipmentQueryServiceImpl implements EquipmentQueryService {
         return active.stream().collect(Collectors.toMap(Equipment::getId,
                 e -> new EquipmentCandidate(e.getId(), e.getExternalId(), e.getName(), e.getInstitutionId(),
                         names.get(e.getInstitutionId()), e.getRegion(), e.isMock(), e.getAvailability(),
-                        e.availabilityNeedsConfirmation(now))));
+                        e.availabilityNeedsConfirmation(now), accessScope(e))));
+    }
+
+    private static kr.astra.equipment.entity.AccessScope accessScope(Equipment e) {
+        return e.getAccessScope() == null ? kr.astra.equipment.entity.AccessScope.UNKNOWN : e.getAccessScope();
     }
 
     @Override

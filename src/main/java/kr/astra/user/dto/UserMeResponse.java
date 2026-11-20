@@ -12,6 +12,7 @@ public record UserMeResponse(
         String email,
         String name,
         String phone,
+        String researcherNo,
         UserRole role,
         UserStatus status,
         OrganizationSummaryResponse organization,
@@ -19,7 +20,7 @@ public record UserMeResponse(
         OffsetDateTime createdAt) {
 
     public static UserMeResponse of(User user, OrganizationSummaryResponse organization) {
-        return new UserMeResponse(user.getId(), user.getEmail(), user.getName(), user.getPhone(), user.getRole(),
+        return new UserMeResponse(user.getId(), user.getEmail(), user.getName(), user.getPhone(), user.getResearcherNo(), user.getRole(),
                 user.getStatus(), organization, user.getLastLoginAt(), user.getCreatedAt());
     }
 }

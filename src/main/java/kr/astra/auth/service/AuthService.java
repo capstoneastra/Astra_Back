@@ -64,12 +64,26 @@ public class AuthService {
             case INSTITUTION_MANAGER -> resolveInstitution(request);
             case ADMIN -> throw invalidField("role", "관리자 계정은 회원가입으로 만들 수 없습니다.");
         };
+        String researcherNo = request.role() == UserRole.INSTITUTION_MANAGER ? researcherNo(request) : null;
         UserAccount account = userService.register(organizationId, request.email(), request.password(),
-                request.name(), request.phone(), request.role());
+                request.name(), request.phone(), request.role(), researcherNo);
         notificationService.ifAvailable(notifier -> userService.findActiveAdminIds().forEach(adminId ->
                 notifier.notify(adminId, NotificationType.USER_APPROVAL_REQUESTED,
                         "새 회원가입 승인 요청: " + account.name(), "/admin/users?status=PENDING", null)));
         return new SignupResponse(account.id(), account.status());
+    }
+
+    /** 국가연구자번호: 실제 조회는 하지 않고 숫자 8자리 형식만 확인 (회의 결정, 목 처리) */
+    private String researcherNo(SignupRequest request) {
+        String raw = request.researcherNo();
+        if (!StringUtils.hasText(raw)) {
+            throw invalidField("researcherNo", "국가연구자번호를 입력해 주세요.");
+        }
+        String digits = raw.replace("-", "").trim();
+        if (!digits.matches("\\d{8}")) {
+            throw invalidField("researcherNo", "국가연구자번호는 숫자 8자리입니다.");
+        }
+        return digits;
     }
 
     private Long createCompany(SignupRequest request) {

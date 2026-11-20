@@ -44,6 +44,10 @@ public class User extends BaseTimeEntity {
     @Column(length = 30)
     private String phone;
 
+    /** 국가연구자번호 (기관·대학 담당자만, 형식만 확인한 목 데이터) */
+    @Column(name = "researcher_no", length = 20)
+    private String researcherNo;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private UserRole role;
@@ -75,7 +79,7 @@ public class User extends BaseTimeEntity {
      * 관리자 계정은 가입으로 만들 수 없으므로 호출 전에 막아야 합니다.
      */
     public static User signUp(Long organizationId, String email, String passwordHash, String name, String phone,
-                              UserRole role) {
+                              UserRole role, String researcherNo) {
         if (role == UserRole.ADMIN) {
             throw new IllegalArgumentException("관리자 계정은 회원가입으로 만들 수 없습니다.");
         }
@@ -85,6 +89,7 @@ public class User extends BaseTimeEntity {
         user.passwordHash = passwordHash;
         user.name = name;
         user.phone = phone;
+        user.researcherNo = researcherNo;
         user.role = role;
         user.status = UserStatus.PENDING;
         return user;

@@ -53,7 +53,7 @@ class UserServiceAuthenticateTest {
     @Test
     void 가입_비밀번호가_72바이트를_넘으면_500이_아니라_password_필드_400() {
         assertThatThrownBy(() -> userService.register(1L, "a@test.kr", "가".repeat(30), "홍길동", null,
-                kr.astra.user.entity.UserRole.COMPANY_USER))
+                kr.astra.user.entity.UserRole.COMPANY_USER, null))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> {
                     BusinessException be = (BusinessException) e;

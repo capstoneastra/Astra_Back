@@ -55,15 +55,39 @@ class TestApi {
 
     /** 이메일 인증 후 기관 담당자 가입. orgJson 은 "organizationId": 3 또는 "organization": {...} */
     Res signupInstitutionManager(String email, String orgJson) throws Exception {
+        return signupInstitutionManager(email, orgJson, "\"researcherNo\": \"12345678\"");
+    }
+
+    /** researcherJson: "researcherNo": "..." 처럼 국가연구자번호 부분 (빈 문자열이면 보내지 않음) */
+    Res signupInstitutionManager(String email, String orgJson, String researcherJson) throws Exception {
         return post("/api/v1/auth/signup", """
                 { "email": "%s", "password": "%s", "name": "김담당", "role": "INSTITUTION_MANAGER",
-                  "verificationToken": "%s", %s }
-                """.formatted(email, PASSWORD, verificationToken(email), orgJson), null);
+                  "verificationToken": "%s", %s %s }
+                """.formatted(email, PASSWORD, verificationToken(email), orgJson,
+                researcherJson.isEmpty() ? "" : ", " + researcherJson), null);
     }
 
     Res login(String email) throws Exception {
         return post("/api/v1/auth/login",
                 "{ \"email\": \"%s\", \"password\": \"%s\" }".formatted(email, PASSWORD), null);
+    }
+
+    /**
+     * 제출 전 필수 항목(회계 담당자)을 채우고 제출. 실사용자는 의뢰를 만들 때 신청자 정보로 미리 채워짐.
+     * 의뢰서 본문은 지금 저장된 것을 그대로 두고 accounting 만 더함.
+     */
+    Res submitRequest(long requestId, String accessToken) throws Exception {
+        JsonNode detail = get("/api/v1/test-requests/" + requestId, accessToken).data();
+        var content = (tools.jackson.databind.node.ObjectNode) detail.path("revision").path("content").deepCopy();
+        content.putObject("accounting").put("name", "회계 담당").put("phone", "02-000-0000")
+                .put("email", "account@example.com");
+        var body = json.createObjectNode();
+        body.put("version", detail.path("version").asInt());
+        body.set("content", content);
+        Res saved = send("PUT", "/api/v1/test-requests/" + requestId + "/draft", json.writeValueAsString(body),
+                accessToken);
+        assertThat(saved.status()).as(saved.body().toString()).isEqualTo(200);
+        return post("/api/v1/test-requests/" + requestId + "/submit", null, accessToken);
     }
 
     Res get(String path, String accessToken) throws Exception {
