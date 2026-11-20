@@ -43,6 +43,10 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 를 .env 에 넣어 주세요}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET(32자 이상)을 .env 에 넣어 주세요}
       TZ: Asia/Seoul
+      # 첨부파일·성적서 파일 저장 위치 (아래 볼륨에 저장되어 재시작·재배포해도 남음)
+      ASTRA_STORAGE_DIR: /app/data/uploads
+    volumes:
+      - astra-prod-uploads:/app/data/uploads
     ports:
       - '${APP_PORT:-8080}:8080'
     healthcheck:
@@ -54,3 +58,4 @@ services:
 
 volumes:
   astra-prod-db-data:
+  astra-prod-uploads:

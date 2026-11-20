@@ -248,7 +248,8 @@ class RequestHardeningTest {
         Res missing = api.post("/api/v1/test-requests/" + id + "/submit", null, company);
         assertThat(missing.status()).as(missing.body().toString()).isEqualTo(400);
         assertThat(missing.code()).isEqualTo("VALIDATION_FAILED");
-        assertThat(missing.details().path("missingItems").toString()).contains("accounting.name", "accounting.contact")
+        assertThat(missing.details().path("missingItems").toString())
+                .contains("accounting.name", "accounting.contact", "schedule.desiredStartDate", "schedule.desiredEndDate")
                 .doesNotContain("actualUser");
 
         Res submitted = api.submitRequest(id, company);
@@ -375,6 +376,85 @@ class RequestHardeningTest {
         assertThat(badUrl.code()).isEqualTo("VALIDATION_FAILED");
         assertThat(api.send("PUT", "/api/v1/test-requests/" + id + "/result", "{ \"summary\": \" \" }", manager1)
                 .code()).isEqualTo("VALIDATION_FAILED");
+    }
+
+    // ------------------------------------------------------------ 첨부파일·성적서 파일 (서버 디스크 저장)
+
+    @Test
+    void 성적서_파일을_올리면_의뢰자가_목록에서_보고_내려받는다() throws Exception {
+        long id = toConfirmed(22);
+        byte[] pdf = "%PDF-1.4 성적서".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        Res up = api.upload("/api/v1/test-requests/" + id + "/attachments", "성적서 KOLAS-1234.pdf", "application/pdf", pdf,
+                manager1, "category", "RESULT_REPORT");
+        assertThat(up.status()).as(up.body().toString()).isEqualTo(201);
+        long fileId = up.data().path("id").asLong();
+        assertThat(up.data().path("category").asString()).isEqualTo("RESULT_REPORT");
+        assertThat(up.data().path("fileName").asString()).isEqualTo("성적서 KOLAS-1234.pdf");
+        assertThat(up.data().path("sizeBytes").asLong()).isEqualTo(pdf.length);
+
+        Res list = api.get("/api/v1/test-requests/" + id + "/attachments", company);
+        assertThat(list.data().toString()).contains("\"id\":" + fileId);
+        var file = api.download("/api/v1/attachments/" + fileId + "/download", company);
+        assertThat(file.statusCode()).isEqualTo(200);
+        assertThat(file.body()).isEqualTo(pdf);
+        assertThat(file.headers().firstValue("Content-Disposition").orElse("")).startsWith("attachment");
+        assertThat(file.headers().firstValue("X-Content-Type-Options").orElse("")).isEqualTo("nosniff");
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM notifications n JOIN users u ON u.id = n.user_id
+                WHERE u.email = 'company@astra.demo' AND n.type = 'RESULT_REGISTERED' AND n.related_request_id = ?
+                """, Long.class, id)).isEqualTo(1);
+
+        // 다른 조직은 목록도 파일도 볼 수 없음
+        String manager2 = token("manager2@astra.demo", UserRole.INSTITUTION_MANAGER);
+        assertThat(api.get("/api/v1/test-requests/" + id + "/attachments", manager2).status()).isEqualTo(403);
+        assertThat(api.download("/api/v1/attachments/" + fileId + "/download", manager2).statusCode()).isEqualTo(403);
+    }
+
+    @Test
+    void 성적서는_장비_보유_조직이_일정_확정_뒤에만_올린다() throws Exception {
+        long id = toScheduling();
+        byte[] pdf = "%PDF-1.4".getBytes();
+        Res early = api.upload("/api/v1/test-requests/" + id + "/attachments", "r.pdf", "application/pdf", pdf, manager1,
+                "category", "RESULT_REPORT");
+        assertThat(early.code()).isEqualTo("REQUEST_INVALID_STATUS");
+        Res byRequester = api.upload("/api/v1/test-requests/" + id + "/attachments", "r.pdf", "application/pdf", pdf,
+                company, "category", "RESULT_REPORT");
+        assertThat(byRequester.status()).isEqualTo(403);
+        // 일반 첨부는 양쪽 모두 가능
+        Res general = api.upload("/api/v1/test-requests/" + id + "/attachments", "시료 사진.png", "image/png",
+                new byte[] {(byte) 0x89, 'P', 'N', 'G'}, company);
+        assertThat(general.status()).as(general.body().toString()).isEqualTo(201);
+        assertThat(general.data().path("category").asString()).isEqualTo("GENERAL");
+    }
+
+    @Test
+    void 허용되지_않는_파일과_너무_큰_파일은_400() throws Exception {
+        long id = toScheduling();
+        Res exe = api.upload("/api/v1/test-requests/" + id + "/attachments", "virus.exe", "application/octet-stream",
+                new byte[] {1, 2, 3}, company);
+        assertThat(exe.status()).isEqualTo(400);
+        assertThat(exe.code()).isEqualTo("VALIDATION_FAILED");
+        Res big = api.upload("/api/v1/test-requests/" + id + "/attachments", "big.pdf", "application/pdf",
+                new byte[1_500_000], company);
+        assertThat(big.status()).isEqualTo(400);
+        assertThat(big.code()).isEqualTo("VALIDATION_FAILED");
+    }
+
+    @Test
+    void 올린_사람만_첨부를_지우고_지운_파일은_404() throws Exception {
+        long id = toScheduling();
+        long fileId = api.upload("/api/v1/test-requests/" + id + "/attachments", "메모.txt", "text/plain",
+                "메모".getBytes(java.nio.charset.StandardCharsets.UTF_8), company).data().path("id").asLong();
+        assertThat(api.send("DELETE", "/api/v1/attachments/" + fileId, null, manager1).status()).isEqualTo(403);
+        assertThat(api.send("DELETE", "/api/v1/attachments/" + fileId, null, company).status()).isEqualTo(200);
+        assertThat(api.download("/api/v1/attachments/" + fileId + "/download", company).statusCode()).isEqualTo(404);
+    }
+
+    private long toConfirmed(int days) throws Exception {
+        long id = toScheduling();
+        long resv = propose(id, start(days));
+        assertThat(api.post("/api/v1/reservations/" + resv + "/confirm", null, manager1).status()).isEqualTo(200);
+        return id;
     }
 
     // ------------------------------------------------------------ 도우미

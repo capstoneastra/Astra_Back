@@ -81,6 +81,12 @@ public final class RequestResponses {
             ResultView result) {
     }
 
+    /** 첨부파일 (일반 첨부 / 성적서 파일). downloadUrl 로 GET 하면 파일이 내려옴 */
+    public record AttachmentView(Long id, Long requestId, kr.astra.request.entity.AttachmentCategory category,
+                                 String fileName, String mimeType, Long sizeBytes, PersonRef uploadedBy,
+                                 OffsetDateTime createdAt, String downloadUrl) {
+    }
+
     /** 장비 보유 조직이 등록한 시험 결과·성적서 (아직 없으면 detail.result = null) */
     public record ResultView(String summary, String reportNo, String reportUrl, PersonRef registeredBy,
                              OffsetDateTime registeredAt, OffsetDateTime updatedAt) {

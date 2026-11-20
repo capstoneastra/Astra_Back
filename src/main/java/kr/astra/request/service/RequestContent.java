@@ -53,7 +53,7 @@ public class RequestContent {
         return jsonMapper.readValue(json, MAP);
     }
 
-    /** 제출할 때 꼭 있어야 하는 사람: 실사용자, 회계 담당자 (회의 결정 2026-11). 이름 + 전화 또는 이메일 */
+    /** 제출할 때 꼭 있어야 하는 것: 이용 희망 기간, 실사용자, 회계 담당자 (회의 결정 2026-11). 사람은 이름 + 전화 또는 이메일 */
     private static final List<String> REQUIRED_PEOPLE = List.of("actualUser", "accounting");
 
     /**
@@ -71,9 +71,16 @@ public class RequestContent {
                 missing.add(key + ".contact");
             }
         }
+        Map<?, ?> schedule = content.get("schedule") instanceof Map<?, ?> m ? m : Map.of();
+        for (String date : List.of("desiredStartDate", "desiredEndDate")) {
+            if (blank(schedule.get(date))) {
+                missing.add("schedule." + date);
+            }
+        }
         if (!missing.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED,
-                    "제출 전에 실사용자와 회계 담당자의 이름·연락처를 입력해 주세요.", Map.of("missingItems", missing));
+                    "제출 전에 이용 희망 기간과 실사용자·회계 담당자의 이름·연락처를 입력해 주세요.",
+                    Map.of("missingItems", missing));
         }
     }
 

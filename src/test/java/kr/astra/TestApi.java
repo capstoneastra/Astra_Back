@@ -73,7 +73,7 @@ class TestApi {
     }
 
     /**
-     * 제출 전 필수 항목(회계 담당자)을 채우고 제출. 실사용자는 의뢰를 만들 때 신청자 정보로 미리 채워짐.
+     * 제출 전 필수 항목(회계 담당자, 이용 희망 기간)을 채우고 제출. 실사용자는 의뢰를 만들 때 신청자 정보로 미리 채워짐.
      * 의뢰서 본문은 지금 저장된 것을 그대로 두고 accounting 만 더함.
      */
     Res submitRequest(long requestId, String accessToken) throws Exception {
@@ -81,6 +81,7 @@ class TestApi {
         var content = (tools.jackson.databind.node.ObjectNode) detail.path("revision").path("content").deepCopy();
         content.putObject("accounting").put("name", "회계 담당").put("phone", "02-000-0000")
                 .put("email", "account@example.com");
+        content.putObject("schedule").put("desiredStartDate", "2026-12-20").put("desiredEndDate", "2026-12-21");
         var body = json.createObjectNode();
         body.put("version", detail.path("version").asInt());
         body.set("content", content);
@@ -96,6 +97,40 @@ class TestApi {
 
     Res post(String path, String body, String accessToken) throws Exception {
         return send("POST", path, body, accessToken);
+    }
+
+    /** multipart/form-data 파일 업로드. extraFields 는 name=value 쌍 (예: "category", "RESULT_REPORT") */
+    Res upload(String path, String fileName, String contentType, byte[] bytes, String accessToken,
+               String... extraFields) throws Exception {
+        String boundary = "----astra" + UUID.randomUUID();
+        var out = new java.io.ByteArrayOutputStream();
+        String crlf = "\r\n";
+        var utf8 = java.nio.charset.StandardCharsets.UTF_8;
+        for (int i = 0; i + 1 < extraFields.length; i += 2) {
+            out.writeBytes(("--" + boundary + crlf + "Content-Disposition: form-data; name=\"" + extraFields[i] + "\""
+                    + crlf + crlf + extraFields[i + 1] + crlf).getBytes(utf8));
+        }
+        out.writeBytes(("--" + boundary + crlf + "Content-Disposition: form-data; name=\"file\"; filename=\"" + fileName
+                + "\"" + crlf + "Content-Type: " + contentType + crlf + crlf).getBytes(utf8));
+        out.writeBytes(bytes);
+        out.writeBytes((crlf + "--" + boundary + "--" + crlf).getBytes(utf8));
+        HttpRequest.Builder req = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(out.toByteArray()));
+        if (accessToken != null) {
+            req.header("Authorization", "Bearer " + accessToken);
+        }
+        HttpResponse<String> res = http.send(req.build(), HttpResponse.BodyHandlers.ofString());
+        return new Res(res.statusCode(), json.readTree(res.body()));
+    }
+
+    /** 파일 내려받기: 상태 코드, 헤더, 내용(바이트) */
+    HttpResponse<byte[]> download(String path, String accessToken) throws Exception {
+        HttpRequest.Builder req = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).GET();
+        if (accessToken != null) {
+            req.header("Authorization", "Bearer " + accessToken);
+        }
+        return http.send(req.build(), HttpResponse.BodyHandlers.ofByteArray());
     }
 
     Res send(String method, String path, String body, String accessToken) throws Exception {
