@@ -60,6 +60,8 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 
 **확인**: 전체 테스트 332개 통과. 새 테스트 `RequestHardeningTest` 4개(성적서 올리기·목록·내려받기·권한, 확정 전·의뢰자 성적서 차단, 확장자·크기 400, 올린 사람만 삭제). 테스트는 `build/test-uploads` 에 저장하고 크기 상한을 1MB 로 낮춰 확인
 
+**api-spec 대조 (2026-11-20)**: 컨트롤러 엔드포인트 101개와 api-spec 표를 스크립트로 비교해 모두 문서에 있음을 확인. 문서에만 있는 2개 중 `/ai/auto-runs/{id}/events` 에 미구현 표시 추가(`/admin/equipment/import` 는 원래 미구현 표시). §0-2 에 size 최대 100, §0-3 429 에 IP 제한·AI 한도 초과 설명 추가
+
 **주의**: `compose.prod.yaml` 수정은 `docker compose config` 검증을 돌리지 못함(이 PC의 자동 모드 설정이 prod compose 명령을 막음). 시연 서버에 올릴 때 한 번 `docker compose -f compose.prod.yaml config` 로 확인 필요
 
 **바뀐 파일 (커밋 전)**: `git status` 참고

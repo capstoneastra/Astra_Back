@@ -28,7 +28,7 @@
 |---|---|
 | JSON 필드명 | camelCase (`desiredStartDate`). DB는 snake_case |
 | 날짜/시각 | `2026-11-20` / ISO-8601 `2026-11-05T09:00:00+09:00` |
-| 페이지네이션 | `?page=0&size=20&sort=createdAt,desc` (0부터 시작) |
+| 페이지네이션 | `?page=0&size=20&sort=createdAt,desc` (0부터 시작). `size` 는 최대 100 (더 크게 보내도 100) |
 | enum | 대문자 문자열 그대로 (`UNDER_REVIEW`). 화면 한글 라벨은 프론트에서 매핑 |
 | ID | 숫자 `id` 사용. 장비는 `externalId`도 함께 응답 (초기 적재 `ASTRA-CAND-0001`, 기관 신규 등록 `ASTRA-EQ-0072`) |
 | 조건·사양 키 | JSON 필드명(camelCase)과 별개로, 조건·사양을 가리키는 키 값은 단위 없는 snake_case. 단위는 `unit`에 따로 (`{ "key": "sample_mass", "value": 15, "unit": "kg" }`). 시험유형별 키 목록은 `GET /test-types/{code}`의 `conditionRules` |
@@ -48,7 +48,7 @@
 | 409 | `REQUEST_INVALID_STATUS`, `VERSION_CONFLICT`, `RESERVATION_OVERLAP`, `RESERVATION_ALREADY_CONFIRMED`, `SUPPLEMENT_ALREADY_OPEN` | 상태 전이 불가 / 동시 수정 / 일정 중복 / 이미 확정된 의뢰 / 답변 대기 중인 보완 요청 존재 |
 | 409 | `EMAIL_ALREADY_EXISTS`, `ORGANIZATION_ALREADY_EXISTS` | 회원가입: 이미 가입된 이메일 / 같은 유형에 같은 이름의 조직이 이미 있음 (`organizations` UNIQUE(org_type, name)) |
 | 409 | `USER_INVALID_STATUS` | 관리자: 승인 대기(PENDING)가 아닌 회원을 승인·거절 |
-| 429 | `TOO_MANY_REQUESTS` | 요청이 너무 잦음 (이메일 인증 코드는 60초에 한 번, `details.retryAfter` 초) |
+| 429 | `TOO_MANY_REQUESTS` | 요청이 너무 잦음. 이메일 인증 코드는 같은 이메일 60초에 한 번, 같은 IP 1분에 5번(전체 60번), 로그인은 같은 IP 1분에 20번 (`details.retryAfter` 초). AI 기능은 AI 서비스 한도 초과·동시 호출 초과 때도 429 ("잠시 후 다시 시도") |
 | 500 | `INTERNAL_ERROR` | 처리되지 않은 서버 오류 (서버 로그 확인) |
 | 502 | `AI_UPSTREAM_ERROR` | LLM 호출 실패 |
 
@@ -659,7 +659,7 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 |---|---|---|---|
 | POST | `/ai/auto-runs` | 🏢 | 시작 `{ "chatSessionId": 5 }` 또는 `{ "inputText": "..." }` → 202 |
 | GET | `/ai/auto-runs/{id}` | 🏢 | 진행 상태 (폴링 1~2초) |
-| GET | `/ai/auto-runs/{id}/events` | 🏢 | (선택) SSE 진행 이벤트 |
+| GET | `/ai/auto-runs/{id}/events` | 🏢 | (선택, 미구현) SSE 진행 이벤트. 지금은 `GET /ai/auto-runs/{id}` 를 주기적으로 조회 |
 | POST | `/ai/auto-runs/{id}/resume` | 🏢 | WAITING_USER 상태에서 조건 보완 후 재개 |
 | POST | `/ai/auto-runs/{id}/cancel` | 🏢 | 중단 |
 
