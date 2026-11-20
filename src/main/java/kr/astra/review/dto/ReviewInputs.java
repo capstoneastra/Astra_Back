@@ -22,12 +22,17 @@ public final class ReviewInputs {
     public record StartReview(Integer version, Long assigneeId) {
     }
 
-    /** POST /test-requests/{id}/supplements */
+    /**
+     * POST /test-requests/{id}/supplements
+     *
+     * @param kind    SUPPLEMENT(기본, message 필수) 또는 ADDITIONAL_INFO(추가 정보 요청. message·items 를 비우면 기본값)
+     */
     public record CreateSupplement(
             Integer version,
-            @NotBlank @Size(max = 2000) String message,
+            @Size(max = 2000) String message,
             @Size(max = 50) List<@NotNull @Valid Item> items,
-            LocalDate dueDate) {
+            LocalDate dueDate,
+            kr.astra.review.entity.SupplementKind kind) {
     }
 
     /**

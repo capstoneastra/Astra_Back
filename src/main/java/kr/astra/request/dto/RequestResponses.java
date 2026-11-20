@@ -76,7 +76,18 @@ public final class RequestResponses {
             Revision workingRevision,
             SupplementView openSupplement,
             List<ReservationView> reservations,
-            List<RequestAction> availableActions) {
+            List<RequestAction> availableActions,
+            EstimatedFee estimatedFee,
+            ResultView result) {
+    }
+
+    /** 장비 보유 조직이 등록한 시험 결과·성적서 (아직 없으면 detail.result = null) */
+    public record ResultView(String summary, String reportNo, String reportUrl, PersonRef registeredBy,
+                             OffsetDateTime registeredAt, OffsetDateTime updatedAt) {
+    }
+
+    /** 장비 보유 조직이 적은 예상 이용료 (아직 없으면 detail.estimatedFee = null) */
+    public record EstimatedFee(long amount, String note, OffsetDateTime updatedAt) {
     }
 
     /** 제출본 (목록에서는 content=null) */

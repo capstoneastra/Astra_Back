@@ -41,4 +41,19 @@ public final class RequestInputs {
     /** POST /test-requests/{id}/reject — 사유 필수 */
     public record Reject(Integer version, @NotBlank @Size(max = 500) String reason) {
     }
+
+    /** PUT /test-requests/{id}/estimated-fee — 장비 보유 조직이 적는 예상 이용료(원) */
+    public record EstimatedFee(
+            Integer version,
+            @jakarta.validation.constraints.NotNull @jakarta.validation.constraints.PositiveOrZero Long amount,
+            @Size(max = 500) String note) {
+    }
+
+    /** PUT /test-requests/{id}/result — 시험 결과·성적서. reportUrl 은 http(s) 주소만 */
+    public record Result(
+            @jakarta.validation.constraints.NotBlank @Size(max = 4000) String summary,
+            @Size(max = 100) String reportNo,
+            @Size(max = 1000) @jakarta.validation.constraints.Pattern(regexp = "^https?://\\S+$",
+                    message = "성적서 링크는 http:// 또는 https:// 주소여야 합니다.") String reportUrl) {
+    }
 }

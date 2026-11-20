@@ -138,12 +138,22 @@ public class RequestWorkflow {
      * @param reason 반려·취소 사유 등 (없으면 null)
      */
     public void transition(TestRequest request, RequestAction action, CurrentUser actor, String reason) {
+        transition(request, action, actor, reason, null);
+    }
+
+    /** notifyTitle 을 주면 기본 알림 문구 대신 그 문구로 상대방에게 알림 (예: 추가 정보 요청) */
+    public void transition(TestRequest request, RequestAction action, CurrentUser actor, String reason,
+                           String notifyTitle) {
         requireAllowed(request, action);
         RequestStatus from = request.getStatus();
         OffsetDateTime now = OffsetDateTime.now();
         request.changeStatus(action.to(), now);
         historyRepository.save(new RequestStatusHistory(request.getId(), from, action.to(), actor.userId(), reason));
-        notifyFor(request, action, actor);
+        if (notifyTitle != null && action == RequestAction.REQUEST_SUPPLEMENT) {
+            notifyRequester(request, NotificationType.SUPPLEMENT_REQUESTED, notifyTitle);
+        } else {
+            notifyFor(request, action, actor);
+        }
         if (action.to() == RequestStatus.CANCELED || action.to() == RequestStatus.REJECTED) {
             events.publishEvent(new RequestClosedEvent(request.getId(), action.to()));
         }

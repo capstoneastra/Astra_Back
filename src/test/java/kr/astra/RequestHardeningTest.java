@@ -230,11 +230,158 @@ class RequestHardeningTest {
         assertThat(res.code()).isEqualTo("VALIDATION_FAILED");
     }
 
+    // ------------------------------------------------------------ 의뢰서 필수 항목 (회의 결정: 실사용자·회계 담당자)
+
+    @Test
+    void 새_의뢰서는_실사용자를_신청자로_채우고_회계_담당자는_비워_둔다() throws Exception {
+        Res created = api.post("/api/v1/test-requests", "{ \"equipmentId\": 48 }", company);
+        JsonNode content = created.data().path("revision").path("content");
+        assertThat(content.path("actualUser").path("name").asString()).isNotBlank();
+        assertThat(content.path("actualUser").path("email").asString()).isEqualTo("company@astra.demo");
+        assertThat(content.path("accounting").isObject()).isTrue();
+        assertThat(content.path("accounting").size()).isZero();
+    }
+
+    @Test
+    void 회계_담당자가_없으면_제출할_수_없고_채우면_제출된다() throws Exception {
+        long id = api.post("/api/v1/test-requests", "{ \"equipmentId\": 48 }", company).data().path("id").asLong();
+        Res missing = api.post("/api/v1/test-requests/" + id + "/submit", null, company);
+        assertThat(missing.status()).as(missing.body().toString()).isEqualTo(400);
+        assertThat(missing.code()).isEqualTo("VALIDATION_FAILED");
+        assertThat(missing.details().path("missingItems").toString()).contains("accounting.name", "accounting.contact")
+                .doesNotContain("actualUser");
+
+        Res submitted = api.submitRequest(id, company);
+        assertThat(submitted.status()).as(submitted.body().toString()).isEqualTo(200);
+        assertThat(submitted.data().path("status").asString()).isEqualTo("SUBMITTED");
+    }
+
+    // ------------------------------------------------------------ 추가 정보 요청 (회의 결정: 검토 중에 4개 항목을 한 번 더 받음)
+
+    @Test
+    void 추가_정보_요청은_기본_4개_항목으로_보내지고_채워야_다시_제출된다() throws Exception {
+        long id = toUnderReview();
+        Res req = api.post("/api/v1/test-requests/" + id + "/supplements", "{ \"kind\": \"ADDITIONAL_INFO\" }", manager1);
+        assertThat(req.status()).as(req.body().toString()).isEqualTo(201);
+        JsonNode supp = req.data().path("supplement");
+        assertThat(supp.path("kind").asString()).isEqualTo("ADDITIONAL_INFO");
+        assertThat(supp.path("message").asString()).isNotBlank();
+        assertThat(supp.path("items").toString())
+                .contains("responsible.name", "report.type", "sample.disposal", "billing.method");
+        assertThat(req.data().path("request").path("status").asString()).isEqualTo("SUPPLEMENT_REQUESTED");
+        String title = jdbc.queryForObject("""
+                SELECT n.title FROM notifications n JOIN users u ON u.id = n.user_id
+                WHERE u.email = 'company@astra.demo' AND n.type = 'SUPPLEMENT_REQUESTED' AND n.related_request_id = ?
+                """, String.class, id);
+        assertThat(title).contains("추가 정보");
+
+        long suppId = supp.path("id").asLong();
+        Res missing = api.post("/api/v1/supplements/" + suppId + "/respond", "{ \"message\": \"아직\" }", company);
+        assertThat(missing.code()).isEqualTo("VALIDATION_FAILED");
+        assertThat(missing.details().path("missingItems").size()).isEqualTo(4);
+
+        JsonNode content = api.get("/api/v1/test-requests/" + id, company).data().path("revision").path("content");
+        var filled = (tools.jackson.databind.node.ObjectNode) content.deepCopy();
+        filled.putObject("responsible").put("name", "박책임");
+        filled.putObject("report").put("type", "공인성적서(KOLAS)");
+        ((tools.jackson.databind.node.ObjectNode) filled.path("sample")).put("disposal", "시험 후 반환");
+        filled.putObject("billing").put("method", "세금계산서");
+        Res responded = api.post("/api/v1/supplements/" + suppId + "/respond",
+                "{ \"message\": \"입력했습니다\", \"content\": " + filled + " }", company);
+        assertThat(responded.status()).as(responded.body().toString()).isEqualTo(200);
+        assertThat(responded.data().path("status").asString()).isEqualTo("RESUBMITTED");
+    }
+
+    @Test
+    void 일반_보완_요청은_메시지가_꼭_있어야_한다() throws Exception {
+        long id = toUnderReview();
+        Res res = api.post("/api/v1/test-requests/" + id + "/supplements", "{ }", manager1);
+        assertThat(res.code()).isEqualTo("VALIDATION_FAILED");
+    }
+
+    // ------------------------------------------------------------ 예상 이용료 (회의 결정: 기관이 직접 입력)
+
+    @Test
+    void 기관이_검토_중에_예상_이용료를_적으면_의뢰자도_상세에서_본다() throws Exception {
+        long id = toUnderReview();
+        int version = api.get("/api/v1/test-requests/" + id, manager1).data().path("version").asInt();
+        Res saved = api.send("PUT", "/api/v1/test-requests/" + id + "/estimated-fee",
+                "{ \"version\": " + version + ", \"amount\": 1250000, \"note\": \"진동시험 2일, 고정구 제작비 별도\" }", manager1);
+        assertThat(saved.status()).as(saved.body().toString()).isEqualTo(200);
+        JsonNode fee = api.get("/api/v1/test-requests/" + id, company).data().path("estimatedFee");
+        assertThat(fee.path("amount").asLong()).isEqualTo(1250000L);
+        assertThat(fee.path("note").asString()).contains("고정구");
+        assertThat(fee.path("updatedAt").isNull()).isFalse();
+    }
+
+    @Test
+    void 예상_이용료는_장비_보유_조직만_검토부터_일정_조율까지_적을_수_있다() throws Exception {
+        long id = toUnderReview();
+        assertThat(api.send("PUT", "/api/v1/test-requests/" + id + "/estimated-fee", "{ \"amount\": 1000 }", company)
+                .status()).isEqualTo(403);
+        assertThat(api.send("PUT", "/api/v1/test-requests/" + id + "/estimated-fee", "{ \"amount\": -1 }", manager1)
+                .code()).isEqualTo("VALIDATION_FAILED");
+
+        long draft = api.post("/api/v1/test-requests", "{ \"equipmentId\": 48 }", company).data().path("id").asLong();
+        assertThat(api.send("PUT", "/api/v1/test-requests/" + draft + "/estimated-fee", "{ \"amount\": 1000 }", manager1)
+                .status()).isIn(403, 409);
+    }
+
+    // ------------------------------------------------------------ 시험 결과·성적서 (회의 결정: 기관이 대신 시험하고 결과를 보냄)
+
+    @Test
+    void 결과를_등록해야_완료되고_의뢰자는_결과와_알림을_받는다() throws Exception {
+        long id = toScheduling();
+        long resv = propose(id, start(20));
+        assertThat(api.post("/api/v1/reservations/" + resv + "/confirm", null, manager1).status()).isEqualTo(200);
+
+        Res early = api.post("/api/v1/test-requests/" + id + "/complete", null, manager1);
+        assertThat(early.status()).isEqualTo(409);
+        assertThat(early.code()).isEqualTo("REQUEST_INVALID_STATUS");
+
+        String body = """
+                { "summary": "20~2000Hz 정현파 진동시험 3축 완료. 시료 외관 이상 없음",
+                  "reportNo": "KOLAS-2026-1234", "reportUrl": "https://files.example.com/report-1234.pdf" }
+                """;
+        assertThat(api.send("PUT", "/api/v1/test-requests/" + id + "/result", body, company).status()).isEqualTo(403);
+        Res saved = api.send("PUT", "/api/v1/test-requests/" + id + "/result", body, manager1);
+        assertThat(saved.status()).as(saved.body().toString()).isEqualTo(200);
+
+        JsonNode result = api.get("/api/v1/test-requests/" + id, company).data().path("result");
+        assertThat(result.path("summary").asString()).contains("3축 완료");
+        assertThat(result.path("reportNo").asString()).isEqualTo("KOLAS-2026-1234");
+        assertThat(result.path("reportUrl").asString()).endsWith("report-1234.pdf");
+        assertThat(result.path("registeredBy").path("id").asLong()).isPositive();
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM notifications n JOIN users u ON u.id = n.user_id
+                WHERE u.email = 'company@astra.demo' AND n.type = 'RESULT_REGISTERED' AND n.related_request_id = ?
+                """, Long.class, id)).isEqualTo(1);
+
+        Res completed = api.post("/api/v1/test-requests/" + id + "/complete", null, manager1);
+        assertThat(completed.status()).as(completed.body().toString()).isEqualTo(200);
+        assertThat(completed.data().path("status").asString()).isEqualTo("COMPLETED");
+    }
+
+    @Test
+    void 결과는_일정_확정_뒤에만_등록하고_링크는_http_주소만_받는다() throws Exception {
+        long id = toScheduling();
+        Res tooEarly = api.send("PUT", "/api/v1/test-requests/" + id + "/result", "{ \"summary\": \"완료\" }", manager1);
+        assertThat(tooEarly.code()).isEqualTo("REQUEST_INVALID_STATUS");
+
+        long resv = propose(id, start(21));
+        assertThat(api.post("/api/v1/reservations/" + resv + "/confirm", null, manager1).status()).isEqualTo(200);
+        Res badUrl = api.send("PUT", "/api/v1/test-requests/" + id + "/result",
+                "{ \"summary\": \"완료\", \"reportUrl\": \"javascript:alert(1)\" }", manager1);
+        assertThat(badUrl.code()).isEqualTo("VALIDATION_FAILED");
+        assertThat(api.send("PUT", "/api/v1/test-requests/" + id + "/result", "{ \"summary\": \" \" }", manager1)
+                .code()).isEqualTo("VALIDATION_FAILED");
+    }
+
     // ------------------------------------------------------------ 도우미
 
     private long toUnderReview() throws Exception {
         long id = api.post("/api/v1/test-requests", "{ \"equipmentId\": 48 }", company).data().path("id").asLong();
-        assertThat(api.post("/api/v1/test-requests/" + id + "/submit", null, company).status()).isEqualTo(200);
+        assertThat(api.submitRequest(id, company).status()).isEqualTo(200);
         assertThat(api.post("/api/v1/test-requests/" + id + "/review/start", null, manager1).status()).isEqualTo(200);
         return id;
     }

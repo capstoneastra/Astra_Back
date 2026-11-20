@@ -51,6 +51,10 @@ public class SupplementRequest {
     @Column(name = "due_date")
     private LocalDate dueDate;
 
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private SupplementKind kind;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private SupplementStatus status;
@@ -70,7 +74,8 @@ public class SupplementRequest {
     private OffsetDateTime respondedAt;
 
     public SupplementRequest(Long requestId, int basedRevisionNo, Long requestedBy, String message, String itemsJson,
-                             LocalDate dueDate) {
+                             LocalDate dueDate, SupplementKind kind) {
+        this.kind = kind;
         this.requestId = requestId;
         this.basedRevisionNo = basedRevisionNo;
         this.requestedBy = requestedBy;

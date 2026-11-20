@@ -88,6 +88,22 @@ public class TestRequestController {
         return ApiResponse.ok(commandService.submit(user, id, request == null ? null : request.version()));
     }
 
+    @Operation(summary = "예상 이용료 입력", description = "장비 보유 조직이 검토 중~일정 조율 중에 금액(원)과 메모를 적음. 응답은 의뢰 상세")
+    @PutMapping("/{id}/estimated-fee")
+    public ApiResponse<Detail> estimatedFee(@AuthenticationPrincipal CurrentUser user, @PathVariable Long id,
+                                            @Valid @RequestBody RequestInputs.EstimatedFee request) {
+        commandService.updateEstimatedFee(user, id, request);
+        return ApiResponse.ok(queryService.detail(user, id));
+    }
+
+    @Operation(summary = "시험 결과·성적서 등록", description = "장비 보유 조직이 일정 확정(CONFIRMED) 뒤 결과 요약·성적서 번호·링크를 등록(다시 보내면 수정). 결과가 있어야 완료 가능. 응답은 의뢰 상세")
+    @PutMapping("/{id}/result")
+    public ApiResponse<Detail> result(@AuthenticationPrincipal CurrentUser user, @PathVariable Long id,
+                                      @Valid @RequestBody RequestInputs.Result request) {
+        commandService.registerResult(user, id, request);
+        return ApiResponse.ok(queryService.detail(user, id));
+    }
+
     @Operation(summary = "취소", description = "DRAFT~SCHEDULING → CANCELED. 열린 보완 요청과 확정 전 일정 제안도 함께 닫힘")
     @PostMapping("/{id}/cancel")
     public ApiResponse<ActionResult> cancel(@AuthenticationPrincipal CurrentUser user, @PathVariable Long id,
