@@ -1,6 +1,6 @@
 -- =====================================================================
 -- ASTRA 우주항공 시험장비 공동활용 플랫폼 - 초기 DB 스키마 (PostgreSQL 16)
--- V15 까지 반영 (2026-11-20). 운영 DB 변경은 db/migration의 새 버전으로만 적용
+-- V16 까지 반영 (2026-11-20). 운영 DB 변경은 db/migration의 새 버전으로만 적용
 --
 -- 규칙
 --  * PK: BIGSERIAL id (외부 노출 코드는 별도 컬럼: external_id, request_no 등)
@@ -444,8 +444,11 @@ CREATE TABLE attachments (
     mime_type         VARCHAR(100),
     size_bytes        BIGINT,
     uploaded_by       BIGINT       NOT NULL REFERENCES users(id),
+    category          VARCHAR(20)  NOT NULL DEFAULT 'GENERAL' CHECK (category IN ('GENERAL','RESULT_REPORT')),
+                      -- V16 RESULT_REPORT = 장비 보유 조직이 일정 확정 뒤 올린 시험 성적서. 파일은 서버 디스크(astra.storage.dir)
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
+CREATE INDEX idx_attachments_request ON attachments(request_id);
 
 -- ---------------------------------------------------------------------
 -- 6. 예약  (기능 11)

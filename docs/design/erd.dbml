@@ -375,6 +375,7 @@ Table attachments {
   mime_type varchar(100)
   size_bytes bigint
   uploaded_by bigint [not null, ref: > users.id]
+  category varchar(20) [not null, default: `'GENERAL'`, note: 'GENERAL | RESULT_REPORT  — V16 RESULT_REPORT = 장비 보유 조직이 일정 확정 뒤 올린 시험 성적서. 파일은 서버 디스크(astra.storage.dir)']
   created_at timestamptz [not null, default: `now()`]
 }
 

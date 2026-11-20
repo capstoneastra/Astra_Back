@@ -530,16 +530,17 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 | GET | `/test-requests` | 🏢 🏛 | 목록: `?box=SENT` 내가 보낸 의뢰 / `?box=RECEIVED` 우리 조직 장비로 들어온 의뢰(제출된 것만). `box`를 안 보내면 `INSTITUTION_MANAGER`는 RECEIVED, 그 외는 SENT (관리자는 전체). `?status=UNDER_REVIEW` | 9 |
 | GET | `/test-requests/{id}` | 🏢 🏛 | 상세 (현재 상태, 최신 revision, 열린 보완요청, 예약, `estimatedFee`, `result`) | 9 |
 | PUT | `/test-requests/{id}/draft` | 🏢 | 작업본 revision 내용 저장 (DRAFT 또는 SUPPLEMENT_REQUESTED) | 8 |
-| POST | `/test-requests/{id}/submit` | 🏢 | 제출 (DRAFT→SUBMITTED). 실사용자·회계 담당자의 이름과 연락처(전화 또는 이메일)가 없으면 `400 VALIDATION_FAILED` (`details.missingItems`: `accounting.name`, `accounting.contact` 등) | 9 |
+| POST | `/test-requests/{id}/submit` | 🏢 | 제출 (DRAFT→SUBMITTED). 이용 희망 기간(`schedule.desiredStartDate`·`desiredEndDate`)과 실사용자·회계 담당자의 이름·연락처(전화 또는 이메일)가 없으면 `400 VALIDATION_FAILED` (`details.missingItems`: `schedule.desiredStartDate`, `accounting.name`, `accounting.contact` 등) | 9 |
 | PUT | `/test-requests/{id}/estimated-fee` | 🏛 | 예상 이용료 입력 `{ version?, amount(원, 0 이상), note? }`. 검토 중~일정 조율 중에만. 응답은 상세(`estimatedFee`) | 9 |
 | PUT | `/test-requests/{id}/result` | 🏛 | 시험 결과·성적서 등록 `{ summary, reportNo?, reportUrl?(http/https) }`. 일정 확정(CONFIRMED) 뒤에만, 다시 보내면 수정. 의뢰자에게 `RESULT_REGISTERED` 알림. 응답은 상세(`result`) | 9 |
 | POST | `/test-requests/{id}/cancel` | 🏢 | 취소 `{ reason }` | 9 |
 | GET | `/test-requests/{id}/revisions` | 🏢 🏛 | 제출본 이력 목록 | 10 |
 | GET | `/test-requests/{id}/revisions/{no}` | 🏢 🏛 | 특정 제출본 (`?diffWith=1` 이면 변경 필드 diff 포함) | 10 |
 | GET | `/test-requests/{id}/history` | 🏢 🏛 | 상태 변경 이력 | 9 |
-| POST | `/test-requests/{id}/attachments` | 🏢 🏛 | 첨부 업로드 (multipart) | |
-| GET | `/test-requests/{id}/attachments` | 🏢 🏛 | 첨부 목록 | |
-| DELETE | `/attachments/{id}` | 업로더 | 첨부 삭제 | |
+| POST | `/test-requests/{id}/attachments` | 🏢 🏛 | 첨부 업로드 (multipart: `file`, `category`=`GENERAL`(기본)·`RESULT_REPORT`). 파일당 20MB, 허용 확장자 pdf·이미지·xlsx/xls/csv·docx/doc·hwp/hwpx·pptx·txt·zip (그 외·초과는 `400 VALIDATION_FAILED`). 성적서(`RESULT_REPORT`)는 장비 보유 조직이 일정 확정(CONFIRMED·COMPLETED) 뒤에만 올리고(아니면 409), 의뢰자에게 `RESULT_REGISTERED` 알림. → 201 `{ id, requestId, category, fileName, mimeType, sizeBytes, uploadedBy, createdAt, downloadUrl }` | 9 |
+| GET | `/test-requests/{id}/attachments` | 🏢 🏛 | 첨부 목록 (의뢰 당사자만) | 9 |
+| GET | `/attachments/{id}/download` | 🏢 🏛 | 파일 내려받기. 항상 `Content-Disposition: attachment` + `X-Content-Type-Options: nosniff` (브라우저에서 바로 열리지 않음) | 9 |
+| DELETE | `/attachments/{id}` | 업로더 | 첨부 삭제 (올린 사람 또는 관리자) | 9 |
 
 **의뢰서 본문 `content` (JSONB) 스키마 (프론트/백 공통 계약)**
 (질량·주파수·크기 같은 수치 조건은 모두 `conditions[]`에 조건 키로 넣고, `sample`에는 시료 이름·수량·준비일만 둡니다.)

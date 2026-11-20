@@ -630,6 +630,7 @@ erDiagram
         varchar mime_type
         bigint size_bytes
         bigint uploaded_by FK
+        varchar category "GENERAL / RESULT_REPORT"
     }
     reservations {
         bigint id PK
@@ -783,7 +784,8 @@ stateDiagram-v2
 `DRAFT`부터 `SCHEDULING`까지는 의뢰자가 언제든 취소(`CANCELED`)할 수 있습니다. 의뢰자·보유 조직은 조직 유형이 아니라 그 의뢰에서의 입장입니다 (기업이 보유 조직, 대학이 의뢰자일 수도 있음). 상태 변경은 모두 상태 갱신 + 이력 저장 + 상대방 알림을 한 트랜잭션으로 처리합니다.
 
 - 제출할 때 실사용자·회계 담당자(이름 + 연락처)가 있어야 합니다. 검토 중에 보유 조직이 **추가 정보 요청**(`kind=ADDITIONAL_INFO`)으로 책임자명·성적서 종류·시료 처리·청구 방법을 한 번 더 받고, **예상 이용료**는 보유 조직이 직접 적습니다.
-- 일정이 확정(`CONFIRMED`)된 뒤 보유 조직이 시험 결과·성적서(요약, 성적서 번호, 링크)를 등록해야 `COMPLETED` 로 넘길 수 있습니다. 파일 업로드는 저장소를 정한 뒤 추가합니다.
+- 일정이 확정(`CONFIRMED`)된 뒤 보유 조직이 시험 결과(요약, 성적서 번호, 링크)를 등록해야 `COMPLETED` 로 넘길 수 있습니다. 성적서 파일(pdf 등, 20MB까지)도 올릴 수 있고, 의뢰자가 내려받습니다.
+- 제출할 때 이용 희망 기간도 필수입니다.
 
 ---
 
@@ -813,7 +815,8 @@ cp .env.example .env        # 필요한 값 채우기 (DB 는 기본값 그대�
 ./gradlew bootRun           # Windows: gradlew.bat bootRun
 ```
 
-- `bootRun`을 하면 `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고, Flyway가 `V1__init.sql`(테이블), `V2__seed.sql`(초기 데이터), `V3__demo_accounts.sql`(시연 계정), `V4__email_verifications.sql`(가입 이메일 인증), `V5__fill_institution_region.sql`(지역이 비어 있던 기관·장비 31대에 '진주' 채움), `V6__equipment_integrity_and_availability.sql`(사양 사전·기준 단위·가용성·정비·공인·운용·보안), `V7__university_org_type.sql`(조직 유형에 대학 추가), `V8__mock_organizations_and_equipment.sql`(가상 조직·시연 장비 268대·시연 계정 2개), `V9`(시연 계정 비밀번호), `V10`·`V11`(회원·예약 동시 수정 방지 version), `V12`(국가연구자번호), `V13`(추가 정보 요청 종류), `V14`(예상 이용료), `V15`(시험 결과·성적서)를 적용합니다.
+- `bootRun`을 하면 `compose.yaml`의 PostgreSQL 16이 자동으로 뜨고, Flyway가 `V1__init.sql`(테이블), `V2__seed.sql`(초기 데이터), `V3__demo_accounts.sql`(시연 계정), `V4__email_verifications.sql`(가입 이메일 인증), `V5__fill_institution_region.sql`(지역이 비어 있던 기관·장비 31대에 '진주' 채움), `V6__equipment_integrity_and_availability.sql`(사양 사전·기준 단위·가용성·정비·공인·운용·보안), `V7__university_org_type.sql`(조직 유형에 대학 추가), `V8__mock_organizations_and_equipment.sql`(가상 조직·시연 장비 268대·시연 계정 2개), `V9`(시연 계정 비밀번호), `V10`·`V11`(회원·예약 동시 수정 방지 version), `V12`(국가연구자번호), `V13`(추가 정보 요청 종류), `V14`(예상 이용료), `V15`(시험 결과·성적서), `V16`(첨부파일 종류: 일반 / 성적서)을 적용합니다.
+- 첨부파일·성적서 파일은 서버 디스크 `astra.storage.dir`(기본 `./data/uploads`, git 제외)에 저장합니다. 시연 서버(`compose.prod.yaml`)는 `astra-prod-uploads` 볼륨에 저장해 재배포해도 남습니다.
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - 헬스체크: http://localhost:8080/actuator/health
 - IntelliJ: **Project SDK와 Gradle JVM을 모두 21**로 맞춘 뒤 `AstraApplication`을 실행합니다.
