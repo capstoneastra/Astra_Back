@@ -79,6 +79,9 @@ management:
         include: health
 
 astra:
+  rules:
+    # 회의 결정으로 추가된 필수 검사(연구자번호, 제출 필수 칸, 결과 등록 후 완료). 프론트가 새 칸을 만들기 전 연동할 때만 false
+    strict: ${ASTRA_RULES_STRICT:true}
   security:
     # true: /auth/** (로그아웃 제외), Swagger, 헬스체크 외에는 전부 로그인 필요 (api-spec.md §0-4)
     # 로컬에서 잠깐 로그인 없이 호출해 보려면 false 로 실행 (커밋 금지)

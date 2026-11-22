@@ -18,14 +18,42 @@ class ChatServiceTest {
     final ChatPersistence persistence=mock(ChatPersistence.class);
     final ConditionExtractionService extraction=mock(ConditionExtractionService.class);
     final LlmClient llm=mock(LlmClient.class);
-    final CurrentUser user=new CurrentUser(1L,UserRole.COMPANY_USER,null);
-    final ChatService service=new ChatService(persistence,extraction,llm,new PromptLoader(),new StructuredJson(JsonMapper.builder().build()));
+    final kr.astra.equipment.service.EquipmentQueryService equipment=mock(kr.astra.equipment.service.EquipmentQueryService.class);
+    final CurrentUser user=new CurrentUser(1L,UserRole.COMPANY_USER,7L);
+    final ChatService service=new ChatService(persistence,extraction,llm,new PromptLoader(),new StructuredJson(JsonMapper.builder().build()),equipment);
     ChatPersistence.Turn turn;
     @BeforeEach void setup() {
         var message=new ChatResponse.Message(11L,ChatRole.USER,"질량 15kg",Map.of(),null);
         turn=new ChatPersistence.Turn(5L,message,new ChatPersistence.Transcript(1L,11L,List.of(message),"질량 15kg"));
         when(persistence.begin(user,5L,"질량 15kg")).thenReturn(turn);
         when(extraction.extract(anyString(),isNull())).thenReturn(new ConditionExtractionService.Extraction("VIBRATION",List.of(),Map.of()));
+    }
+    @Test void consultationGetsUpToFiveDbEquipmentOfThatTestTypeExcludingOwnOrganization() {
+        // 상담 답변에 우리 DB 장비를 소개할 수 있게 후보를 같이 보냄 (적합 판정은 매칭이 함)
+        var A=kr.astra.equipment.entity.Availability.AVAILABLE; var B=kr.astra.equipment.entity.Availability.BUSY;
+        var EXT=kr.astra.equipment.entity.AccessScope.EXTERNAL_ALLOWED;
+        List<kr.astra.equipment.dto.EquipmentCandidate> all=new ArrayList<>();
+        all.add(new kr.astra.equipment.dto.EquipmentCandidate(99L,"E99","내 조직 장비",7L,"우리 회사","서울",true,A,false,EXT));
+        for (long id=1;id<=7;id++) all.add(new kr.astra.equipment.dto.EquipmentCandidate(id,"E"+id,"진동시험기"+id,2L,"미리내센터","대전",true,
+                id%2==0 ? A : B,false,EXT));
+        when(equipment.findCandidates("VIBRATION",null)).thenReturn(all);
+        when(llm.complete(any())).thenReturn(new LlmClient.Reply("이런 장비가 있습니다.","model","request",1,2));
+        service.send(user,5L,"질량 15kg",null);
+        var request=org.mockito.ArgumentCaptor.forClass(LlmClient.Request.class);
+        verify(llm).complete(request.capture());
+        String payload=request.getValue().input();
+        assertThat(payload).contains("equipmentCandidates","진동시험기2","미리내센터","AVAILABLE","EXTERNAL_ALLOWED")
+                .doesNotContain("내 조직 장비");
+        assertThat(request.getValue().system()).contains("equipmentCandidates");
+        // 예약 가능(AVAILABLE)부터, 최대 5대. 화면이 카드로 보여 줄 수 있게 id 를 메타데이터에
+        verify(persistence).complete(eq(user),eq(turn),any(),argThat(m ->
+                m.get("suggestedEquipmentIds") instanceof List<?> ids && ids.size()==5 && ids.subList(0,3).equals(List.of(2L,4L,6L))));
+    }
+    @Test void equipmentLookupFailureStillAnswers() {
+        when(equipment.findCandidates(anyString(),any())).thenThrow(new RuntimeException("db down"));
+        when(llm.complete(any())).thenReturn(new LlmClient.Reply("답변","model","request",1,2));
+        service.send(user,5L,"질량 15kg",null);
+        verify(persistence).complete(eq(user),eq(turn),eq("답변"),any());
     }
     @Test void extractionOrChatFailureMarksUserMessageFailedAndNeverPersistsAssistant() {
         when(llm.complete(any())).thenThrow(new BusinessException(ErrorCode.AI_UPSTREAM_ERROR));

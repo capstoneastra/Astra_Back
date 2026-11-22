@@ -21,7 +21,8 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 | 9 | 통합 2차에서 찾은 AI 초안·매칭·상담 문제 수정 (BE-C 코드, 윤준수가 수정), 2026-11-18 | ✅ | 41e12c0 |
 | 10 | 전체 코드 점검 후 과부하·오류 위험 수정 (BE-A·B·C 전 영역), 2026-11-18 | ✅ | PR #17 |
 | 11 | 회의 결정 반영: 시험 대행, 의뢰 항목 2단계, 예상 이용료, 결과·성적서, 연구자번호, 공동/단독활용 (BE-A·B·C), 2026-11-20 | ✅ | `8fe2e4f`~`acdaac3` (push, PR 전) |
-| 12 | 이용 희망 기간 제출 필수, 성적서·첨부파일 업로드(서버 디스크), 2026-11-20 | ✅ | 커밋 전 |
+| 12 | 이용 희망 기간 제출 필수, 성적서·첨부파일 업로드(서버 디스크), 2026-11-20 | ✅ | `d24cf5d`·`2af083b` |
+| 13 | 연동 준비: 필수 검사 스위치, 시연 데이터 스크립트(실제 서버 점검), AI 상담에 DB 장비 소개, 프론트 연동 안내서, 2026-11-22 | ✅ | 커밋 전 |
 
 **지금 남은 것** (2026-11-20 기준)
 - FE 공지(11번): 기관·대학 가입에 `researcherNo` 필수, 의뢰서 `actualUser`·`accounting` 제출 필수, 추가 정보 요청(`kind`), 예상 이용료·결과 등록 화면, 매칭 결과 `accessScope` 배지, 완료 전 결과 등록
@@ -42,6 +43,25 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 - `application.yml` 의 Gemini 기본 모델 `gemini-3.8-flash` 가 503 과부하 상태. 시연 서버 `.env` 에 `GEMINI_MODEL` 을 명시해 둘 것
 
 11-09 에 남았던 것 중 끝난 것: `feature/be-a` PR(→ PR #11), 공인시험·운용 인력·보안 정보 필드(→ V6, BE-C 주현욱 2026-11-14), BE-B 의뢰·예약·알림 구현(→ PR #13)
+
+---
+
+## 2026-11-22 · 13번: 프론트 연동 준비
+
+**왜**: 프론트 배포본(`astra-team-preview-hw1122`)을 대조해 보니 API 주소 62개는 모두 맞지만, 아직 백엔드에 연결되지 않은 미리보기 빌드이고 회의 이후 바뀐 필수 칸이 없음. 연동 전에 백엔드 쪽에서 할 수 있는 준비를 함(사용자 요청)
+
+**한 것**
+1. 필수 검사 스위치 `astra.rules.strict`(`ASTRA_RULES_STRICT`, 기본 true, `RulesProperties`): false 면 가입 국가연구자번호(보낸 값의 형식은 계속 검사), 제출·보완 제출 필수 칸, 결과 등록 후 완료 검사를 건너뜀. 프론트가 새 칸을 만들기 전 연동용
+2. `docs/tools/seed_demo_requests.py`: 실제 API 로 시연 의뢰 11건(작성 중·제출·검토 중+이용료·추가 정보 요청·재제출·일정 조율·확정·완료(결과+성적서 파일)·반려·조직 간 2건)을 만듦. 표준 라이브러리만 사용
+3. 실제 서버 점검: 새 DB(마이그레이션 16개)에서 위 스크립트 **78단계 모두 성공**. 오늘까지 추가한 흐름(추가 정보 요청 → 이용료 → 결과 → 성적서 파일 → 완료)을 실제 서버로 확인
+4. AI 상담에 DB 장비 소개: 시험유형을 알면 그 유형 장비 최대 5대(내 조직 제외, 예약 가능 먼저)를 상담 AI 에 넘기고, 응답 메타데이터에 `suggestedEquipmentIds`. 프롬프트에 "소개만 하고 충족 여부는 매칭으로", "목록에 없는 장비·사양·비용을 만들지 않기", 예약 가능/사용 중·공동/단독활용·시연용 표시 규칙 추가. 장비 조회가 실패해도 상담은 이어감. 실제 Gemini(lite)로 장비 3대를 기관·지역·예약 가능·공동활용과 함께 소개하는 것 확인
+5. `docs/frontend-integration.md`: 연결 방법(VITE_API_BASE_URL·CORS·스위치), 꼭 고칠 3곳, 새 화면 목록과 API, 순서 추천. README·api-spec(§0-2 스위치, §3 suggestedEquipmentIds)·`.env.example` 갱신
+
+**확인**: 전체 테스트 336개 통과. 새 테스트 `LenientRulesTest` 2개(스위치를 끄면 가입·제출·완료 통과, 형식 검사는 유지), `ChatServiceTest` 2개(장비 후보 5대·내 조직 제외·예약 가능 먼저·메타데이터, 장비 조회 실패해도 답변)
+
+**주의**: lite 모델은 용어를 어색하게 쓰는 경우가 있음(고정구 → "지치"). 정식 모델로 바꾸면 나아질 부분. Docker Desktop 이 자주 꺼져 있어 테스트 전 확인 필요
+
+**바뀐 파일 (커밋 전)**: `global/config/RulesProperties`(새), `AuthService`, `RequestCommandService`, `ReviewService`, `ChatService`, `prompts/consultation.md`, `application.yml`, `.env.example`, 테스트(`LenientRulesTest` 새, `ChatServiceTest`, `RequestCommandServiceTest`), `docs/tools/seed_demo_requests.py`(새), `docs/frontend-integration.md`(새), README, api-spec, 이 파일
 
 ---
 

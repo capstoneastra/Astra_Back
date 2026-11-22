@@ -43,6 +43,7 @@ public class RequestCommandService {
     private final RequirementApplicationService requirementService;
     private final MatchingService matchingService;
     private final kr.astra.request.repository.TestResultRepository resultRepository;
+    private final kr.astra.global.config.RulesProperties rules;
 
     /**
      * POST /test-requests. 시험조건(requirementId)이 있으면 조건을 의뢰서 content.conditions 에 옮겨 담습니다.
@@ -97,7 +98,9 @@ public class RequestCommandService {
         TestRequestRevision revision = workflow.currentRevision(request);
         Map<String, Object> body = content.read(revision.getContent());
         content.validate(body);
-        content.requireForSubmit(body);
+        if (rules.strict()) {
+            content.requireForSubmit(body);
+        }
         RequestContent.Schedule s = content.schedule(body);
         request.updateDraftInfo(null, s.start(), s.end());
         revision.submit(OffsetDateTime.now());

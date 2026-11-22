@@ -33,7 +33,8 @@ class RequestCommandServiceTest {
         RequestCommandService service = new RequestCommandService(drafts, mock(RequestWorkflow.class),
                 new RequestContent(JsonMapper.builder().build()), equipmentService, userService,
                 mock(RequirementApplicationService.class), mock(MatchingService.class),
-                mock(kr.astra.request.repository.TestResultRepository.class));
+                mock(kr.astra.request.repository.TestResultRepository.class),
+                new kr.astra.global.config.RulesProperties(true));
 
         EquipmentDetailResponse equipment = mock(EquipmentDetailResponse.class);
         when(equipment.id()).thenReturn(48L);

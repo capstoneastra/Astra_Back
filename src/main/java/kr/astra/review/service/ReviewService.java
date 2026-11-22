@@ -56,6 +56,7 @@ public class ReviewService {
     private final UserService userService;
     private final JsonMapper jsonMapper;
     private final kr.astra.request.repository.TestResultRepository resultRepository;
+    private final kr.astra.global.config.RulesProperties rules;
 
     /** POST /test-requests/{id}/review/start — SUBMITTED/RESUBMITTED → UNDER_REVIEW, 담당자 지정 */
     public ActionResult startReview(CurrentUser actor, Long requestId, ReviewInputs.StartReview input) {
@@ -136,7 +137,9 @@ public class ReviewService {
         TestRequestRevision working = workflow.editableRevision(request, actor.userId());
         Map<String, Object> body = input.content() != null ? input.content() : content.read(working.getContent());
         content.validate(body);
-        content.requireForSubmit(body);
+        if (rules.strict()) {
+            content.requireForSubmit(body);
+        }
         List<String> missing = readItems(supplement).stream()
                 .filter(ReviewInputs.Item::required)
                 .filter(item -> !content.isFilled(body, item.fieldKey()))
@@ -178,7 +181,7 @@ public class ReviewService {
     public ActionResult complete(CurrentUser actor, Long requestId, Integer version) {
         TestRequest request = workflow.begin(requestId, RequestAction.COMPLETE, actor, version);
         // 시험 대행이므로 결과·성적서를 보내야 완료 (회의 결정 2026-11)
-        if (!resultRepository.existsByRequestId(requestId)) {
+        if (rules.strict() && !resultRepository.existsByRequestId(requestId)) {
             throw new BusinessException(ErrorCode.REQUEST_INVALID_STATUS, "시험 결과를 먼저 등록해 주세요.",
                     Map.of("missing", "result"));
         }

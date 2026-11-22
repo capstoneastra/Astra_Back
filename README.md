@@ -860,6 +860,12 @@ docker compose -f compose.prod.yaml down              # 중지 (DB 데이터 유
 
 Swagger에서 호출하기: `POST /api/v1/auth/login`으로 로그인 → 응답의 `accessToken`을 복사 → 오른쪽 위 **Authorize**에 붙여넣기.
 
+### 프론트 연동·시연 데이터
+
+- 연동 방법과 프론트가 맞춰야 할 점: [`docs/frontend-integration.md`](docs/frontend-integration.md)
+- 새 DB 로 서버를 띄운 뒤 `python docs/tools/seed_demo_requests.py` 를 한 번 실행하면 여러 상태의 시연 의뢰가 실제 API 로 만들어집니다 (모든 단계가 성공하면 백엔드 전체 흐름 점검도 됨)
+- 프론트가 새 필수 칸을 만들기 전에 연동한다면 `.env` 에 `ASTRA_RULES_STRICT=false` (회의 결정 필수 검사 3가지를 잠시 끔)
+
 ### 테스트
 
 ```bash
