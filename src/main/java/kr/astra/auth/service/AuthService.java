@@ -38,6 +38,7 @@ public class AuthService {
 
     private final UserService userService;
     private final OrganizationService organizationService;
+    private final kr.astra.global.config.RulesProperties rules;
     private final RefreshTokenService refreshTokenService;
     private final EmailVerificationService emailVerificationService;
     private final ObjectProvider<NotificationService> notificationService;
@@ -77,6 +78,9 @@ public class AuthService {
     private String researcherNo(SignupRequest request) {
         String raw = request.researcherNo();
         if (!StringUtils.hasText(raw)) {
+            if (!rules.strict()) {
+                return null; // 프론트 연동 전 완화 모드: 비어 있으면 그냥 통과 (RulesProperties)
+            }
             throw invalidField("researcherNo", "국가연구자번호를 입력해 주세요.");
         }
         String digits = raw.replace("-", "").trim();
