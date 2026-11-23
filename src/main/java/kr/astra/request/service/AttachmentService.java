@@ -32,6 +32,7 @@ import org.springframework.web.multipart.MultipartFile;
 /**
  * 의뢰 첨부파일 (api-spec §5). 파일은 서버 디스크(LocalFileStorage), 정보는 attachments 표.
  * 성적서(RESULT_REPORT)는 장비 보유 조직이 일정 확정 뒤에 올리고, 올리면 의뢰자에게 알림.
+ * 끝난 의뢰(완료·반려·취소)에는 일반 첨부를 더 올리지 않고, 올라간 파일은 관리자만 지울 수 있음.
  */
 @Service
 @RequiredArgsConstructor
@@ -42,6 +43,9 @@ public class AttachmentService {
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("pdf", "png", "jpg", "jpeg", "gif", "webp",
             "xlsx", "xls", "csv", "docx", "doc", "hwp", "hwpx", "pptx", "txt", "zip");
     private static final Set<RequestStatus> REPORT_STATUSES = EnumSet.of(RequestStatus.CONFIRMED, RequestStatus.COMPLETED);
+    /** 끝난 의뢰: 일반 첨부를 더 올리지 않고, 올라간 파일(특히 성적서)은 지우지 않음 (관리자만 예외) */
+    private static final Set<RequestStatus> CLOSED = EnumSet.of(RequestStatus.COMPLETED, RequestStatus.REJECTED,
+            RequestStatus.CANCELED);
     private static final int MAX_NAME = 300;
 
     private final AttachmentRepository attachmentRepository;
@@ -65,6 +69,10 @@ public class AttachmentService {
             }
         } else {
             workflow.requireParty(actor, request);
+            if (CLOSED.contains(request.getStatus())) {
+                throw new BusinessException(ErrorCode.REQUEST_INVALID_STATUS, "끝난 의뢰에는 파일을 올릴 수 없습니다.",
+                        Map.of("currentStatus", request.getStatus()));
+            }
         }
         String fileName = cleanName(file);
         String key = "requests/" + requestId + "/" + UUID.randomUUID();
@@ -110,6 +118,12 @@ public class AttachmentService {
         Attachment a = find(attachmentId);
         if (!actor.isAdmin() && !a.getUploadedBy().equals(actor.userId())) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "올린 사람만 지울 수 있습니다.", null);
+        }
+        TestRequest request = workflow.lock(a.getRequestId());
+        if (!actor.isAdmin() && CLOSED.contains(request.getStatus())) {
+            throw new BusinessException(ErrorCode.REQUEST_INVALID_STATUS,
+                    "끝난 의뢰의 파일은 지울 수 없습니다. (완료된 의뢰의 성적서는 기록으로 남깁니다)",
+                    Map.of("currentStatus", request.getStatus()));
         }
         attachmentRepository.delete(a);
         attachmentRepository.flush();

@@ -161,6 +161,8 @@ public class ReservationService {
         }
         reservation.cancel();
         reservationRepository.flush();
+        workflow.notifyCounterpart(request, actor, NotificationType.RESERVATION_CANCELED,
+                "[" + request.getRequestNo() + "] 제안된 시험 일정이 취소되었습니다: " + period(reservation));
         return result(reservation, request);
     }
 

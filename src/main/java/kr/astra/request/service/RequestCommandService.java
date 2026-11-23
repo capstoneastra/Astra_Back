@@ -123,7 +123,11 @@ public class RequestCommandService {
                     Map.of("currentStatus", request.getStatus()));
         }
         RequestWorkflow.checkVersion(request, input.version());
+        boolean first = request.getEstimatedFee() == null;
         request.updateEstimatedFee(input.amount(), input.note(), OffsetDateTime.now());
+        workflow.notifyRequester(request, kr.astra.notification.entity.NotificationType.ESTIMATED_FEE_UPDATED,
+                "[" + request.getRequestNo() + "] 예상 이용료가 " + (first ? "등록" : "변경") + "되었습니다: "
+                        + String.format(java.util.Locale.KOREA, "%,d", input.amount()) + "원");
         workflow.bumpVersion(request);
     }
 

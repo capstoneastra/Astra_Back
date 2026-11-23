@@ -450,6 +450,78 @@ class RequestHardeningTest {
         assertThat(api.download("/api/v1/attachments/" + fileId + "/download", company).statusCode()).isEqualTo(404);
     }
 
+    // ------------------------------------------------------------ 끝난 의뢰의 파일 보호·빠졌던 알림 (BE-B 2026-11-23)
+
+    @Test
+    void 완료된_의뢰의_성적서는_지울_수_없고_새_첨부도_올릴_수_없다() throws Exception {
+        long id = toConfirmed(23);
+        long reportId = api.upload("/api/v1/test-requests/" + id + "/attachments", "성적서.pdf", "application/pdf",
+                "%PDF-1.4".getBytes(), manager1, "category", "RESULT_REPORT").data().path("id").asLong();
+        assertThat(api.send("PUT", "/api/v1/test-requests/" + id + "/result", "{ \"summary\": \"시험 완료\" }",
+                manager1).status()).isEqualTo(200);
+        assertThat(api.post("/api/v1/test-requests/" + id + "/complete", null, manager1).status()).isEqualTo(200);
+
+        Res delete = api.send("DELETE", "/api/v1/attachments/" + reportId, null, manager1);
+        assertThat(delete.status()).as(delete.body().toString()).isEqualTo(409);
+        assertThat(delete.code()).isEqualTo("REQUEST_INVALID_STATUS");
+        assertThat(api.download("/api/v1/attachments/" + reportId + "/download", company).statusCode()).isEqualTo(200);
+
+        Res late = api.upload("/api/v1/test-requests/" + id + "/attachments", "메모.txt", "text/plain",
+                "늦은 메모".getBytes(java.nio.charset.StandardCharsets.UTF_8), company);
+        assertThat(late.status()).as(late.body().toString()).isEqualTo(409);
+        assertThat(late.code()).isEqualTo("REQUEST_INVALID_STATUS");
+
+        // 관리자는 정리할 수 있음
+        String admin = token("admin@astra.demo", UserRole.ADMIN);
+        assertThat(api.send("DELETE", "/api/v1/attachments/" + reportId, null, admin).status()).isEqualTo(200);
+    }
+
+    @Test
+    void 제출한_의뢰를_취소하면_장비_보유_조직에_알림이_가고_작성_중_취소는_알리지_않는다() throws Exception {
+        long submitted = toUnderReview();
+        assertThat(api.post("/api/v1/test-requests/" + submitted + "/cancel", "{ \"reason\": \"일정 변경\" }", company)
+                .data().path("status").asString()).isEqualTo("CANCELED");
+        assertThat(notifications("manager1@astra.demo", "REQUEST_CANCELED", submitted)).isEqualTo(1);
+
+        long draft = api.post("/api/v1/test-requests", "{ \"equipmentId\": 48 }", company).data().path("id").asLong();
+        assertThat(api.post("/api/v1/test-requests/" + draft + "/cancel", null, company).status()).isEqualTo(200);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM notifications WHERE related_request_id = ?", Long.class,
+                draft)).isZero();
+    }
+
+    @Test
+    void 일정_제안을_취소하면_상대편에_알림이_간다() throws Exception {
+        long id = toScheduling();
+        long resv = propose(id, start(24)); // 기업이 제안
+        Res canceled = api.post("/api/v1/reservations/" + resv + "/cancel", null, manager1); // 기관이 거절
+        assertThat(canceled.status()).as(canceled.body().toString()).isEqualTo(200);
+        assertThat(notifications("company@astra.demo", "RESERVATION_CANCELED", id)).isEqualTo(1);
+        assertThat(notifications("manager1@astra.demo", "RESERVATION_CANCELED", id)).isZero();
+    }
+
+    @Test
+    void 예상_이용료를_적거나_바꾸면_의뢰자에게_알림이_간다() throws Exception {
+        long id = toUnderReview();
+        assertThat(api.send("PUT", "/api/v1/test-requests/" + id + "/estimated-fee", "{ \"amount\": 1250000 }", manager1)
+                .status()).isEqualTo(200);
+        assertThat(api.send("PUT", "/api/v1/test-requests/" + id + "/estimated-fee", "{ \"amount\": 1400000 }", manager1)
+                .status()).isEqualTo(200);
+        assertThat(notifications("company@astra.demo", "ESTIMATED_FEE_UPDATED", id)).isEqualTo(2);
+        String latest = jdbc.queryForObject("""
+                SELECT n.title FROM notifications n JOIN users u ON u.id = n.user_id
+                WHERE u.email = 'company@astra.demo' AND n.type = 'ESTIMATED_FEE_UPDATED' AND n.related_request_id = ?
+                ORDER BY n.id DESC LIMIT 1
+                """, String.class, id);
+        assertThat(latest).contains("변경", "1,400,000원");
+    }
+
+    private long notifications(String email, String type, long requestId) {
+        return jdbc.queryForObject("""
+                SELECT count(*) FROM notifications n JOIN users u ON u.id = n.user_id
+                WHERE u.email = ? AND n.type = ? AND n.related_request_id = ?
+                """, Long.class, email, type, requestId);
+    }
+
     private long toConfirmed(int days) throws Exception {
         long id = toScheduling();
         long resv = propose(id, start(days));

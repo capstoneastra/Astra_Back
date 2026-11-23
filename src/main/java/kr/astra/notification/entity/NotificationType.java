@@ -12,6 +12,12 @@ public enum NotificationType {
     RESERVATION_PROPOSED,
     RESERVATION_CONFIRMED,
     RESULT_REGISTERED,
+    /** 의뢰자가 제출한 뒤의 의뢰를 취소 → 장비 보유 조직 구성원 전원 */
+    REQUEST_CANCELED,
+    /** 확정 전 일정 제안이 취소(거절)됨 → 상대편 */
+    RESERVATION_CANCELED,
+    /** 장비 보유 조직이 예상 이용료를 적거나 바꿈 → 의뢰자 */
+    ESTIMATED_FEE_UPDATED,
     AI_RUN_DONE,
     AI_RUN_WAITING,
     USER_APPROVAL_REQUESTED,

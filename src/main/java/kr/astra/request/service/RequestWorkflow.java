@@ -226,8 +226,14 @@ public class RequestWorkflow {
                     no + "의뢰가 반려되었습니다.");
             case CONFIRM_RESERVATION -> notifyRequester(request, NotificationType.RESERVATION_CONFIRMED,
                     no + "시험 일정이 확정되었습니다.");
+            case CANCEL -> {
+                if (request.getSubmittedAt() != null) {
+                    notifyInstitution(request, NotificationType.REQUEST_CANCELED,
+                            no + "의뢰자가 의뢰를 취소했습니다: " + request.getTitle());
+                }
+            }
             default -> {
-                // START_REVIEW, COMPLETE, CANCEL: §13 에 알림 없음
+                // START_REVIEW, COMPLETE: §13 에 알림 없음
             }
         }
     }
