@@ -59,6 +59,8 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 
 **확인**: 전체 테스트 336개 통과. 새 테스트 `LenientRulesTest` 2개(스위치를 끄면 가입·제출·완료 통과, 형식 검사는 유지), `ChatServiceTest` 2개(장비 후보 5대·내 조직 제외·예약 가능 먼저·메타데이터, 장비 조회 실패해도 답변)
 
+**로컬 연동 서버 (2026-11-23)**: 이 PC 의 로컬 DB(V5 상태였음)에 V6~V16 이 자동 적용됨. 시연 데이터 스크립트를 돌리다 대학·기업 장비를 번호(77·86)로 고정해 둔 탓에 다른 조직 장비로 의뢰가 가는 문제를 발견(이 DB 는 장비 번호가 3씩 밀려 있었음) → 스크립트가 계정 소속 장비를 API(`/institutions/me/equipment`)로 찾도록 수정. 잘못 간 2건은 취소하고 올바르게 다시 만듦
+
 **주의**: lite 모델은 용어를 어색하게 쓰는 경우가 있음(고정구 → "지치"). 정식 모델로 바꾸면 나아질 부분. Docker Desktop 이 자주 꺼져 있어 테스트 전 확인 필요
 
 **바뀐 파일 (커밋 전)**: `global/config/RulesProperties`(새), `AuthService`, `RequestCommandService`, `ReviewService`, `ChatService`, `prompts/consultation.md`, `application.yml`, `.env.example`, 테스트(`LenientRulesTest` 새, `ChatServiceTest`, `RequestCommandServiceTest`), `docs/tools/seed_demo_requests.py`(새), `docs/frontend-integration.md`(새), README, api-spec, 이 파일

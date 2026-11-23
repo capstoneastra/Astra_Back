@@ -12,6 +12,7 @@
     · 일정 조율 중(제안 1건) · 일정 확정 · 시험 완료(결과 + 성적서 파일) · 반려
     · 조직 간: 대학 → 기업 장비 의뢰, 기업 → 대학 장비 의뢰(검토 통과)
 여러 번 실행하면 같은 의뢰가 또 생깁니다 (시연 DB 는 새로 만든 뒤 한 번만 실행).
+장비 48·44 는 초기 데이터(V2) 번호라 고정이고, 대학·기업 장비는 계정 소속 장비를 API 로 찾아 씁니다.
 """
 import argparse
 import json
@@ -79,6 +80,14 @@ def main():
         day[0] += 1
         start = (datetime.now(KST) + timedelta(days=30 + day[0])).replace(hour=9, minute=0, second=0, microsecond=0)
         return {"startAt": start.isoformat(), "endAt": (start + timedelta(hours=hours)).isoformat()}
+
+    def own_equipment(token, who):
+        """그 계정 소속 조직의 장비 하나 (DB 마다 장비 번호가 다를 수 있어 번호를 고정하지 않음)"""
+        d = step(f"{who} 소속 장비 찾기", *api.call("GET", "/institutions/me/equipment?size=1", token=token), 200)
+        if not d["content"]:
+            print(f"
+중단: {who} 소속 장비가 없습니다."); sys.exit(1)
+        return d["content"][0]["id"]
 
     def create(token, equipment_id, title):
         d = step(f"의뢰 생성 '{title}'", *api.call("POST", "/test-requests", {"equipmentId": equipment_id, "title": "[시연] " + title}, token), 201)
@@ -197,11 +206,11 @@ def main():
     step("반려", *api.call("POST", f"/test-requests/{r}/reject", {"reason": "시료 질량이 장비 최대 하중을 넘습니다."}, M1), 200)
 
     print("\n[10] 조직 간: 대학 → 기업(미르항공정밀) 장비")
-    r = create(U1, 86, "대학 연구실 시료 시험 의뢰")
+    r = create(U1, own_equipment(C2, "company2"), "대학 연구실 시료 시험 의뢰")
     fill_and_submit(U1, r, "연구 시료 특성 시험")
 
     print("\n[11] 조직 간: 기업(미르항공정밀) → 대학 장비, 검토 통과")
-    r = create(C2, 77, "기업 부품 시험 의뢰")
+    r = create(C2, own_equipment(U1, "univ1"), "기업 부품 시험 의뢰")
     fill_and_submit(C2, r, "부품 신뢰성 시험")
     review(U1, r)
     accept(U1, r)
