@@ -53,8 +53,8 @@ class RequestHardeningTest {
     @BeforeEach
     void setUp() {
         api = new TestApi(port, mail);
-        company = token("company@astra.demo", UserRole.COMPANY_USER);
-        manager1 = token("manager1@astra.demo", UserRole.INSTITUTION_MANAGER);
+        company = token("company@astra.kr", UserRole.COMPANY_USER);
+        manager1 = token("lab1@astra.kr", UserRole.INSTITUTION_MANAGER);
     }
 
     // ------------------------------------------------------------ 보완 항목
@@ -237,7 +237,7 @@ class RequestHardeningTest {
         Res created = api.post("/api/v1/test-requests", "{ \"equipmentId\": 48 }", company);
         JsonNode content = created.data().path("revision").path("content");
         assertThat(content.path("actualUser").path("name").asString()).isNotBlank();
-        assertThat(content.path("actualUser").path("email").asString()).isEqualTo("company@astra.demo");
+        assertThat(content.path("actualUser").path("email").asString()).isEqualTo("company@astra.kr");
         assertThat(content.path("accounting").isObject()).isTrue();
         assertThat(content.path("accounting").size()).isZero();
     }
@@ -272,7 +272,7 @@ class RequestHardeningTest {
         assertThat(req.data().path("request").path("status").asString()).isEqualTo("SUPPLEMENT_REQUESTED");
         String title = jdbc.queryForObject("""
                 SELECT n.title FROM notifications n JOIN users u ON u.id = n.user_id
-                WHERE u.email = 'company@astra.demo' AND n.type = 'SUPPLEMENT_REQUESTED' AND n.related_request_id = ?
+                WHERE u.email = 'company@astra.kr' AND n.type = 'SUPPLEMENT_REQUESTED' AND n.related_request_id = ?
                 """, String.class, id);
         assertThat(title).contains("추가 정보");
 
@@ -355,7 +355,7 @@ class RequestHardeningTest {
         assertThat(result.path("registeredBy").path("id").asLong()).isPositive();
         assertThat(jdbc.queryForObject("""
                 SELECT count(*) FROM notifications n JOIN users u ON u.id = n.user_id
-                WHERE u.email = 'company@astra.demo' AND n.type = 'RESULT_REGISTERED' AND n.related_request_id = ?
+                WHERE u.email = 'company@astra.kr' AND n.type = 'RESULT_REGISTERED' AND n.related_request_id = ?
                 """, Long.class, id)).isEqualTo(1);
 
         Res completed = api.post("/api/v1/test-requests/" + id + "/complete", null, manager1);
@@ -401,11 +401,11 @@ class RequestHardeningTest {
         assertThat(file.headers().firstValue("X-Content-Type-Options").orElse("")).isEqualTo("nosniff");
         assertThat(jdbc.queryForObject("""
                 SELECT count(*) FROM notifications n JOIN users u ON u.id = n.user_id
-                WHERE u.email = 'company@astra.demo' AND n.type = 'RESULT_REGISTERED' AND n.related_request_id = ?
+                WHERE u.email = 'company@astra.kr' AND n.type = 'RESULT_REGISTERED' AND n.related_request_id = ?
                 """, Long.class, id)).isEqualTo(1);
 
         // 다른 조직은 목록도 파일도 볼 수 없음
-        String manager2 = token("manager2@astra.demo", UserRole.INSTITUTION_MANAGER);
+        String manager2 = token("lab2@astra.kr", UserRole.INSTITUTION_MANAGER);
         assertThat(api.get("/api/v1/test-requests/" + id + "/attachments", manager2).status()).isEqualTo(403);
         assertThat(api.download("/api/v1/attachments/" + fileId + "/download", manager2).statusCode()).isEqualTo(403);
     }

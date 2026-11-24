@@ -4,7 +4,7 @@
 모든 단계가 실제 API 호출이라, 끝까지 성공하면 "백엔드는 이 순서로 된다"는 확인도 됩니다.
 
 사용법 (저장소 루트에서, 파이썬 표준 라이브러리만 사용):
-    python docs/tools/seed_demo_requests.py                       # http://localhost:8080, 비밀번호 12345678
+    python docs/tools/seed_demo_requests.py                       # http://localhost:8080, 비밀번호 1234
     python docs/tools/seed_demo_requests.py --base http://서버주소:8080
 
 만들어지는 의뢰 (제목에 말머리 없음, 데모 여부는 장비의 isMock 으로 구분):
@@ -64,16 +64,16 @@ def step(name, status, js, expect):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="http://localhost:8080")
-    ap.add_argument("--password", default="12345678")
+    ap.add_argument("--password", default="1234")
     args = ap.parse_args()
     api = Api(args.base)
 
     print("[로그인]")
     tok = {}
-    for who in ["company", "company2", "manager1", "manager2", "univ1", "admin"]:
-        d = step(f"{who} 로그인", *api.call("POST", "/auth/login", {"email": f"{who}@astra.demo", "password": args.password}), 200)
+    for who in ["company", "company2", "lab1", "lab2", "univ", "admin"]:
+        d = step(f"{who} 로그인", *api.call("POST", "/auth/login", {"email": f"{who}@astra.kr", "password": args.password}), 200)
         tok[who] = d["accessToken"]
-    C, C2, M1, M2, U1 = tok["company"], tok["company2"], tok["manager1"], tok["manager2"], tok["univ1"]
+    C, C2, M1, M2, U1 = tok["company"], tok["company2"], tok["lab1"], tok["lab2"], tok["univ"]
     day = [0]
 
     def slot(hours=8):
@@ -210,18 +210,18 @@ def main():
     fill_and_submit(U1, r, "연구 시료 특성 시험")
 
     print("\n[11] 조직 간: 기업(미르항공정밀) → 대학 장비, 검토 통과")
-    r = create(C2, own_equipment(U1, "univ1"), "기업 부품 시험 의뢰")
+    r = create(C2, own_equipment(U1, "univ"), "기업 부품 시험 의뢰")
     fill_and_submit(C2, r, "부품 신뢰성 시험")
     review(U1, r)
     accept(U1, r)
 
     print("\n[확인] 의뢰 목록·대시보드")
     sent = step("company 보낸 의뢰 목록", *api.call("GET", "/test-requests?box=SENT&size=100", token=C), 200)
-    received = step("manager1 받은 의뢰 목록", *api.call("GET", "/test-requests?size=100", token=M1), 200)
-    step("manager1 대시보드", *api.call("GET", "/dashboard/summary", token=M1), 200)
+    received = step("lab1 받은 의뢰 목록", *api.call("GET", "/test-requests?size=100", token=M1), 200)
+    step("lab1 대시보드", *api.call("GET", "/dashboard/summary", token=M1), 200)
     statuses = sorted({x["status"] for x in sent["content"]})
     print(f"\n완료: 단계 {len(STEPS)}개 모두 성공. company 보낸 의뢰 {sent['totalElements']}건 {statuses}, "
-          f"manager1 받은 의뢰 {received['totalElements']}건")
+          f"lab1 받은 의뢰 {received['totalElements']}건")
 
 
 if __name__ == "__main__":

@@ -50,7 +50,7 @@ class BeCPersistenceTest {
             Map<Long,String> result=new HashMap<>(); inputs.forEach(i -> result.put(i.equipmentId(),"테스트 설명"));
             return result;
         });
-        Long id=jdbc.queryForObject("select id from users where email = 'company@astra.demo'",Long.class);
+        Long id=jdbc.queryForObject("select id from users where email = 'company@astra.kr'",Long.class);
         owner=new CurrentUser(id,UserRole.COMPANY_USER,null);
     }
     ConditionInput number(String key,String value,String unit) {

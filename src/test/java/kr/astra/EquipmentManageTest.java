@@ -59,10 +59,10 @@ class EquipmentManageTest {
     @BeforeEach
     void setUp() {
         api = new TestApi(port, mail);
-        manager1 = token("manager1@astra.demo", UserRole.INSTITUTION_MANAGER);
-        manager2 = token("manager2@astra.demo", UserRole.INSTITUTION_MANAGER);
-        admin = token("admin@astra.demo", UserRole.ADMIN);
-        company = token("company@astra.demo", UserRole.COMPANY_USER);
+        manager1 = token("lab1@astra.kr", UserRole.INSTITUTION_MANAGER);
+        manager2 = token("lab2@astra.kr", UserRole.INSTITUTION_MANAGER);
+        admin = token("admin@astra.kr", UserRole.ADMIN);
+        company = token("company@astra.kr", UserRole.COMPANY_USER);
     }
 
     // ------------------------------------------------------------ 등록
@@ -116,7 +116,7 @@ class EquipmentManageTest {
     @Test
     void 기업도_자기_조직_장비를_등록하고_관리하며_장비가_있는_동안_기관_목록에_나온다() throws Exception {
         long companyOrgId = jdbc.queryForObject(
-                "SELECT organization_id FROM users WHERE email = 'company@astra.demo'", Long.class);
+                "SELECT organization_id FROM users WHERE email = 'company@astra.kr'", Long.class);
         // 장비가 없는 기업은 기관 목록·상세에 나오지 않는다
         assertThat(institutionIds()).doesNotContain(companyOrgId);
         assertThat(api.get("/api/v1/institutions/" + companyOrgId, company).code()).isEqualTo("NOT_FOUND");
@@ -408,7 +408,7 @@ class EquipmentManageTest {
 
     @Test
     void 갱신_알림은_기관마다_요약_한_건만_보내고_다시_보내지_않는다() throws Exception {
-        long manager1Id = jdbc.queryForObject("SELECT id FROM users WHERE email = 'manager1@astra.demo'", Long.class);
+        long manager1Id = jdbc.queryForObject("SELECT id FROM users WHERE email = 'lab1@astra.kr'", Long.class);
         // 다른 테스트가 남긴 대상이 섞이지 않도록 기존 장비는 모두 알림 보낸 것으로
         jdbc.update("UPDATE equipment SET availability_reminded_at = now() WHERE availability_reminded_at IS NULL");
         List<Long> ids = List.of(create(manager1), create(manager1), create(manager1));

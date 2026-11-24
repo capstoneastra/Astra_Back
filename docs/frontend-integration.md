@@ -12,7 +12,7 @@
 | 백엔드 `.env` | `CORS_ALLOWED_ORIGINS` | 프론트 주소. 여러 개면 쉼표 (예: `https://astra-team-preview-hw1122.almondteal65.chatgpt.site`) |
 | 백엔드 `.env` | `ASTRA_RULES_STRICT` | 아래 3곳을 고치기 전까지만 `false`. 고치면 지우기(기본 `true`) |
 
-시연 계정 비밀번호는 모두 `12345678` 입니다: `company@astra.demo`(기업), `manager1@astra.demo`(기관, 장비 48), `manager2@astra.demo`(기관, 장비 44), `company2@astra.demo`(장비 가진 기업), `univ1@astra.demo`(대학), `admin@astra.demo`(관리자), `pending@astra.demo`(승인 대기).
+시연 계정 비밀번호는 모두 `1234` 입니다: `company@astra.kr`(기업), `lab1@astra.kr`(기관, 장비 48), `lab2@astra.kr`(기관, 장비 44), `company2@astra.kr`(장비 가진 기업), `univ@astra.kr`(대학), `admin@astra.kr`(관리자), `pending@astra.kr`(승인 대기).
 
 새 DB 로 서버를 띄운 뒤 `python docs/tools/seed_demo_requests.py --base http://서버주소:8080` 를 한 번 실행하면, 여러 상태의 의뢰(작성 중·검토 중·추가 정보 요청·일정 확정·완료·반려 등)가 미리 생겨 화면이 비어 보이지 않습니다.
 
@@ -63,7 +63,7 @@
 | 이용료 형식 | `feeText` 가 모두 `"12,000원/시간 (부가세 별도)"` 또는 `"협의"`. `usage.feeAmount`·`feeUnit`·`vatIncluded`(새 필드) 채움 ("협의"면 금액·부가세 null, 단위 NEGOTIABLE) | §2 |
 | 관리자 대시보드 | `GET /dashboard/summary`(관리자)에 `byTestType[]` { code, nameKo, requestCount(작성 중 제외), equipmentCount } | §10 |
 | 비밀번호 변경 | `PATCH /users/me/password` { currentPassword, newPassword } → 200, 틀리면 400 `INVALID_PASSWORD` | §1 |
-| 데모 예약 | 서버가 뜰 때(그리고 매일 0시 10분) manager1 기관 장비 3대에 **오늘부터 14일 안** 예약 4건(확정 2·제안 2)을 맞춤. 날짜가 지나면 자동으로 옮김. 끄기: `ASTRA_DEMO_RESERVATIONS=false` | §7 아래 참고 |
+| 데모 예약 | 서버가 뜰 때(그리고 매일 0시 10분) lab1 기관 장비 3대에 **오늘부터 14일 안** 예약 4건(확정 2·제안 2)을 맞춤. 날짜가 지나면 자동으로 옮김. 끄기: `ASTRA_DEMO_RESERVATIONS=false` | §7 아래 참고 |
 | 장비 목록 | `GET /equipment` 항목에 `usage`{accessScope, feeText, feeAmount, feeUnit, vatIncluded, durationText}, `keySpecs`(주요 사양 2개), `simulation`{capability, presetIds}. 시연 장비 `utilizationRate` 모두 채움 | §2 |
 
 ## 5. 순서 추천

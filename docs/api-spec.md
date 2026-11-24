@@ -155,20 +155,20 @@
 [ { "id": 5, "orgType": "INSTITUTION", "name": "가온대학교 첨단소재분석센터", "region": "진주" }, ... ]
 
 // GET /users/me → 200 (organization 은 소속이 없으면 null)
-{ "id": 3, "email": "manager1@astra.demo", "name": "김담당", "phone": "042-000-0001",
+{ "id": 3, "email": "lab1@astra.kr", "name": "김담당", "phone": "042-000-0001",
   "role": "INSTITUTION_MANAGER", "status": "ACTIVE",
   "organization": { "id": 2, "orgType": "INSTITUTION", "name": "미리내우주환경시험센터", "region": "대전", "isVerified": true },
   "lastLoginAt": "2026-11-07T17:03:04+09:00", "createdAt": "2026-11-07T17:02:51+09:00" }
 
 // PATCH /users/me { "name"?: "김담당", "phone"?: "042-000-0009" } → 200 (GET 과 같은 형식, 보낸 값만 수정)
 
-// PATCH /users/me/password { "currentPassword": "12345678", "newPassword": "new-pass-1234" }
+// PATCH /users/me/password { "currentPassword": "1234", "newPassword": "new-pass-1234" }
 //   → 200 { "success": true }  (data 없음. 로그인 상태·토큰은 그대로)
 //   실패: 400 INVALID_PASSWORD (현재 비밀번호 틀림, details.field = "currentPassword")
 //         400 VALIDATION_FAILED (새 비밀번호 규칙 = 회원가입과 같음: 8~72자, UTF-8 72바이트 이하 / 빈 값)
 ```
 
-> 시연 계정(V3 seed): `admin@astra.demo`, `company@astra.demo`, `manager1@astra.demo`, `manager2@astra.demo`, `pending@astra.demo`(PENDING), V8 추가 `company2@astra.demo`, `univ1@astra.demo`. 비밀번호는 모두 `12345678` (V9).
+> 시연 계정 (V18 에서 짧게 바꿈, 2026-11-25): `admin@astra.kr`, `company@astra.kr`, `lab1@astra.kr`, `lab2@astra.kr`, `pending@astra.kr`(PENDING), V8 추가 `company2@astra.kr`, `univ@astra.kr`. 비밀번호는 모두 `1234`. 가입·비밀번호 변경 규칙(8자 이상)은 그대로이고, 시연 계정만 짧은 비밀번호를 씀
 
 > 토큰: access 토큰은 `Authorization: Bearer` 헤더로 보냅니다(유효 1시간). refresh 토큰은 유효 14일이고, 서버는 원문 대신 해시만 `refresh_tokens.token_hash`에 저장합니다.
 
@@ -656,8 +656,8 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 | POST | `/reservations/{id}/cancel` | 🏢 🏛 | 예약 취소 |
 | GET | `/equipment/{id}/reservations` | 로그인 | 장비 예약 현황(바쁜 구간만) `?from=2026-11-01&to=2026-11-30` |
 
-> 시연 예약 (2026-11-24): 서버가 뜰 때와 매일 0시 10분(한국 시간)에, manager1 계정 기관의 장비(id 순 앞 3대)에 **오늘부터 14일 안** 예약 4건이 있도록 맞춥니다.
-> 확정(CONFIRMED) 2건 + 제안(PROPOSED) 2건이고, 처음에는 실제 흐름(company 의뢰 → 제출 → manager1 검토·통과 → 일정 제안 → 확정)으로 만들어 알림·이력도 남습니다.
+> 시연 예약 (2026-11-24): 서버가 뜰 때와 매일 0시 10분(한국 시간)에, lab1 계정 기관의 장비(id 순 앞 3대)에 **오늘부터 14일 안** 예약 4건이 있도록 맞춥니다.
+> 확정(CONFIRMED) 2건 + 제안(PROPOSED) 2건이고, 처음에는 실제 흐름(company 의뢰 → 제출 → lab1 검토·통과 → 일정 제안 → 확정)으로 만들어 알림·이력도 남습니다.
 > 날짜가 지나 14일 창 밖이 되면 날짜만 오늘 기준으로 옮기고, 시연 중 그 의뢰를 완료·취소했으면 새로 만듭니다. 예약의 `external_system = 'ASTRA_DEMO'` 로 구분.
 > 시연 계정이 없으면 아무것도 하지 않으며, `ASTRA_DEMO_RESERVATIONS=false` 로 끕니다.
 
@@ -760,7 +760,7 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
   "equipmentStats": { "total": 339, "byRegion": { "경남": 1, "고흥": 40, "광주": 1, "대전": 32, "사천": 154, "원주": 1, "진주": 36, "창원": 74 } },
   "dataAvailable": { "requests": true, "chats": true } }
 
-// GET /dashboard/summary?view=PROVIDER (장비 보유 조직 화면. INSTITUTION_MANAGER 의 기본값, manager1 — seed 실제 값)
+// GET /dashboard/summary?view=PROVIDER (장비 보유 조직 화면. INSTITUTION_MANAGER 의 기본값, lab1 — seed 실제 값)
 { "role": "INSTITUTION_MANAGER", "view": "PROVIDER",
   "institution": { "id": 2, "name": "미리내우주환경시험센터" },
   "requestCounts": { ... 10개 상태 ... },                       // 우리 기관 접수함
@@ -841,7 +841,7 @@ UNDER_REVIEW ──reject──▶ REJECTED        (DRAFT~SCHEDULING 에서 기�
 ```json
 // GET /admin/users?status=PENDING → 200 (페이지). 정렬 가능: createdAt(기본, 최신순)·email·name·role·status·approvedAt·lastLoginAt
 { "content": [
-    { "id": 5, "email": "pending@astra.demo", "name": "이대기", "phone": "055-000-0003",
+    { "id": 5, "email": "pending@astra.kr", "name": "이대기", "phone": "055-000-0003",
       "role": "INSTITUTION_MANAGER", "status": "PENDING",
       "organization": { "id": 4, "orgType": "INSTITUTION", "name": "가람재료시험연구원", "businessRegNo": null,
                         "region": "경남", "address": null, "phone": null, "isVerified": true },

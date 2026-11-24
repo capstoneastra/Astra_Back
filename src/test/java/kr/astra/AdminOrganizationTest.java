@@ -40,7 +40,7 @@ class AdminOrganizationTest {
     @BeforeEach
     void setUp() {
         api = new TestApi(port, mail);
-        long adminId = jdbc.queryForObject("SELECT id FROM users WHERE email = 'admin@astra.demo'", Long.class);
+        long adminId = jdbc.queryForObject("SELECT id FROM users WHERE email = 'admin@astra.kr'", Long.class);
         admin = jwtProvider.createAccessToken(adminId, UserRole.ADMIN, null);
     }
 
@@ -119,7 +119,7 @@ class AdminOrganizationTest {
 
     @Test
     void 관리자가_아니면_403_잘못된_정렬은_400() throws Exception {
-        long companyId = jdbc.queryForObject("SELECT id FROM users WHERE email = 'company@astra.demo'", Long.class);
+        long companyId = jdbc.queryForObject("SELECT id FROM users WHERE email = 'company@astra.kr'", Long.class);
         String company = jwtProvider.createAccessToken(companyId, UserRole.COMPANY_USER, null);
         assertThat(api.get("/api/v1/admin/organizations", company).code()).isEqualTo("FORBIDDEN");
         assertThat(api.post("/api/v1/admin/organizations", "{ \"name\": \"x\" }", company).code()).isEqualTo("FORBIDDEN");

@@ -77,7 +77,7 @@ class UserConcurrencyTest {
     void 내_정보_수정_중에_정지되면_덮어쓰지_않고_버전_충돌() throws Exception {
         String email = "update-race-" + UUID.randomUUID() + "@test.kr";
         long userId = activeUser(email);
-        long adminId = jdbc.queryForObject("SELECT id FROM users WHERE email = 'admin@astra.demo'", Long.class);
+        long adminId = jdbc.queryForObject("SELECT id FROM users WHERE email = 'admin@astra.kr'", Long.class);
         TransactionTemplate tx = new TransactionTemplate(transactionManager);
 
         assertThatThrownBy(() -> tx.executeWithoutResult(status -> {

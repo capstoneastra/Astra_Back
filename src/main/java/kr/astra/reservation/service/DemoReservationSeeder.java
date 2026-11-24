@@ -38,14 +38,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * 시연용 예약 (프론트 2주 일정표). 서버가 뜰 때와 매일 0시 10분에, manager1 계정 조직의 장비 앞 3대에
+ * 시연용 예약 (프론트 2주 일정표). 서버가 뜰 때와 매일 0시 10분에, lab1 계정 조직의 장비 앞 3대에
  * "오늘부터 14일 안" 예약 4건(CONFIRMED 2, PROPOSED 2)이 있도록 맞춥니다.
  * <ul>
- *   <li>처음에는 실제 서비스 흐름(company 의뢰 작성 → 제출 → manager1 검토·통과 → 일정 제안 → 확정)으로 만들고,
+ *   <li>처음에는 실제 서비스 흐름(company 의뢰 작성 → 제출 → lab1 검토·통과 → 일정 제안 → 확정)으로 만들고,
  *       예약에 external_system='ASTRA_DEMO', external_ref='slot-N' 을 붙여 둡니다.</li>
  *   <li>다음부터는 그 예약이 14일 창 밖(지난 날짜)이면 날짜만 오늘 기준으로 옮깁니다. 의뢰가 이미 완료·취소돼
  *       옮길 수 없으면 새로 만듭니다.</li>
- *   <li>시연 계정(company·manager1 @astra.demo)이나 장비가 없으면 아무것도 하지 않음. 끄기: ASTRA_DEMO_RESERVATIONS=false</li>
+ *   <li>시연 계정(company·lab1 @astra.kr)이나 장비가 없으면 아무것도 하지 않음. 끄기: ASTRA_DEMO_RESERVATIONS=false</li>
  * </ul>
  * 한 칸이 실패해도(겹치는 실제 예약, 점검 기간 등) 경고 로그만 남기고 다음 칸으로 넘어갑니다.
  */
@@ -55,12 +55,12 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class DemoReservationSeeder {
 
     static final String DEMO_SYSTEM = "ASTRA_DEMO";
-    static final String COMPANY_EMAIL = "company@astra.demo";
-    static final String MANAGER_EMAIL = "manager1@astra.demo";
+    static final String COMPANY_EMAIL = "company@astra.kr";
+    static final String MANAGER_EMAIL = "lab1@astra.kr";
     static final int WINDOW_DAYS = 14;
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
-    /** equipmentIndex: manager1 조직 장비(id 순) 중 몇 번째인지. 장비가 적으면 나머지로 돌려 씀 */
+    /** equipmentIndex: lab1 조직 장비(id 순) 중 몇 번째인지. 장비가 적으면 나머지로 돌려 씀 */
     record Slot(String ref, int equipmentIndex, int dayOffset, int startHour, int hours, boolean confirmed,
                 String title, String purpose, String sampleName) {
     }
@@ -119,7 +119,7 @@ public class DemoReservationSeeder {
                         manager.get().getOrganizationId(), PageRequest.of(0, 3, Sort.by("id")))
                 .map(Equipment::getId).getContent();
         if (equipmentIds.isEmpty()) {
-            log.info("manager1 조직에 장비가 없어 시연 예약을 건너뜁니다.");
+            log.info("lab1 조직에 장비가 없어 시연 예약을 건너뜁니다.");
             return 0;
         }
         CurrentUser requester = actor(company.get());

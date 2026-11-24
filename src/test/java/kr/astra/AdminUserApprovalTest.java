@@ -201,7 +201,7 @@ class AdminUserApprovalTest {
 
     @Test
     void 관리자가_아니면_403_없는_회원이면_404() throws Exception {
-        long companyUserId = jdbc.queryForObject("SELECT id FROM users WHERE email = 'company@astra.demo'", Long.class);
+        long companyUserId = jdbc.queryForObject("SELECT id FROM users WHERE email = 'company@astra.kr'", Long.class);
         String companyToken = jwtProvider.createAccessToken(companyUserId, UserRole.COMPANY_USER, null);
         assertThat(api.get("/api/v1/admin/users", companyToken).code()).isEqualTo("FORBIDDEN");
         assertThat(api.post("/api/v1/admin/users/1/approve", null, companyToken).code()).isEqualTo("FORBIDDEN");
@@ -227,7 +227,7 @@ class AdminUserApprovalTest {
     }
 
     private long adminId() {
-        return jdbc.queryForObject("SELECT id FROM users WHERE email = 'admin@astra.demo'", Long.class);
+        return jdbc.queryForObject("SELECT id FROM users WHERE email = 'admin@astra.kr'", Long.class);
     }
 
     private String adminToken() {

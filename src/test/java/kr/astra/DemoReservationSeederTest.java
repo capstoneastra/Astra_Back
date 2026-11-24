@@ -44,7 +44,7 @@ class DemoReservationSeederTest {
         assertThat(rows).extracting(r -> r.get("status")).containsOnly("CONFIRMED", "PROPOSED")
                 .contains("CONFIRMED", "PROPOSED");
         assertThat(rows.stream().map(r -> r.get("equipment_id")).distinct().count()).isBetween(2L, 3L);
-        Long managerOrg = jdbc.queryForObject("SELECT organization_id FROM users WHERE email = 'manager1@astra.demo'",
+        Long managerOrg = jdbc.queryForObject("SELECT organization_id FROM users WHERE email = 'lab1@astra.kr'",
                 Long.class);
         assertThat(rows).allSatisfy(r -> {
             assertThat(r.get("institution_id")).isEqualTo(managerOrg);

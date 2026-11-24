@@ -44,8 +44,8 @@ class LenientRulesTest {
     @BeforeEach
     void setUp() {
         api = new TestApi(port, mail);
-        company = token("company@astra.demo", UserRole.COMPANY_USER);
-        manager1 = token("manager1@astra.demo", UserRole.INSTITUTION_MANAGER);
+        company = token("company@astra.kr", UserRole.COMPANY_USER);
+        manager1 = token("lab1@astra.kr", UserRole.INSTITUTION_MANAGER);
     }
 
     @Test

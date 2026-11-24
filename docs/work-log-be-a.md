@@ -23,7 +23,8 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 | 11 | 회의 결정 반영: 시험 대행, 의뢰 항목 2단계, 예상 이용료, 결과·성적서, 연구자번호, 공동/단독활용 (BE-A·B·C), 2026-11-20 | ✅ | `8fe2e4f`~`acdaac3` (push, PR 전) |
 | 12 | 이용 희망 기간 제출 필수, 성적서·첨부파일 업로드(서버 디스크), 2026-11-20 | ✅ | `d24cf5d`·`2af083b` |
 | 13 | 연동 준비: 필수 검사 스위치, 시연 데이터 스크립트(실제 서버 점검), AI 상담에 DB 장비 소개, 프론트 연동 안내서, 2026-11-22 | ✅ | 커밋 전 |
-| 14 | 프론트 화면 정리 요청 6건: 데모 문구, 이용료 형식 통일, 관리자 시험유형별 수요·공급, 비밀번호 변경, 데모 예약, 장비 목록 필드, 2026-11-24 | ✅ | 커밋 전 |
+| 14 | 프론트 화면 정리 요청 6건: 데모 문구, 이용료 형식 통일, 관리자 시험유형별 수요·공급, 비밀번호 변경, 데모 예약, 장비 목록 필드, 2026-11-24 | ✅ | `666e9da` |
+| 15 | 시연 계정 이메일·비밀번호 짧게 (`@astra.kr`, `1234`), 2026-11-25 | ✅ | 커밋 전 |
 
 **지금 남은 것** (2026-11-20 기준)
 - FE 공지(11번): 기관·대학 가입에 `researcherNo` 필수, 의뢰서 `actualUser`·`accounting` 제출 필수, 추가 정보 요청(`kind`), 예상 이용료·결과 등록 화면, 매칭 결과 `accessScope` 배지, 완료 전 결과 등록
@@ -44,6 +45,27 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 - `application.yml` 의 Gemini 기본 모델 `gemini-3.8-flash` 가 503 과부하 상태. 시연 서버 `.env` 에 `GEMINI_MODEL` 을 명시해 둘 것
 
 11-09 에 남았던 것 중 끝난 것: `feature/be-a` PR(→ PR #11), 공인시험·운용 인력·보안 정보 필드(→ V6, BE-C 주현욱 2026-11-14), BE-B 의뢰·예약·알림 구현(→ PR #13)
+
+---
+
+## 2026-11-25 · 15번: 시연 계정 짧게
+
+- `V18__simple_demo_accounts.sql`: 시연 계정 7개 이메일과 비밀번호를 바꿈 (다른 계정은 그대로)
+
+| 전 | 후 |
+|---|---|
+| admin@astra.demo | admin@astra.kr |
+| company@astra.demo | company@astra.kr |
+| company2@astra.demo | company2@astra.kr |
+| manager1@astra.demo | lab1@astra.kr |
+| manager2@astra.demo | lab2@astra.kr |
+| univ1@astra.demo | univ@astra.kr |
+| pending@astra.demo | pending@astra.kr |
+
+- 비밀번호는 모두 `1234`. 가입·비밀번호 변경 규칙(8자 이상)은 그대로라 시연 계정만 짧음
+- 함께 바꾼 곳: `DemoReservationSeeder`(lab1 기준), 테스트 14개 파일의 이메일, `seed_demo_requests.py`(계정 이름·기본 비밀번호), README·api-spec·frontend-integration·demo-scenario
+- 확인: 전체 테스트 341개 통과 (`AuthFlowTest` 가 6개 계정 `1234` 로그인 200, pending 403 확인)
+- 주의: 이미 떠 있는 서버는 다시 시작해야 V18 이 적용됨. 프론트에 `@astra.demo` 를 쓰는 코드는 없음 (로그인 칸 길이 제한도 없음)
 
 ---
 

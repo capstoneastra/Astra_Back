@@ -18,7 +18,7 @@
 | 서버 | 시연 서버: `docker compose -f compose.prod.yaml up -d --build` (README "시연 서버 실행") / 노트북: `./gradlew bootRun` |
 | DB | 처음부터 시작하려면 seed 만 있는 새 DB (로컬은 `docker compose down -v` 후 실행). 기관 8곳·대학 4곳·기업 4곳(모두 가상 이름), 장비 339대(기존 71대 + V8 시연 장비 268대, 전부 시연용 `isMock=true`), 시연 계정 7개 |
 | `.env` | `JWT_SECRET`(32자 이상), `MAIL_*`(Gmail 앱 비밀번호), `CORS_ALLOWED_ORIGINS`(프론트 주소). 시연 당일만 `MAIL_LOG_CODE=true` (일회용 메일이 늦을 때 서버 로그로 코드 확인) |
-| 계정 | `company@astra.demo`(기업, 가상 A기업), `manager1@astra.demo`(미리내우주환경시험센터 = 장비 48 보유), `manager2@astra.demo`(다온신뢰성시험센터 = 장비 44 보유), `univ1@astra.demo`(대학, 늘해랑대학교 항공우주공동기기원), `company2@astra.demo`(장비 보유 기업, 미르항공정밀), `admin@astra.demo`. 비밀번호는 모두 `12345678` (V9) |
+| 계정 | `company@astra.kr`(기업, 가상 A기업), `lab1@astra.kr`(미리내우주환경시험센터 = 장비 48 보유), `lab2@astra.kr`(다온신뢰성시험센터 = 장비 44 보유), `univ@astra.kr`(대학, 늘해랑대학교 항공우주공동기기원), `company2@astra.kr`(장비 보유 기업, 미르항공정밀), `admin@astra.kr`. 비밀번호는 모두 `1234` (V9) |
 | 주요 장비 | **ASTRA-CAND-0048** 진동시험기 (미리내우주환경시험센터, 주파수 10~3000Hz, 최대 시료 40kg, 고정구 15kg, 모두 MOCK) / **ASTRA-CAND-0044** 진동시험기1 (다온신뢰성시험센터, 주파수 5~1800Hz) |
 
 ---
@@ -38,15 +38,15 @@
 | 7 | 장비 매칭 | BE-C | company | `POST /requirements/{id}/match-runs`, `GET /match-runs/{id}` | 상위 5대(기본) 0045·0047·0048·DEMO-0036·DEMO-0037(다솜대학교) 모두 SUITABLE 100점 (V8 장비가 늘어 0044 는 상위 5대 밖). 조건별 근거·추천 이유 문장, `usedMockData=true` (DEMO) | ✅ 2026-11-18. AI 설명이 실패해도 규칙 판정 결과는 응답(설명 문장만 빠짐). 면책 문구는 한 번만 |
 | 8 | 장비 상세·비교 | BE-A | company | `GET /equipment/48`, `POST /equipment/compare {48,44}`, `GET /equipment/48/similar` | 사양이 MOCK·DEMO 로 표시, 비교표에서 주파수 10~3000 vs 5~1800 확인, 유사 장비에 같은 진동시험 장비 | ✅ 2026-11-08 |
 | 9 | 시험 정보 안내 | BE-A | company | `GET /test-types/VIBRATION` | V6 기준 조건 5개: 필수 3개(시료 질량·고정구 질량·주파수), 선택 2개(가진 축·공인성적서 필요 여부). 가능 조직 9곳(V8 이후) | ✅ 2026-11-18 |
-| 10 | AI 의뢰서 초안 | BE-C (+BE-B) | company | `POST /test-requests/ai-draft {requirementId, equipmentId: 48, matchResultId}` | `DRAFT` 의뢰 + 1번 제출본(`isAiGenerated=true`), 자동 제출 안 함 | ✅ 2026-11-18 201 `DRAFT` + 1번 제출본 `isAiGenerated=true`, 이어서 제출하면 manager1 접수함에 보임. AI 응답 실패(502) 때는 의뢰가 남지 않음. 가끔 502 라 재시도 필요할 수 있음 |
-| 11 | 의뢰서 수정·제출 | BE-B | company | `PUT /test-requests/{id}/draft`, `POST /test-requests/{id}/submit` | `DRAFT → SUBMITTED`, 기관 담당자에게 알림 | ✅ 2026-11-18 (manager1 알림 1건) |
+| 10 | AI 의뢰서 초안 | BE-C (+BE-B) | company | `POST /test-requests/ai-draft {requirementId, equipmentId: 48, matchResultId}` | `DRAFT` 의뢰 + 1번 제출본(`isAiGenerated=true`), 자동 제출 안 함 | ✅ 2026-11-18 201 `DRAFT` + 1번 제출본 `isAiGenerated=true`, 이어서 제출하면 lab1 접수함에 보임. AI 응답 실패(502) 때는 의뢰가 남지 않음. 가끔 502 라 재시도 필요할 수 있음 |
+| 11 | 의뢰서 수정·제출 | BE-B | company | `PUT /test-requests/{id}/draft`, `POST /test-requests/{id}/submit` | `DRAFT → SUBMITTED`, 기관 담당자에게 알림 | ✅ 2026-11-18 (lab1 알림 1건) |
 | 11-1 | 제출 전 필수 항목 | BE-B | company | `POST /test-requests/{id}/submit` | 이용 희망 기간, 실사용자(신청자로 미리 채워짐)·회계 담당자 이름과 연락처가 없으면 400 `missingItems`. 채우면 `SUBMITTED` | ✅ 자동 점검 2026-11-20 |
-| 12 | 기관 담당자 대시보드·장비 확인 | BE-A (+BE-B) | manager1 | `GET /dashboard/summary`, `GET /institutions/me/equipment`, `POST /equipment/48/confirm` | 소속 기관·갱신 필요 장비 수(13대) 표시, 검토 대기에 제출한 의뢰, 장비 48 확인 → `INSTITUTION_VERIFIED`. manager2 는 이 의뢰 403 | ✅ 2026-11-18 |
-| 13 | 검토 시작·보완 요청 | BE-B | manager1 | `POST /test-requests/{id}/review/start`, `POST /test-requests/{id}/supplements` (예: 시료 준비 완료일) | `UNDER_REVIEW → SUPPLEMENT_REQUESTED`, 기업에게 알림 | ✅ 2026-11-18 |
-| 13-1 | 추가 정보 요청·예상 이용료 | BE-B | manager1 → company | `POST /test-requests/{id}/supplements {kind: ADDITIONAL_INFO}`, `PUT /test-requests/{id}/estimated-fee` | 책임자명·성적서 종류·시료 처리·청구 방법 4항목 요청 → 기업이 채워 재제출. 기관이 예상 이용료 입력 → 기업 상세에 표시 | ✅ 자동 점검 2026-11-20 |
+| 12 | 기관 담당자 대시보드·장비 확인 | BE-A (+BE-B) | lab1 | `GET /dashboard/summary`, `GET /institutions/me/equipment`, `POST /equipment/48/confirm` | 소속 기관·갱신 필요 장비 수(13대) 표시, 검토 대기에 제출한 의뢰, 장비 48 확인 → `INSTITUTION_VERIFIED`. lab2 는 이 의뢰 403 | ✅ 2026-11-18 |
+| 13 | 검토 시작·보완 요청 | BE-B | lab1 | `POST /test-requests/{id}/review/start`, `POST /test-requests/{id}/supplements` (예: 시료 준비 완료일) | `UNDER_REVIEW → SUPPLEMENT_REQUESTED`, 기업에게 알림 | ✅ 2026-11-18 |
+| 13-1 | 추가 정보 요청·예상 이용료 | BE-B | lab1 → company | `POST /test-requests/{id}/supplements {kind: ADDITIONAL_INFO}`, `PUT /test-requests/{id}/estimated-fee` | 책임자명·성적서 종류·시료 처리·청구 방법 4항목 요청 → 기업이 채워 재제출. 기관이 예상 이용료 입력 → 기업 상세에 표시 | ✅ 자동 점검 2026-11-20 |
 | 14 | 보완 제출 | BE-B | company | `POST /supplements/{id}/respond` | 새 제출본(revision 2) 생성, `RESUBMITTED`. 제출본 이력이 분리돼 보임 | ✅ 2026-11-18 |
-| 15 | 검토 통과·예약 확정 | BE-B | manager1 | `POST /test-requests/{id}/accept`, `POST /test-requests/{id}/reservations`, `POST /reservations/{id}/confirm` | `SCHEDULING → CONFIRMED`. 같은 시간 중복 예약은 409 `RESERVATION_OVERLAP` | ✅ 2026-11-18 (이력 DRAFT→…→CONFIRMED 8단계) |
-| 15-1 | 시험 결과·성적서 전달 | BE-B | manager1 → company | `PUT /test-requests/{id}/result`, `POST /test-requests/{id}/complete` | 결과 없이 완료하면 409. 결과(요약·성적서 번호·링크) 등록, 성적서 파일 업로드(`POST .../attachments category=RESULT_REPORT`) → 기업에 `RESULT_REGISTERED` 알림, 상세 `result`·첨부 목록에서 내려받기 → 완료 | ✅ 자동 점검 2026-11-20 |
+| 15 | 검토 통과·예약 확정 | BE-B | lab1 | `POST /test-requests/{id}/accept`, `POST /test-requests/{id}/reservations`, `POST /reservations/{id}/confirm` | `SCHEDULING → CONFIRMED`. 같은 시간 중복 예약은 409 `RESERVATION_OVERLAP` | ✅ 2026-11-18 (이력 DRAFT→…→CONFIRMED 8단계) |
+| 15-1 | 시험 결과·성적서 전달 | BE-B | lab1 → company | `PUT /test-requests/{id}/result`, `POST /test-requests/{id}/complete` | 결과 없이 완료하면 409. 결과(요약·성적서 번호·링크) 등록, 성적서 파일 업로드(`POST .../attachments category=RESULT_REPORT`) → 기업에 `RESULT_REGISTERED` 알림, 상세 `result`·첨부 목록에서 내려받기 → 완료 | ✅ 자동 점검 2026-11-20 |
 | 16 | (선택) 가상 시뮬레이션 | BE-B | company | `POST /simulation/runs {presetId: SIM-0048}` | 결과 그래프 + "가상 시연 모델" 경고 (DEMO) | ✅ 2026-11-18 (점 51개 + 경고 문구) |
 | 17 | (선택) AI 자동 추진 | BE-C | company | `POST /ai/auto-runs` | 조건 분석 → 검색 → 매칭 → 초안까지 단계별 진행, 누락 시 `WAITING_USER` | ✅ 2026-11-18 `{inputText}` 로 시작 202 → 고정구 질량 누락이라 ANALYZE 에서 `WAITING_USER` (이어서 진행은 미확인) |
 | 18 | 관리자 대시보드 | BE-A (+BE-B) | admin | `GET /dashboard/summary`, `GET /dashboard/equipment-stats` | 승인 대기 회원·기관 수, 기관별 장비 확인 비율, 전체 의뢰 상태별 개수 | ✅ 2026-11-18 |
@@ -55,11 +55,11 @@
 
 | # | 단계 | 계정 | API | 기대 결과 | 확인 |
 |---|---|---|---|---|---|
-| S1 | 대학이 기업 장비에 의뢰 | univ1 | `POST /test-requests {equipmentId: 미르항공정밀 장비}` → `.../submit` | 201 → `SUBMITTED`, company2 에게 `REQUEST_SUBMITTED` 알림 | ✅ 자동 점검 · 실제 서버 2026-11-18 |
+| S1 | 대학이 기업 장비에 의뢰 | univ | `POST /test-requests {equipmentId: 미르항공정밀 장비}` → `.../submit` | 201 → `SUBMITTED`, company2 에게 `REQUEST_SUBMITTED` 알림 | ✅ 자동 점검 · 실제 서버 2026-11-18 |
 | S2 | 기업이 받은 의뢰 검토·통과 | company2 | `GET /test-requests?box=RECEIVED`, `POST .../review/start`, `POST .../accept` | 받은 의뢰 목록에 보이고 `SCHEDULING` | ✅ 자동 점검 · 실제 서버 2026-11-18 |
-| S3 | 기업이 대학 장비에 의뢰 | company2 | `POST /test-requests {equipmentId: 늘해랑대학교 장비}` → `.../submit` | univ1 의 받은 의뢰(기본 목록)에 보임 | ✅ 자동 점검 · 실제 서버 2026-11-18 |
-| S4 | 보낸·받은 의뢰 전환 | univ1, company2 | `GET /test-requests?box=SENT`, `GET /dashboard/summary?view=REQUESTER\|PROVIDER` | 한 계정에서 두 목록·두 대시보드가 따로 보임 | ✅ 자동 점검 · 실제 서버 2026-11-18 |
-| S5 | 자기 조직 장비 의뢰 차단 | univ1 | `POST /test-requests {equipmentId: 자기 조직 장비}` | 400 `VALIDATION_FAILED` (`details.field=equipmentId`). 매칭 추천에서도 빠짐 | ✅ 자동 점검 · 실제 서버 2026-11-18 |
+| S3 | 기업이 대학 장비에 의뢰 | company2 | `POST /test-requests {equipmentId: 늘해랑대학교 장비}` → `.../submit` | univ 의 받은 의뢰(기본 목록)에 보임 | ✅ 자동 점검 · 실제 서버 2026-11-18 |
+| S4 | 보낸·받은 의뢰 전환 | univ, company2 | `GET /test-requests?box=SENT`, `GET /dashboard/summary?view=REQUESTER\|PROVIDER` | 한 계정에서 두 목록·두 대시보드가 따로 보임 | ✅ 자동 점검 · 실제 서버 2026-11-18 |
+| S5 | 자기 조직 장비 의뢰 차단 | univ | `POST /test-requests {equipmentId: 자기 조직 장비}` | 400 `VALIDATION_FAILED` (`details.field=equipmentId`). 매칭 추천에서도 빠짐 | ✅ 자동 점검 · 실제 서버 2026-11-18 |
 | S6 | 기업이 장비 등록 | company | `POST /equipment` | 201, `GET /institutions`에 기업이 `orgType=COMPANY`로 나옴 | ✅ 자동 점검 · 실제 서버 2026-11-18 |
 
 ---

@@ -43,8 +43,8 @@ class DemoScenarioTest {
     @Test
     void 시연_시나리오_BE_A_단계가_처음부터_끝까지_이어진다() throws Exception {
         TestApi api = new TestApi(port, mail);
-        String admin = token("admin@astra.demo", UserRole.ADMIN);
-        String manager1 = token("manager1@astra.demo", UserRole.INSTITUTION_MANAGER);
+        String admin = token("admin@astra.kr", UserRole.ADMIN);
+        String manager1 = token("lab1@astra.kr", UserRole.INSTITUTION_MANAGER);
 
         // 1. 새 기업 가입 (이메일 인증) → 승인 전 로그인 403
         String email = uniqueEmail();

@@ -123,21 +123,21 @@ class AuthFlowTest {
     }
 
     @Test
-    void 시연_계정은_V9_비밀번호로_로그인되고_승인_대기_계정은_403() throws Exception {
-        for (String email : new String[] {"admin@astra.demo", "company@astra.demo", "company2@astra.demo",
-                "manager1@astra.demo", "manager2@astra.demo", "univ1@astra.demo"}) {
+    void 시연_계정은_V18_비밀번호_1234로_로그인되고_승인_대기_계정은_403() throws Exception {
+        for (String email : new String[] {"admin@astra.kr", "company@astra.kr", "company2@astra.kr",
+                "lab1@astra.kr", "lab2@astra.kr", "univ@astra.kr"}) {
             Res login = api.post("/api/v1/auth/login",
-                    "{ \"email\": \"%s\", \"password\": \"12345678\" }".formatted(email), null);
+                    "{ \"email\": \"%s\", \"password\": \"1234\" }".formatted(email), null);
             assertThat(login.status()).as(email + " " + login.body()).isEqualTo(200);
         }
         Res pending = api.post("/api/v1/auth/login",
-                "{ \"email\": \"pending@astra.demo\", \"password\": \"12345678\" }", null);
+                "{ \"email\": \"pending@astra.kr\", \"password\": \"1234\" }", null);
         assertThat(pending.code()).isEqualTo("ACCOUNT_NOT_ACTIVE");
     }
 
     @Test
     void 이미_가입된_이메일은_인증_코드도_보내지_않고_409_EMAIL_ALREADY_EXISTS() throws Exception {
-        Res res = api.post("/api/v1/auth/email-verifications", "{ \"email\": \"COMPANY@astra.demo\" }", null);
+        Res res = api.post("/api/v1/auth/email-verifications", "{ \"email\": \"COMPANY@astra.kr\" }", null);
         assertThat(res.status()).isEqualTo(409);
         assertThat(res.code()).isEqualTo("EMAIL_ALREADY_EXISTS");
     }
@@ -381,19 +381,19 @@ class AuthFlowTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM organizations o WHERE NOT o.is_verified "
                 + "AND EXISTS (SELECT 1 FROM equipment e WHERE e.institution_id = o.id)", Long.class)).isZero();
         assertThat(jdbc.queryForList(
-                "SELECT role || ':' || status FROM users WHERE email LIKE '%@astra.demo' ORDER BY email", String.class))
-                // admin, company, company2(V8 장비 보유 기업), manager1, manager2, pending, univ1(V8 대학)
+                "SELECT role || ':' || status FROM users WHERE email LIKE '%@astra.kr' ORDER BY email", String.class))
+                // admin, company, company2(V8 장비 보유 기업), lab1, lab2, pending, univ(V8 대학)
                 .containsExactly("ADMIN:ACTIVE", "COMPANY_USER:ACTIVE", "COMPANY_USER:ACTIVE",
                         "INSTITUTION_MANAGER:ACTIVE", "INSTITUTION_MANAGER:ACTIVE", "INSTITUTION_MANAGER:PENDING",
                         "INSTITUTION_MANAGER:ACTIVE");
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM users WHERE email LIKE '%@astra.demo' "
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM users WHERE email LIKE '%@astra.kr' "
                 + "AND password_hash LIKE '$2a$10$%'", Long.class)).isEqualTo(7);
     }
 
     // ------------------------------------------------------------ helpers
 
     private String adminToken() {
-        long adminId = jdbc.queryForObject("SELECT id FROM users WHERE email = 'admin@astra.demo'", Long.class);
+        long adminId = jdbc.queryForObject("SELECT id FROM users WHERE email = 'admin@astra.kr'", Long.class);
         return jwtProvider.createAccessToken(adminId, UserRole.ADMIN, null);
     }
 

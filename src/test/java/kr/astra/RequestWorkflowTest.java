@@ -55,9 +55,9 @@ class RequestWorkflowTest {
     @BeforeEach
     void setUp() {
         api = new TestApi(port, mail);
-        company = token("company@astra.demo", UserRole.COMPANY_USER);
-        manager1 = token("manager1@astra.demo", UserRole.INSTITUTION_MANAGER);
-        manager2 = token("manager2@astra.demo", UserRole.INSTITUTION_MANAGER);
+        company = token("company@astra.kr", UserRole.COMPANY_USER);
+        manager1 = token("lab1@astra.kr", UserRole.INSTITUTION_MANAGER);
+        manager2 = token("lab2@astra.kr", UserRole.INSTITUTION_MANAGER);
     }
 
     @Test
@@ -90,7 +90,7 @@ class RequestWorkflowTest {
         Res submitted = api.submitRequest(id, company);
         assertThat(submitted.status()).as(submitted.body().toString()).isEqualTo(200);
         assertThat(submitted.data().path("status").asString()).isEqualTo("SUBMITTED");
-        assertThat(unread("manager1@astra.demo", "REQUEST_SUBMITTED", id)).isEqualTo(1);
+        assertThat(unread("lab1@astra.kr", "REQUEST_SUBMITTED", id)).isEqualTo(1);
         // 다시 제출하면 상태 전이 불가
         assertThat(api.post("/api/v1/test-requests/" + id + "/submit", null, company).code())
                 .isEqualTo("REQUEST_INVALID_STATUS");
@@ -122,7 +122,7 @@ class RequestWorkflowTest {
         // 중복 클릭 → 409 SUPPLEMENT_ALREADY_OPEN
         assertThat(api.post("/api/v1/test-requests/" + id + "/supplements", supplementBody, manager1).code())
                 .isEqualTo("SUPPLEMENT_ALREADY_OPEN");
-        assertThat(unread("company@astra.demo", "SUPPLEMENT_REQUESTED", id)).isEqualTo(1);
+        assertThat(unread("company@astra.kr", "SUPPLEMENT_REQUESTED", id)).isEqualTo(1);
         JsonNode companyDash = api.get("/api/v1/dashboard/summary", company).data();
         assertThat(companyDash.path("dataAvailable").path("requests").asBoolean()).isTrue();
         assertThat(companyDash.path("actionRequired").get(0).path("status").asString()).isEqualTo("SUPPLEMENT_REQUESTED");
@@ -160,7 +160,7 @@ class RequestWorkflowTest {
         Res confirmed = api.post("/api/v1/reservations/" + reservationId + "/confirm", null, manager1);
         assertThat(confirmed.status()).as(confirmed.body().toString()).isEqualTo(200);
         assertThat(confirmed.data().path("request").path("status").asString()).isEqualTo("CONFIRMED");
-        assertThat(unread("company@astra.demo", "RESERVATION_CONFIRMED", id)).isEqualTo(1);
+        assertThat(unread("company@astra.kr", "RESERVATION_CONFIRMED", id)).isEqualTo(1);
         assertThat(api.post("/api/v1/reservations/" + reservationId + "/confirm", null, manager1).code())
                 .isEqualTo("RESERVATION_ALREADY_CONFIRMED");
 
@@ -201,7 +201,7 @@ class RequestWorkflowTest {
 
         // 다른 기관(manager2 소속) 장비에는 의뢰자로 의뢰를 만들 수 있다
         long otherOrgId = jdbc.queryForObject(
-                "SELECT organization_id FROM users WHERE email = 'manager2@astra.demo'", Long.class);
+                "SELECT organization_id FROM users WHERE email = 'lab2@astra.kr'", Long.class);
         long otherEquipment = jdbc.queryForObject(
                 "SELECT min(id) FROM equipment WHERE institution_id = ? AND is_active", Long.class, otherOrgId);
         Res created = api.post("/api/v1/test-requests", "{ \"equipmentId\": " + otherEquipment + " }", manager1);
@@ -226,7 +226,7 @@ class RequestWorkflowTest {
 
     @Test
     void 기관이_의뢰자이고_기업이_장비_보유_조직인_의뢰도_끝까지_진행된다() throws Exception {
-        long companyUserId = jdbc.queryForObject("SELECT id FROM users WHERE email = 'company@astra.demo'", Long.class);
+        long companyUserId = jdbc.queryForObject("SELECT id FROM users WHERE email = 'company@astra.kr'", Long.class);
         // 기업이 장비를 등록 (기업 = 장비 보유 조직)
         Res equipment = api.post("/api/v1/equipment", """
                 { "name": "기업 보유 진동시험기 %s", "model": "C-200", "equipmentType": "TEST",
@@ -240,7 +240,7 @@ class RequestWorkflowTest {
             long id = api.post("/api/v1/test-requests", "{ \"equipmentId\": " + equipmentId + " }", manager1)
                     .data().path("id").asLong();
             assertThat(api.submitRequest(id, manager1).status()).isEqualTo(200);
-            assertThat(unread("company@astra.demo", "REQUEST_SUBMITTED", id)).isEqualTo(1);
+            assertThat(unread("company@astra.kr", "REQUEST_SUBMITTED", id)).isEqualTo(1);
 
             // 보낸 의뢰 / 받은 의뢰는 box 로 나눠 본다
             assertThat(ids(api.get("/api/v1/test-requests?box=SENT&size=100", manager1))).contains(id);
@@ -267,7 +267,7 @@ class RequestWorkflowTest {
                     .isEqualTo(companyUserId);
             assertThat(api.post("/api/v1/test-requests/" + id + "/accept", null, company).data().path("status")
                     .asString()).isEqualTo("SCHEDULING");
-            assertThat(unread("manager1@astra.demo", "REQUEST_ACCEPTED", id)).isEqualTo(1);
+            assertThat(unread("lab1@astra.kr", "REQUEST_ACCEPTED", id)).isEqualTo(1);
 
             // 일정: 의뢰자가 제안하고 보유 기업이 확정
             OffsetDateTime start = OffsetDateTime.now(ZoneOffset.ofHours(9)).plusDays(120).truncatedTo(ChronoUnit.HOURS);
@@ -294,14 +294,14 @@ class RequestWorkflowTest {
     @Test
     void 대학과_기업이_시연_계정으로_서로의_장비를_빌린다() throws Exception {
         // V8 시연 계정: univ1 = 늘해랑대학교(대학), company2 = 미르항공정밀(장비 보유 기업)
-        String univ1 = token("univ1@astra.demo", UserRole.INSTITUTION_MANAGER);
-        String company2 = token("company2@astra.demo", UserRole.COMPANY_USER);
-        long univEquipment = usableEquipmentOf("univ1@astra.demo");
-        long companyEquipment = usableEquipmentOf("company2@astra.demo");
+        String univ1 = token("univ@astra.kr", UserRole.INSTITUTION_MANAGER);
+        String company2 = token("company2@astra.kr", UserRole.COMPANY_USER);
+        long univEquipment = usableEquipmentOf("univ@astra.kr");
+        long companyEquipment = usableEquipmentOf("company2@astra.kr");
 
         // 대학 → 기업 장비
         long toCompany = submit(univ1, companyEquipment);
-        assertThat(unread("company2@astra.demo", "REQUEST_SUBMITTED", toCompany)).isEqualTo(1);
+        assertThat(unread("company2@astra.kr", "REQUEST_SUBMITTED", toCompany)).isEqualTo(1);
         assertThat(ids(api.get("/api/v1/test-requests?box=RECEIVED&size=100", company2))).contains(toCompany);
         assertThat(api.post("/api/v1/test-requests/" + toCompany + "/review/start", null, company2).data()
                 .path("status").asString()).isEqualTo("UNDER_REVIEW");
@@ -310,7 +310,7 @@ class RequestWorkflowTest {
 
         // 기업 → 대학 장비
         long toUniversity = submit(company2, univEquipment);
-        assertThat(unread("univ1@astra.demo", "REQUEST_SUBMITTED", toUniversity)).isEqualTo(1);
+        assertThat(unread("univ@astra.kr", "REQUEST_SUBMITTED", toUniversity)).isEqualTo(1);
         assertThat(ids(api.get("/api/v1/test-requests?size=100", univ1))).contains(toUniversity); // 대학 기본값 = 받은 의뢰
         assertThat(api.post("/api/v1/test-requests/" + toUniversity + "/review/start", null, univ1).data()
                 .path("status").asString()).isEqualTo("UNDER_REVIEW");
@@ -435,7 +435,7 @@ class RequestWorkflowTest {
     private static String content(boolean filled) {
         return """
                 { "applicant": { "companyName": "가상 A기업", "contactName": "홍길동" },
-                  "actualUser": { "name": "홍길동", "email": "company@astra.demo" },
+                  "actualUser": { "name": "홍길동", "email": "company@astra.kr" },
                   "accounting": { "name": "김회계", "phone": "02-000-0000" },
                   "test": { "testTypeCode": "VIBRATION", "purpose": "발사 환경 진동 내구성 확인" },
                   "sample": { "name": "위성 탑재 전장품", "quantity": 1 %s },
