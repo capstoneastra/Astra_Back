@@ -23,6 +23,8 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 | 11 | 회의 결정 반영: 시험 대행, 의뢰 항목 2단계, 예상 이용료, 결과·성적서, 연구자번호, 공동/단독활용 (BE-A·B·C), 2026-11-20 | ✅ | `8fe2e4f`~`acdaac3` (push, PR 전) |
 | 12 | 이용 희망 기간 제출 필수, 성적서·첨부파일 업로드(서버 디스크), 2026-11-20 | ✅ | `d24cf5d`·`2af083b` |
 | 13 | 연동 준비: 필수 검사 스위치, 시연 데이터 스크립트(실제 서버 점검), AI 상담에 DB 장비 소개, 프론트 연동 안내서, 2026-11-22 | ✅ | 커밋 전 |
+| 14 | 프론트 화면 정리 요청 6건: 데모 문구, 이용료 형식 통일, 관리자 시험유형별 수요·공급, 비밀번호 변경, 데모 예약, 장비 목록 필드, 2026-11-24 | ✅ | `666e9da` |
+| 15 | 시연 계정 이메일·비밀번호 짧게 (`@astra.kr`, `1234`), 2026-11-25 | ✅ | 커밋 전 |
 
 **지금 남은 것** (2026-11-20 기준)
 - FE 공지(11번): 기관·대학 가입에 `researcherNo` 필수, 의뢰서 `actualUser`·`accounting` 제출 필수, 추가 정보 요청(`kind`), 예상 이용료·결과 등록 화면, 매칭 결과 `accessScope` 배지, 완료 전 결과 등록
@@ -43,6 +45,57 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 - `application.yml` 의 Gemini 기본 모델 `gemini-3.8-flash` 가 503 과부하 상태. 시연 서버 `.env` 에 `GEMINI_MODEL` 을 명시해 둘 것
 
 11-09 에 남았던 것 중 끝난 것: `feature/be-a` PR(→ PR #11), 공인시험·운용 인력·보안 정보 필드(→ V6, BE-C 주현욱 2026-11-14), BE-B 의뢰·예약·알림 구현(→ PR #13)
+
+---
+
+## 2026-11-25 · 15번: 시연 계정 짧게
+
+- `V18__simple_demo_accounts.sql`: 시연 계정 7개 이메일과 비밀번호를 바꿈 (다른 계정은 그대로)
+
+| 전 | 후 |
+|---|---|
+| admin@astra.demo | admin@astra.kr |
+| company@astra.demo | company@astra.kr |
+| company2@astra.demo | company2@astra.kr |
+| manager1@astra.demo | lab1@astra.kr |
+| manager2@astra.demo | lab2@astra.kr |
+| univ1@astra.demo | univ@astra.kr |
+| pending@astra.demo | pending@astra.kr |
+
+- 비밀번호는 모두 `1234`. 가입·비밀번호 변경 규칙(8자 이상)은 그대로라 시연 계정만 짧음
+- 함께 바꾼 곳: `DemoReservationSeeder`(lab1 기준), 테스트 14개 파일의 이메일, `seed_demo_requests.py`(계정 이름·기본 비밀번호), README·api-spec·frontend-integration·demo-scenario
+- 확인: 전체 테스트 341개 통과 (`AuthFlowTest` 가 6개 계정 `1234` 로그인 200, pending 403 확인)
+- 주의: 이미 떠 있는 서버는 다시 시작해야 V18 이 적용됨. 프론트에 `@astra.demo` 를 쓰는 코드는 없음 (로그인 칸 길이 제한도 없음)
+
+---
+
+## 2026-11-24 · 14번: 프론트 화면 정리 요청 반영
+
+FE 요청 6건. 기존 필드·주소는 그대로 두고 추가만 함. 용어: 장비를 가진 쪽 = "시험기관", 맡기는 쪽 = "기업".
+
+**DB**: `V17__frontend_display_alignment.sql`
+- `equipment.fee_vat_included` 추가. `fee_text` 를 `"12,000원/시간 (부가세 별도)"` / `"협의"` 한 형식으로 (KRW 원문 3대 포함 전부). 원문에 VAT 표시가 없던 장비는 부가세 별도로 둠
+- 금액 없는 장비(71대 중 대부분)는 `협의` + `NEGOTIABLE`, 시연 장비(`is_mock`) 빈 가동률은 25~84% (external_id 해시라 DB 마다 같음)
+- 이미 쌓인 의뢰 제목 `[시연] `, 알림 `[REQ-…] ` 말머리 제거, "장비 보유 조직" → "시험기관"
+
+**API (추가만)**
+- 알림 문구: 의뢰번호 말머리 제거, "시험기관에서 …" (RequestWorkflow·ReviewService·ReservationService·AttachmentService·RequestCommandService)
+- `GET /equipment` 항목: `usage`{accessScope, feeText, feeAmount, feeUnit, vatIncluded, durationText}, `keySpecs`(상세 specs 순서에서 키가 다른 앞 2개), `simulation`{capability, presetIds}. 사양·프리셋은 페이지당 쿼리 1번씩
+- 상세·비교 `usage.vatIncluded`, 장비 등록·수정 입력에 `usage.vatIncluded`. 문구가 없는 장비에 금액·단위만 보내면 서버가 형식대로 만듦 (기존 문구는 PATCH 규칙대로 보낸 경우에만 바뀜)
+- `GET /dashboard/summary`(관리자) `byTestType[]` {code, nameKo, requestCount(DRAFT 제외), equipmentCount}. 의뢰 시험유형 = 현재 제출본 `content.test.testTypeCode`, 없으면 시험조건의 유형
+- `PATCH /users/me/password` → 200, 현재 비밀번호 틀리면 400 `INVALID_PASSWORD`(새 에러 코드), 새 비밀번호 규칙은 가입과 같음
+- 시연 예약 `DemoReservationSeeder`: 서버 시작·매일 0:10 에 manager1 기관 장비 앞 3대에 오늘+2·4·7·10일 예약 4건(확정 2, 제안 2). 처음엔 실제 서비스 흐름으로 만들고 `external_system='ASTRA_DEMO'` 표시, 이후엔 창 밖이면 날짜만 옮김. `ASTRA_DEMO_RESERVATIONS=false` 로 끔 (테스트에서는 꺼 둠)
+- 시연 데이터 스크립트: 의뢰 제목 `[시연]` 말머리 제거
+
+**확인**: 새 테스트 `UserPasswordTest`(3), `DemoReservationSeederTest`(만들기·재실행해도 안 늘어남·지난 예약 옮김), 기존 테스트에 목록 새 필드·이용료 형식·관리자 byTestType·알림 문구 검사 추가. 전체 341개 통과 (`ASTRA_RULES_STRICT=true ./gradlew test`)
+- 주의: 로컬 `.env` 에 `ASTRA_RULES_STRICT=false` 가 있으면 테스트도 그 값을 읽어 필수 검사 테스트 3개(AuthFlowTest 연구자번호, RequestHardeningTest 2개)가 실패함. 테스트는 위처럼 true 로 돌리기
+
+**남은 것·주의**
+- 로컬 DB 에는 아직 V17 미적용 (서버를 띄우면 적용되고 시연 예약 4건이 생김)
+- 비밀번호 변경 후에도 다른 기기의 refresh 토큰은 그대로 (필요하면 변경 시 전부 폐기로 바꿀 수 있음), 횟수 제한 없음 (로그인한 사용자만 호출 가능)
+- FE 공지: 위 API 추가분 (frontend-integration.md 4-1)
+
+**바뀐 파일**: V17, `equipment/`(FeeUnit·Equipment·EquipmentFields·입력·응답 DTO·EquipmentService·JdbcRepository·비교·변경 이력), `dashboard/`, `request/`(알림 문구·시험유형 집계), `reservation/`(DemoReservationSeeder, 엔티티·저장소), `review/`, `user/`(비밀번호 변경), `ErrorCode`, `application.yml`, `.env.example`, 테스트 5개, `docs/api-spec.md`·`frontend-integration.md`·`design/schema.sql`·`tools/seed_demo_requests.py`, 이 파일
 
 ---
 

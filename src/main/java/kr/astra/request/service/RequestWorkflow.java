@@ -212,20 +212,19 @@ public class RequestWorkflow {
     // ------------------------------------------------------------ 알림 (api-spec §13)
 
     private void notifyFor(TestRequest request, RequestAction action, CurrentUser actor) {
-        String no = "[" + request.getRequestNo() + "] ";
         switch (action) {
             case SUBMIT -> notifyInstitution(request, NotificationType.REQUEST_SUBMITTED,
-                    no + "새 시험 의뢰가 접수되었습니다: " + request.getTitle());
+                    "새 시험 의뢰가 접수되었습니다: " + request.getTitle());
             case RESPOND_SUPPLEMENT -> notifyInstitution(request, NotificationType.REQUEST_RESUBMITTED,
-                    no + "보완 자료가 제출되었습니다: " + request.getTitle());
+                    "보완 자료가 제출되었습니다: " + request.getTitle());
             case REQUEST_SUPPLEMENT -> notifyRequester(request, NotificationType.SUPPLEMENT_REQUESTED,
-                    no + "장비 보유 조직에서 보완을 요청했습니다.");
+                    "시험기관에서 보완을 요청했습니다.");
             case ACCEPT -> notifyRequester(request, NotificationType.REQUEST_ACCEPTED,
-                    no + "기술 검토를 통과했습니다. 일정을 협의해 주세요.");
+                    "기술 검토를 통과했습니다. 일정을 협의해 주세요.");
             case REJECT -> notifyRequester(request, NotificationType.REQUEST_REJECTED,
-                    no + "의뢰가 반려되었습니다.");
+                    "의뢰가 반려되었습니다.");
             case CONFIRM_RESERVATION -> notifyRequester(request, NotificationType.RESERVATION_CONFIRMED,
-                    no + "시험 일정이 확정되었습니다.");
+                    "시험 일정이 확정되었습니다.");
             default -> {
                 // START_REVIEW, COMPLETE, CANCEL: §13 에 알림 없음
             }

@@ -105,7 +105,7 @@ public final class EquipmentManageResponses {
                             Availability availability, VerificationStatus verificationStatus,
                             OffsetDateTime infoUpdatedAt, TestTypeEstimate testTypeEstimate,
                             Integer leadTimeDays, kr.astra.equipment.entity.OperationMode operationMode,
-                            boolean availabilityNeedsConfirmation) {
+                            boolean availabilityNeedsConfirmation, Boolean vatIncluded) {
         }
 
         /** 그 시험의 예상 비용(원)·소요일 (equipment_test_types) */

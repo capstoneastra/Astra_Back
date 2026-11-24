@@ -46,7 +46,7 @@ class DashboardSearchApiTest {
 
     @Test
     void 장비_통계는_지역_유형_시험유형_기관별_수를_준다() throws Exception {
-        Res res = api.get("/api/v1/dashboard/equipment-stats", token("company@astra.demo", UserRole.COMPANY_USER));
+        Res res = api.get("/api/v1/dashboard/equipment-stats", token("company@astra.kr", UserRole.COMPANY_USER));
         assertThat(res.status()).isEqualTo(200);
         JsonNode d = res.data();
         assertThat(d.path("total").asLong()).isEqualTo(activeEquipment());
@@ -75,7 +75,7 @@ class DashboardSearchApiTest {
 
     @Test
     void 기업_요약은_의뢰_상태_10개를_0으로_채우고_연결_안_된_데이터를_알려준다() throws Exception {
-        JsonNode d = api.get("/api/v1/dashboard/summary", token("company@astra.demo", UserRole.COMPANY_USER)).data();
+        JsonNode d = api.get("/api/v1/dashboard/summary", token("company@astra.kr", UserRole.COMPANY_USER)).data();
         assertThat(d.path("role").asString()).isEqualTo("COMPANY_USER");
         assertThat(d.path("requestCounts").size()).isEqualTo(10);
         assertThat(d.path("requestCounts").path("SUPPLEMENT_REQUESTED").asLong()).isZero();
@@ -89,8 +89,8 @@ class DashboardSearchApiTest {
 
     @Test
     void view_로_의뢰자_화면과_장비_보유_조직_화면을_고른다() throws Exception {
-        String company = token("company@astra.demo", UserRole.COMPANY_USER);
-        String manager1 = token("manager1@astra.demo", UserRole.INSTITUTION_MANAGER);
+        String company = token("company@astra.kr", UserRole.COMPANY_USER);
+        String manager1 = token("lab1@astra.kr", UserRole.INSTITUTION_MANAGER);
 
         // 안 보내면 가입 유형 기본 화면
         assertThat(api.get("/api/v1/dashboard/summary", company).data().path("view").asString()).isEqualTo("REQUESTER");
@@ -116,7 +116,7 @@ class DashboardSearchApiTest {
         assertThat(requester.has("institution")).isFalse();
 
         // 관리자는 view 와 무관하게 관리자 요약
-        JsonNode admin = api.get("/api/v1/dashboard/summary?view=REQUESTER", token("admin@astra.demo", UserRole.ADMIN))
+        JsonNode admin = api.get("/api/v1/dashboard/summary?view=REQUESTER", token("admin@astra.kr", UserRole.ADMIN))
                 .data();
         assertThat(admin.path("view").asString()).isEqualTo("ADMIN");
         assertThat(admin.has("pendingUsers")).isTrue();
@@ -125,7 +125,7 @@ class DashboardSearchApiTest {
 
     @Test
     void 기관_요약은_소속_기관과_갱신_필요_장비_수를_준다() throws Exception {
-        JsonNode d = api.get("/api/v1/dashboard/summary", token("manager1@astra.demo", UserRole.INSTITUTION_MANAGER))
+        JsonNode d = api.get("/api/v1/dashboard/summary", token("lab1@astra.kr", UserRole.INSTITUTION_MANAGER))
                 .data();
         assertThat(d.path("role").asString()).isEqualTo("INSTITUTION_MANAGER");
         assertThat(d.path("institution").path("id").asLong()).isEqualTo(2);
@@ -141,15 +141,34 @@ class DashboardSearchApiTest {
 
     @Test
     void 관리자_요약은_승인_대기_수와_기관별_확인_비율을_준다() throws Exception {
-        JsonNode d = api.get("/api/v1/dashboard/summary", token("admin@astra.demo", UserRole.ADMIN)).data();
+        JsonNode d = api.get("/api/v1/dashboard/summary", token("admin@astra.kr", UserRole.ADMIN)).data();
         assertThat(d.path("role").asString()).isEqualTo("ADMIN");
         long pending = jdbc.queryForObject("SELECT count(*) FROM users WHERE status = 'PENDING'", Long.class);
-        assertThat(d.path("pendingUsers").asLong()).isEqualTo(pending).isGreaterThanOrEqualTo(1); // pending@astra.demo
+        assertThat(d.path("pendingUsers").asLong()).isEqualTo(pending).isGreaterThanOrEqualTo(1); // pending@astra.kr
         assertThat(d.path("pendingInstitutions").asLong()).isEqualTo(jdbc.queryForObject(
                 "SELECT count(*) FROM organizations WHERE org_type IN ('INSTITUTION', 'UNIVERSITY') AND NOT is_verified",
                 Long.class));
         assertThat(d.path("requestCounts").size()).isEqualTo(10);
         assertThat(d.path("institutionVerification").size()).isEqualTo(equipmentOwners());
+        // 시험유형별 수요(작성 중 뺀 의뢰)·공급(활성 장비): 15개 전부
+        JsonNode byTestType = d.path("byTestType");
+        assertThat(byTestType.size()).isEqualTo(15);
+        JsonNode vibration = null;
+        for (JsonNode t : byTestType) {
+            if (t.path("code").asString().equals("VIBRATION")) {
+                vibration = t;
+            }
+        }
+        assertThat(vibration).isNotNull();
+        assertThat(vibration.path("nameKo").asString()).isEqualTo(jdbc.queryForObject(
+                "SELECT name_ko FROM test_types WHERE code = 'VIBRATION'", String.class));
+        assertThat(vibration.path("equipmentCount").asLong()).isEqualTo(jdbc.queryForObject("""
+                SELECT count(*) FROM equipment_test_types t JOIN equipment e ON e.id = t.equipment_id
+                WHERE e.is_active AND t.test_type_code = 'VIBRATION'""", Long.class)).isPositive();
+        assertThat(vibration.path("requestCount").asLong()).isEqualTo(jdbc.queryForObject("""
+                SELECT count(*) FROM test_requests r
+                JOIN test_request_revisions v ON v.request_id = r.id AND v.revision_no = r.current_revision_no
+                WHERE r.status <> 'DRAFT' AND v.content -> 'test' ->> 'testTypeCode' = 'VIBRATION'""", Long.class));
         assertThat(api.get("/api/v1/dashboard/summary", null).code()).isEqualTo("AUTH_REQUIRED");
     }
 
@@ -189,7 +208,7 @@ class DashboardSearchApiTest {
         assertThat(externalIds(res)).contains("ASTRA-CAND-0048");
 
         assertThat(search(" ").code()).isEqualTo("VALIDATION_FAILED");
-        assertThat(api.get("/api/v1/search", token("company@astra.demo", UserRole.COMPANY_USER)).code())
+        assertThat(api.get("/api/v1/search", token("company@astra.kr", UserRole.COMPANY_USER)).code())
                 .isEqualTo("VALIDATION_FAILED");
     }
 
@@ -197,7 +216,7 @@ class DashboardSearchApiTest {
 
     private Res search(String q) throws Exception {
         return api.get("/api/v1/search?q=" + URLEncoder.encode(q, StandardCharsets.UTF_8),
-                token("company@astra.demo", UserRole.COMPANY_USER));
+                token("company@astra.kr", UserRole.COMPANY_USER));
     }
 
     private String token(String email, UserRole role) {

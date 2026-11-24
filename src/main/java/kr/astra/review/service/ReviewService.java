@@ -113,7 +113,7 @@ public class ReviewService {
         }
         workflow.transition(request, RequestAction.REQUEST_SUPPLEMENT, actor, message,
                 kind == SupplementKind.ADDITIONAL_INFO
-                        ? "[" + request.getRequestNo() + "] 장비 보유 조직에서 추가 정보(책임자명·성적서 종류·시료 처리·청구 방법)를 요청했습니다."
+                        ? "시험기관에서 추가 정보(책임자명·성적서 종류·시료 처리·청구 방법)를 요청했습니다."
                         : null);
         return new SupplementCreated(view(supplement, views.people(List.of(actor.userId()))),
                 RequestWorkflow.result(request));

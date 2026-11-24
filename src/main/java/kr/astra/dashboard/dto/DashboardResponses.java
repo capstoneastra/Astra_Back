@@ -93,9 +93,22 @@ public final class DashboardResponses {
     public record NeedsUpdate(long total, long notConfirmed, long outdated) {
     }
 
-    /** ADMIN: 승인 대기 회원·기관 수, 전체 의뢰 상태별 수, 기관별 장비 확인 비율, 장비 요약 */
+    /**
+     * ADMIN: 승인 대기 회원·기관 수, 전체 의뢰 상태별 수, 기관별 장비 확인 비율, 장비 요약,
+     * 시험유형별 수요(의뢰)·공급(장비) 비교
+     */
     public record AdminSummary(UserRole role, DashboardView view, long pendingUsers, long pendingInstitutions,
                                Map<RequestStatus, Long> requestCounts, List<InstitutionStat> institutionVerification,
-                               EquipmentOverview equipmentStats, DataAvailable dataAvailable) implements Summary {
+                               EquipmentOverview equipmentStats, DataAvailable dataAvailable,
+                               List<TestTypeDemand> byTestType) implements Summary {
+    }
+
+    /**
+     * 시험유형 하나의 수요·공급 (관리자 대시보드)
+     *
+     * @param requestCount   작성 중(DRAFT)을 뺀 의뢰 수
+     * @param equipmentCount 그 시험을 할 수 있는 활성 장비 수
+     */
+    public record TestTypeDemand(String code, String nameKo, long requestCount, long equipmentCount) {
     }
 }

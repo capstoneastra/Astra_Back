@@ -244,6 +244,23 @@ public class UserService {
         return UserMeResponse.of(user, organizationService.findSummary(user.getOrganizationId()).orElse(null));
     }
 
+    /**
+     * PATCH /users/me/password. 현재 비밀번호가 틀리면 400 INVALID_PASSWORD.
+     * 새 비밀번호 규칙(8~72자, 72바이트 이하)은 요청 DTO 에서 회원가입과 같게 검사합니다.
+     */
+    @Transactional
+    public void changePassword(Long userId, String currentPassword, String newPassword) {
+        User user = findUser(userId);
+        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            throw new BusinessException(ErrorCode.INVALID_PASSWORD, Map.of("field", "currentPassword"));
+        }
+        if (!PasswordPolicy.withinBcryptLimit(newPassword)) {
+            throw BusinessException.invalidField("newPassword", PasswordPolicy.TOO_LONG_MESSAGE);
+        }
+        user.changePassword(passwordEncoder.encode(newPassword));
+        userRepository.flush();
+    }
+
     private User findUser(Long userId) {
         // 토큰은 유효한데 사용자가 없는 경우(삭제 등)는 다시 로그인하게 함
         return userRepository.findById(userId).orElseThrow(() -> new BusinessException(ErrorCode.AUTH_REQUIRED));

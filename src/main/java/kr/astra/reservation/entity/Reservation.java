@@ -95,4 +95,16 @@ public class Reservation extends BaseTimeEntity {
     public void cancel() {
         this.status = ReservationStatus.CANCELED;
     }
+
+    /** 시연 일정 표시 (external_system 에 표시해 서버가 다시 시작할 때 찾아 날짜를 옮김) */
+    public void markDemo(String system, String ref) {
+        this.externalSystem = system;
+        this.externalRef = ref;
+    }
+
+    /** 시연 일정을 오늘 기준 날짜로 옮김 (일반 기능에서는 쓰지 않음: 일정 변경은 대안 제안으로) */
+    public void moveDemo(OffsetDateTime startAt, OffsetDateTime endAt) {
+        this.startAt = startAt;
+        this.endAt = endAt;
+    }
 }

@@ -12,7 +12,7 @@
 | 백엔드 `.env` | `CORS_ALLOWED_ORIGINS` | 프론트 주소. 여러 개면 쉼표 (예: `https://astra-team-preview-hw1122.almondteal65.chatgpt.site`) |
 | 백엔드 `.env` | `ASTRA_RULES_STRICT` | 아래 3곳을 고치기 전까지만 `false`. 고치면 지우기(기본 `true`) |
 
-시연 계정 비밀번호는 모두 `12345678` 입니다: `company@astra.demo`(기업), `manager1@astra.demo`(기관, 장비 48), `manager2@astra.demo`(기관, 장비 44), `company2@astra.demo`(장비 가진 기업), `univ1@astra.demo`(대학), `admin@astra.demo`(관리자), `pending@astra.demo`(승인 대기).
+시연 계정 비밀번호는 모두 `1234` 입니다: `company@astra.kr`(기업), `lab1@astra.kr`(기관, 장비 48), `lab2@astra.kr`(기관, 장비 44), `company2@astra.kr`(장비 가진 기업), `univ@astra.kr`(대학), `admin@astra.kr`(관리자), `pending@astra.kr`(승인 대기).
 
 새 DB 로 서버를 띄운 뒤 `python docs/tools/seed_demo_requests.py --base http://서버주소:8080` 를 한 번 실행하면, 여러 상태의 의뢰(작성 중·검토 중·추가 정보 요청·일정 확정·완료·반려 등)가 미리 생겨 화면이 비어 보이지 않습니다.
 
@@ -52,6 +52,19 @@
 - AI 상담 답변 메타데이터 `suggestedEquipmentIds`: 상담 AI 가 소개한 우리 DB 장비 id 목록. 답변 아래에 장비 카드로 보여 주면 좋음
 - AI 요청이 429 `TOO_MANY_REQUESTS` 를 줄 수 있음 (AI 서비스 한도 초과). 502 처럼 "잠시 후 다시 시도" 안내
 - 동시에 고치면 409 `VERSION_CONFLICT` → "다른 사람이 먼저 바꿨습니다, 새로고침" 안내
+
+## 4-1. 화면 정리 요청 반영 (2026-11-24)
+
+기존 필드·주소는 그대로이고 추가만 했습니다. 자세한 모양은 api-spec 의 해당 절.
+
+| 요청 | 반영 | api-spec |
+|---|---|---|
+| 데모 문구 | 의뢰 제목 `[시연]` 말머리 없음(데모 여부는 장비 `isMock`), 알림 제목에 `[REQ-…]` 없음(`relatedRequestId` 로 연결), "장비 보유 조직" → "시험기관". 이미 쌓인 데이터도 V17 이 고침 | §13 |
+| 이용료 형식 | `feeText` 가 모두 `"12,000원/시간 (부가세 별도)"` 또는 `"협의"`. `usage.feeAmount`·`feeUnit`·`vatIncluded`(새 필드) 채움 ("협의"면 금액·부가세 null, 단위 NEGOTIABLE) | §2 |
+| 관리자 대시보드 | `GET /dashboard/summary`(관리자)에 `byTestType[]` { code, nameKo, requestCount(작성 중 제외), equipmentCount } | §10 |
+| 비밀번호 변경 | `PATCH /users/me/password` { currentPassword, newPassword } → 200, 틀리면 400 `INVALID_PASSWORD` | §1 |
+| 데모 예약 | 서버가 뜰 때(그리고 매일 0시 10분) lab1 기관 장비 3대에 **오늘부터 14일 안** 예약 4건(확정 2·제안 2)을 맞춤. 날짜가 지나면 자동으로 옮김. 끄기: `ASTRA_DEMO_RESERVATIONS=false` | §7 아래 참고 |
+| 장비 목록 | `GET /equipment` 항목에 `usage`{accessScope, feeText, feeAmount, feeUnit, vatIncluded, durationText}, `keySpecs`(주요 사양 2개), `simulation`{capability, presetIds}. 시연 장비 `utilizationRate` 모두 채움 | §2 |
 
 ## 5. 순서 추천
 

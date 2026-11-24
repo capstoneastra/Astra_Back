@@ -79,7 +79,7 @@ public class AttachmentService {
                 fileName, key, file.getContentType(), file.getSize(), actor.userId(), kind));
         if (kind == AttachmentCategory.RESULT_REPORT) {
             workflow.notifyRequester(request, NotificationType.RESULT_REGISTERED,
-                    "[" + request.getRequestNo() + "] 시험 성적서 파일이 올라왔습니다: " + fileName);
+                    "시험 성적서 파일이 올라왔습니다: " + fileName);
         }
         return view(saved, views.people(List.of(actor.userId())));
     }

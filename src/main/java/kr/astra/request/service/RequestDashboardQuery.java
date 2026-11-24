@@ -24,6 +24,11 @@ public interface RequestDashboardQuery {
     /** 전체 의뢰의 상태별 개수 (관리자) */
     Map<RequestStatus, Long> countAll();
 
+    /** 작성 중(DRAFT)을 뺀 전체 의뢰의 시험유형 코드별 개수 (관리자, 시험유형을 알 수 없는 의뢰는 빠짐) */
+    default Map<String, Long> countByTestType() {
+        return Map.of();
+    }
+
     /**
      * 기업 회원이 지금 처리해야 할 의뢰 (예: SUPPLEMENT_REQUESTED 보완 요청, 기한 빠른 순)
      *

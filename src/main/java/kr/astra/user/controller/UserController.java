@@ -6,6 +6,7 @@ import jakarta.validation.Valid;
 import kr.astra.global.response.ApiResponse;
 import kr.astra.global.security.AccessGuard;
 import kr.astra.global.security.CurrentUser;
+import kr.astra.user.dto.PasswordChangeRequest;
 import kr.astra.user.dto.UserMeResponse;
 import kr.astra.user.dto.UserUpdateRequest;
 import kr.astra.user.service.UserService;
@@ -36,5 +37,15 @@ public class UserController {
     public ApiResponse<UserMeResponse> updateMe(@AuthenticationPrincipal CurrentUser user,
                                                 @Valid @RequestBody UserUpdateRequest request) {
         return ApiResponse.ok(userService.updateMe(AccessGuard.requireLogin(user).userId(), request));
+    }
+
+    @Operation(summary = "비밀번호 변경", description = "현재 비밀번호가 틀리면 400 INVALID_PASSWORD. "
+            + "새 비밀번호 규칙은 회원가입과 같음(8~72자, 72바이트 이하). 성공하면 data 없이 200")
+    @PatchMapping("/me/password")
+    public ApiResponse<Void> changePassword(@AuthenticationPrincipal CurrentUser user,
+                                            @Valid @RequestBody PasswordChangeRequest request) {
+        userService.changePassword(AccessGuard.requireLogin(user).userId(), request.currentPassword(),
+                request.newPassword());
+        return ApiResponse.ok();
     }
 }

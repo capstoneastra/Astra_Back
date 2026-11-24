@@ -37,6 +37,9 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
     boolean existsByRequestIdAndStatus(Long requestId, ReservationStatus status);
 
+    /** 시연 일정 찾기 (같은 표시가 여러 개면 가장 최근 것) */
+    Optional<Reservation> findFirstByExternalSystemAndExternalRefOrderByIdDesc(String externalSystem, String externalRef);
+
     /** 장비 달력: [from, to) 와 겹치는 확정 구간 */
     @Query("""
             SELECT r FROM Reservation r

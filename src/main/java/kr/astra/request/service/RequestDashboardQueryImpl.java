@@ -56,6 +56,17 @@ public class RequestDashboardQueryImpl implements RequestDashboardQuery {
         return toMap(requestRepository.countStatusAll());
     }
 
+    @Override
+    public Map<String, Long> countByTestType() {
+        Map<String, Long> counts = new java.util.HashMap<>();
+        for (Object[] row : requestRepository.countNonDraftByTestType()) {
+            if (row[0] != null) {
+                counts.put((String) row[0], ((Number) row[1]).longValue());
+            }
+        }
+        return counts;
+    }
+
     /** 보완 요청(기한 빠른 순) → 일정 협의 → 작성 중 순서, 같은 묶음은 최근 수정 순 */
     @Override
     public List<RequestActionItem> findActionRequired(Long requesterId, int limit) {

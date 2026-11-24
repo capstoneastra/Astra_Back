@@ -844,19 +844,19 @@ docker compose -f compose.prod.yaml down              # 중지 (DB 데이터 유
 
 ### 시연 계정
 
-`/auth/**`(로그아웃 제외), Swagger, 헬스체크 외에는 모두 로그인이 필요합니다. 시연 계정 비밀번호는 모두 **`12345678`** 입니다 (V9, 시연 전용 계정이라 공개해도 되는 값). 실제 운영 계정에는 쓰지 마세요.
+`/auth/**`(로그아웃 제외), Swagger, 헬스체크 외에는 모두 로그인이 필요합니다. 시연 계정 비밀번호는 모두 **`1234`** 입니다 (V18 에서 이메일 `@astra.kr`·비밀번호 변경, 시연 전용 계정이라 공개해도 되는 값). 실제 운영 계정에는 쓰지 마세요.
 
 | 이메일 | 역할 | 소속 | 상태 |
 |---|---|---|---|
-| `admin@astra.demo` | ADMIN | ASTRA 플랫폼 운영 | ACTIVE |
-| `company@astra.demo` | COMPANY_USER | 가상 A기업 | ACTIVE |
-| `company2@astra.demo` | COMPANY_USER | 미르항공정밀 (장비 44대 보유 기업) | ACTIVE |
-| `manager1@astra.demo` | INSTITUTION_MANAGER | 미리내우주환경시험센터 (기관, 장비 48 보유) | ACTIVE |
-| `manager2@astra.demo` | INSTITUTION_MANAGER | 다온신뢰성시험센터 (기관) | ACTIVE |
-| `univ1@astra.demo` | INSTITUTION_MANAGER | 늘해랑대학교 항공우주공동기기원 (대학, 장비 55대) | ACTIVE |
-| `pending@astra.demo` | INSTITUTION_MANAGER | 가람재료시험연구원 (기관) | PENDING (로그인 시 403, 승인 시연용) |
+| `admin@astra.kr` | ADMIN | ASTRA 플랫폼 운영 | ACTIVE |
+| `company@astra.kr` | COMPANY_USER | 가상 A기업 | ACTIVE |
+| `company2@astra.kr` | COMPANY_USER | 미르항공정밀 (장비 44대 보유 기업) | ACTIVE |
+| `lab1@astra.kr` | INSTITUTION_MANAGER | 미리내우주환경시험센터 (기관, 장비 48 보유) | ACTIVE |
+| `lab2@astra.kr` | INSTITUTION_MANAGER | 다온신뢰성시험센터 (기관) | ACTIVE |
+| `univ@astra.kr` | INSTITUTION_MANAGER | 늘해랑대학교 항공우주공동기기원 (대학, 장비 55대) | ACTIVE |
+| `pending@astra.kr` | INSTITUTION_MANAGER | 가람재료시험연구원 (기관) | PENDING (로그인 시 403, 승인 시연용) |
 
-조직 이름은 모두 가상입니다. `company`(장비 없이 의뢰만 하는 기업)와 `company2`·`univ1`로 기업 ↔ 대학 ↔ 기관 사이의 의뢰를 시연할 수 있습니다.
+조직 이름은 모두 가상입니다. `company`(장비 없이 의뢰만 하는 기업)와 `company2`·`univ`로 기업 ↔ 대학 ↔ 기관 사이의 의뢰를 시연할 수 있습니다.
 
 Swagger에서 호출하기: `POST /api/v1/auth/login`으로 로그인 → 응답의 `accessToken`을 복사 → 오른쪽 위 **Authorize**에 붙여넣기.
 

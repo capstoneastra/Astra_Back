@@ -21,6 +21,7 @@ import kr.astra.dashboard.dto.DashboardResponses.InstitutionSummary;
 import kr.astra.dashboard.dto.DashboardResponses.NeedsUpdate;
 import kr.astra.dashboard.dto.DashboardResponses.Summary;
 import kr.astra.dashboard.dto.DashboardResponses.TestTypeCount;
+import kr.astra.dashboard.dto.DashboardResponses.TestTypeDemand;
 import kr.astra.dashboard.dto.DashboardView;
 import kr.astra.equipment.entity.Equipment;
 import kr.astra.equipment.repository.EquipmentJdbcRepository.InstitutionVerificationRow;
@@ -128,7 +129,17 @@ public class DashboardService {
                 organizationService.countUnverifiedInstitutions(),
                 counts(requests == null ? null : requests::countAll),
                 institutionStats(rows), new EquipmentOverview(total(rows), byRegion()),
-                new DataAvailable(requests != null, null));
+                new DataAvailable(requests != null, null), testTypeDemand(requests));
+    }
+
+    /** 시험유형 15개 전부(표시 순서), 의뢰·장비가 없으면 0 */
+    private List<TestTypeDemand> testTypeDemand(RequestDashboardQuery requests) {
+        Map<String, Long> requestCounts = requests == null ? Map.of() : requests.countByTestType();
+        Map<String, Long> equipmentCounts = equipmentService.countByTestType();
+        return testTypeService.findAllOrdered().stream()
+                .map(t -> new TestTypeDemand(t.getCode(), t.getNameKo(), requestCounts.getOrDefault(t.getCode(), 0L),
+                        equipmentCounts.getOrDefault(t.getCode(), 0L)))
+                .toList();
     }
 
     /** 의뢰 상태 10개를 모두 넣고 없는 상태는 0 (구현이 없으면 전부 0) */

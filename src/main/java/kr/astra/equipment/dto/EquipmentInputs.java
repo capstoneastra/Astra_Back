@@ -35,10 +35,18 @@ public final class EquipmentInputs {
             Availability availability,
             @Size(max = 500) String availabilityNote,
             @Min(0) Integer leadTimeDays,
-            kr.astra.equipment.entity.OperationMode operationMode) {
+            kr.astra.equipment.entity.OperationMode operationMode,
+            Boolean vatIncluded) {
         public UsageInput(AccessScope scope, String text, Integer amount, FeeUnit unit, String duration,
                           BigDecimal rate, Availability availability) {
-            this(scope, text, amount, unit, duration, rate, availability, null, null, null);
+            this(scope, text, amount, unit, duration, rate, availability, null, null, null, null);
+        }
+
+        public UsageInput(AccessScope scope, String text, Integer amount, FeeUnit unit, String duration,
+                          BigDecimal rate, Availability availability, String availabilityNote, Integer leadTimeDays,
+                          kr.astra.equipment.entity.OperationMode operationMode) {
+            this(scope, text, amount, unit, duration, rate, availability, availabilityNote, leadTimeDays,
+                    operationMode, null);
         }
     }
 
@@ -95,7 +103,7 @@ public final class EquipmentInputs {
             UsageInput u = usage == null ? new UsageInput(null, null, null, null, null, null, null) : usage;
             return new EquipmentFields(name.trim(), model, manufacturer, category, equipmentType, region, description,
                     imageUrl, u.accessScope(), u.feeText(), u.feeAmount(), u.feeUnit(), u.durationText(),
-                    u.utilizationRate(), u.availability());
+                    u.utilizationRate(), u.availability(), u.vatIncluded());
         }
     }
 
@@ -116,7 +124,7 @@ public final class EquipmentInputs {
             UsageInput u = usage == null ? new UsageInput(null, null, null, null, null, null, null) : usage;
             return new EquipmentFields(name == null ? null : name.trim(), model, manufacturer, category, equipmentType,
                     region, description, imageUrl, u.accessScope(), u.feeText(), u.feeAmount(), u.feeUnit(),
-                    u.durationText(), u.utilizationRate(), u.availability());
+                    u.durationText(), u.utilizationRate(), u.availability(), u.vatIncluded());
         }
     }
 

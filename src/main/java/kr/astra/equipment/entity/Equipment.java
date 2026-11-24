@@ -79,6 +79,10 @@ public class Equipment extends BaseTimeEntity {
     @Column(name = "fee_unit", length = 20)
     private FeeUnit feeUnit;
 
+    /** 이용료 부가세 포함 여부 (V17). 금액이 없는 '협의' 장비는 null */
+    @Column(name = "fee_vat_included")
+    private Boolean feeVatIncluded;
+
     @Column(name = "duration_text", length = 200)
     private String durationText;
 
@@ -215,6 +219,13 @@ public class Equipment extends BaseTimeEntity {
         if (f.feeText() != null) feeText = f.feeText();
         if (f.feeAmount() != null) feeAmount = f.feeAmount();
         if (f.feeUnit() != null) feeUnit = f.feeUnit();
+        if (f.feeVatIncluded() != null) feeVatIncluded = f.feeVatIncluded();
+        // 문구가 아직 없는 장비에 금액·단위·부가세만 보내면 서버가 "금액원/단위 (부가세 별도)" 형식으로 만듦
+        // (이미 있는 문구는 PATCH 규칙대로 보낸 경우에만 바뀜)
+        if ((feeText == null || feeText.isBlank())
+                && (f.feeAmount() != null || f.feeUnit() != null || f.feeVatIncluded() != null)) {
+            feeText = FeeUnit.format(feeAmount, feeUnit, feeVatIncluded);
+        }
         if (f.durationText() != null) durationText = f.durationText();
         if (f.utilizationRate() != null) utilizationRate = f.utilizationRate();
         if (f.availability() != null) availability = f.availability();

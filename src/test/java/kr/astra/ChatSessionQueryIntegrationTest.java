@@ -42,7 +42,7 @@ class ChatSessionQueryIntegrationTest {
     private final OffsetDateTime past = OffsetDateTime.parse("2020-01-01T00:00:00Z");
 
     @BeforeEach void login() {
-        Long id = jdbc.queryForObject("select id from users where email = 'company@astra.demo'", Long.class);
+        Long id = jdbc.queryForObject("select id from users where email = 'company@astra.kr'", Long.class);
         owner = new CurrentUser(id, UserRole.COMPANY_USER, null);
         SecurityContextHolder.getContext().setAuthentication(
                 UsernamePasswordAuthenticationToken.authenticated(owner, null, List.of()));
@@ -59,7 +59,7 @@ class ChatSessionQueryIntegrationTest {
         }
         // 생성은 가장 오래된 상담이지만 활동은 가장 최근이어야 합니다.
         sessions.recordActivity(ids.getFirst(), past.plusDays(1));
-        Long otherId = jdbc.queryForObject("select id from users where email = 'admin@astra.demo'", Long.class);
+        Long otherId = jdbc.queryForObject("select id from users where email = 'admin@astra.kr'", Long.class);
         chats.create(new CurrentUser(otherId, UserRole.ADMIN, null), "다른 사용자 상담");
         entityManager.clear();
 

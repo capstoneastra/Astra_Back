@@ -52,7 +52,8 @@ public record EquipmentDetailResponse(
                 e.isMock(), e.getInfoUpdatedAt(), e.getManufacturer(), e.getCategory(), e.getDescription(),
                 new Usage(e.getAccessScope(), e.getFeeText(), e.getFeeAmount(), e.getFeeUnit(), e.getDurationText(),
                         e.getUtilizationRate(), e.getAvailability(), e.getAvailabilityUpdatedAt(), e.getAvailabilityUpdatedBy(),
-                        e.getAvailabilityNote(), e.availabilityNeedsConfirmation(OffsetDateTime.now()), e.getLeadTimeDays(), e.getOperationMode()),
+                        e.getAvailabilityNote(), e.availabilityNeedsConfirmation(OffsetDateTime.now()), e.getLeadTimeDays(), e.getOperationMode(),
+                        e.getFeeVatIncluded()),
                 specs,
                 new Source(e.getSourceType(), e.getSourceUrl(), e.getSourceFile(), e.getSourcePage()),
                 new Simulation(e.getSimulationCapability(), presetIds));
@@ -62,7 +63,8 @@ public record EquipmentDetailResponse(
     public record Usage(AccessScope accessScope, String feeText, Integer feeAmount, FeeUnit feeUnit,
                         String durationText, BigDecimal utilizationRate, Availability availability,
                         OffsetDateTime availabilityUpdatedAt, Long availabilityUpdatedBy, String availabilityNote,
-                        boolean availabilityNeedsConfirmation, Integer leadTimeDays, kr.astra.equipment.entity.OperationMode operationMode) {
+                        boolean availabilityNeedsConfirmation, Integer leadTimeDays, kr.astra.equipment.entity.OperationMode operationMode,
+                        Boolean vatIncluded) {
     }
 
     /**
