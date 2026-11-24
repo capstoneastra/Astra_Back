@@ -397,6 +397,7 @@ public class EquipmentCommandService {
         m.put("feeText", e.getFeeText());
         m.put("feeAmount", e.getFeeAmount());
         m.put("feeUnit", name(e.getFeeUnit()));
+        m.put("vatIncluded", e.getFeeVatIncluded());
         m.put("durationText", e.getDurationText());
         m.put("utilizationRate", e.getUtilizationRate());
         m.put("availability", name(e.getAvailability()));

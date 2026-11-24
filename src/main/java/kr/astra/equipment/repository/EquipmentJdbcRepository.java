@@ -378,6 +378,20 @@ public class EquipmentJdbcRepository {
      * 장비의 시뮬레이션 프리셋 id (GET /equipment/{id} 의 simulation.presetIds).
      * simulation_presets 는 BE-B 테이블이라 읽기만 합니다. BE-B 서비스가 생기면 그쪽 호출로 바꿀 것.
      */
+    /** 장비 id → 시뮬레이션 프리셋 id 목록 (목록 화면용, 쿼리 1번) */
+    public Map<Long, List<String>> findPresetIds(java.util.Collection<Long> equipmentIds) {
+        Map<Long, List<String>> result = new java.util.HashMap<>();
+        if (equipmentIds.isEmpty()) {
+            return result;
+        }
+        jdbc.query("SELECT equipment_id, preset_id FROM simulation_presets WHERE equipment_id IN (:ids) ORDER BY preset_id",
+                Map.of("ids", equipmentIds), rs -> {
+                    result.computeIfAbsent(rs.getLong("equipment_id"), k -> new java.util.ArrayList<>())
+                            .add(rs.getString("preset_id"));
+                });
+        return result;
+    }
+
     public List<String> findPresetIds(Long equipmentId) {
         return jdbc.queryForList("SELECT preset_id FROM simulation_presets WHERE equipment_id = :id ORDER BY preset_id",
                 Map.of("id", equipmentId), String.class);

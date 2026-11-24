@@ -143,9 +143,10 @@ CREATE TABLE equipment (
     image_url         VARCHAR(500),
     -- 이용 조건
     access_scope      VARCHAR(30)  CHECK (access_scope IN ('EXTERNAL_ALLOWED','INTERNAL_ONLY','UNKNOWN')),
-    fee_text          VARCHAR(200),                       -- 원문 그대로 '12000 KRW/hour VAT excluded'
+    fee_text          VARCHAR(200),                       -- V17 부터 '12,000원/시간 (부가세 별도)' 또는 '협의' (V2 원문은 '12000 KRW/hour VAT excluded')
     fee_amount        INT,                                -- 파싱된 숫자(원)
     fee_unit          VARCHAR(20)  CHECK (fee_unit IN ('HOUR','DAY','CASE','SAMPLE','NEGOTIABLE')),
+    fee_vat_included  BOOLEAN,                            -- V17 이용료 부가세 포함 여부 ('협의'면 NULL)
     duration_text     VARCHAR(200),
     utilization_rate  NUMERIC(5,2),                       -- 가동률 %
     availability      VARCHAR(20)  NOT NULL DEFAULT 'UNKNOWN' CHECK (availability IN ('AVAILABLE','BUSY','MAINTENANCE','UNAVAILABLE','UNKNOWN')),

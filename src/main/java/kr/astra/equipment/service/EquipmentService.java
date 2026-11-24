@@ -107,10 +107,28 @@ public class EquipmentService {
         Map<Long, String> names = institutionNames(byId.values().stream().map(Equipment::getInstitutionId)
                 .collect(Collectors.toSet()));
         Map<Long, List<String>> testTypes = testTypeCodes(ids);
+        Map<Long, List<EquipmentDetailResponse.Spec>> keySpecs = keySpecs(ids);
+        Map<Long, List<String>> presets = jdbcRepository.findPresetIds(ids);
         return ids.stream().filter(byId::containsKey).map(byId::get)
                 .map(e -> EquipmentSummaryResponse.of(e, names.get(e.getInstitutionId()),
-                        testTypes.getOrDefault(e.getId(), List.of())))
+                        testTypes.getOrDefault(e.getId(), List.of()), keySpecs.getOrDefault(e.getId(), List.of()),
+                        presets.getOrDefault(e.getId(), List.of())))
                 .toList();
+    }
+
+    /** 장비 id → 주요 사양 (상세 specs 순서에서 키가 다른 앞 2개). 사양 전체를 쿼리 1번으로 읽음 */
+    private Map<Long, List<EquipmentDetailResponse.Spec>> keySpecs(List<Long> ids) {
+        Map<Long, List<EquipmentSpec>> byEquipment = specRepository.findAllByEquipmentIdInOrderByIdAsc(ids).stream()
+                .collect(Collectors.groupingBy(EquipmentSpec::getEquipmentId));
+        Map<Long, List<EquipmentDetailResponse.Spec>> result = new java.util.HashMap<>();
+        byEquipment.forEach((id, specs) -> {
+            Set<String> seen = new java.util.HashSet<>();
+            result.put(id, orderRealFirst(specs).stream()
+                    .filter(s -> seen.add(s.getSpecKey()))
+                    .limit(EquipmentSummaryResponse.KEY_SPEC_LIMIT)
+                    .map(EquipmentDetailResponse.Spec::from).toList());
+        });
+        return result;
     }
 
     /** 기관 id → 활성 장비 수 */

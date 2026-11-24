@@ -7,7 +7,7 @@
     python docs/tools/seed_demo_requests.py                       # http://localhost:8080, 비밀번호 12345678
     python docs/tools/seed_demo_requests.py --base http://서버주소:8080
 
-만들어지는 의뢰 (제목 앞에 [시연]):
+만들어지는 의뢰 (제목에 말머리 없음, 데모 여부는 장비의 isMock 으로 구분):
     작성 중(DRAFT) · 제출됨(SUBMITTED) · 검토 중 + 예상 이용료 · 추가 정보 요청됨 · 다시 냄(재제출)
     · 일정 조율 중(제안 1건) · 일정 확정 · 시험 완료(결과 + 성적서 파일) · 반려
     · 조직 간: 대학 → 기업 장비 의뢰, 기업 → 대학 장비 의뢰(검토 통과)
@@ -90,7 +90,7 @@ def main():
         return d["content"][0]["id"]
 
     def create(token, equipment_id, title):
-        d = step(f"의뢰 생성 '{title}'", *api.call("POST", "/test-requests", {"equipmentId": equipment_id, "title": "[시연] " + title}, token), 201)
+        d = step(f"의뢰 생성 '{title}'", *api.call("POST", "/test-requests", {"equipmentId": equipment_id, "title": title}, token), 201)
         return d["id"]
 
     def fill_and_submit(token, rid, purpose):

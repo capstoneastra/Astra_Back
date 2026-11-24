@@ -20,5 +20,15 @@ public record EquipmentFields(
         FeeUnit feeUnit,
         String durationText,
         BigDecimal utilizationRate,
-        Availability availability) {
+        Availability availability,
+        Boolean feeVatIncluded) {
+
+    /** 부가세 여부 없이 만드는 기존 호출용 */
+    public EquipmentFields(String name, String model, String manufacturer, String category,
+                           EquipmentType equipmentType, String region, String description, String imageUrl,
+                           AccessScope accessScope, String feeText, Integer feeAmount, FeeUnit feeUnit,
+                           String durationText, BigDecimal utilizationRate, Availability availability) {
+        this(name, model, manufacturer, category, equipmentType, region, description, imageUrl, accessScope, feeText,
+                feeAmount, feeUnit, durationText, utilizationRate, availability, null);
+    }
 }

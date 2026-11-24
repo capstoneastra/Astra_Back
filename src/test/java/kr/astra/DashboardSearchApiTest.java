@@ -150,6 +150,25 @@ class DashboardSearchApiTest {
                 Long.class));
         assertThat(d.path("requestCounts").size()).isEqualTo(10);
         assertThat(d.path("institutionVerification").size()).isEqualTo(equipmentOwners());
+        // 시험유형별 수요(작성 중 뺀 의뢰)·공급(활성 장비): 15개 전부
+        JsonNode byTestType = d.path("byTestType");
+        assertThat(byTestType.size()).isEqualTo(15);
+        JsonNode vibration = null;
+        for (JsonNode t : byTestType) {
+            if (t.path("code").asString().equals("VIBRATION")) {
+                vibration = t;
+            }
+        }
+        assertThat(vibration).isNotNull();
+        assertThat(vibration.path("nameKo").asString()).isEqualTo(jdbc.queryForObject(
+                "SELECT name_ko FROM test_types WHERE code = 'VIBRATION'", String.class));
+        assertThat(vibration.path("equipmentCount").asLong()).isEqualTo(jdbc.queryForObject("""
+                SELECT count(*) FROM equipment_test_types t JOIN equipment e ON e.id = t.equipment_id
+                WHERE e.is_active AND t.test_type_code = 'VIBRATION'""", Long.class)).isPositive();
+        assertThat(vibration.path("requestCount").asLong()).isEqualTo(jdbc.queryForObject("""
+                SELECT count(*) FROM test_requests r
+                JOIN test_request_revisions v ON v.request_id = r.id AND v.revision_no = r.current_revision_no
+                WHERE r.status <> 'DRAFT' AND v.content -> 'test' ->> 'testTypeCode' = 'VIBRATION'""", Long.class));
         assertThat(api.get("/api/v1/dashboard/summary", null).code()).isEqualTo("AUTH_REQUIRED");
     }
 

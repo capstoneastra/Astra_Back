@@ -98,6 +98,10 @@ astra:
     from: ${MAIL_FROM:no-reply@astra.local}
     # true 면 메일을 보낸 뒤 서버 로그에도 인증 코드를 남김 (일회용 메일이 늦을 때 대비, 시연 날에만 켜기)
     log-code: ${MAIL_LOG_CODE:false}
+  demo:
+    reservations:
+      # 서버 시작·매일 0시 10분에 manager1 조직 장비에 "오늘부터 14일 안" 시연 예약 4건을 맞춤 (시연 계정이 없으면 아무것도 안 함)
+      enabled: ${ASTRA_DEMO_RESERVATIONS:true}
   equipment:
     update-reminder:
       enabled: true   # 매일 오전 9시 마지막 갱신 90일 지난 장비 알림 (BE-B 알림 구현이 있을 때만 발송)

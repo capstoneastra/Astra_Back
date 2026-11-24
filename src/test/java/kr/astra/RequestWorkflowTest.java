@@ -372,10 +372,13 @@ class RequestWorkflowTest {
 
     @Test
     void 알림_목록과_읽음_처리() throws Exception {
-        toScheduling(); // company 에게 REQUEST_ACCEPTED 알림
+        long id = toScheduling(); // company 에게 REQUEST_ACCEPTED 알림
         long before = api.get("/api/v1/notifications/unread-count", company).data().path("count").asLong();
         assertThat(before).isPositive();
         JsonNode first = api.get("/api/v1/notifications?unreadOnly=true", company).data().path("content").get(0);
+        // 알림 문구에는 의뢰번호 말머리를 붙이지 않음 (어느 의뢰인지는 relatedRequestId)
+        assertThat(first.path("title").asString()).isEqualTo("기술 검토를 통과했습니다. 일정을 협의해 주세요.");
+        assertThat(first.path("relatedRequestId").asLong()).isEqualTo(id);
         Res read = api.send("PATCH", "/api/v1/notifications/" + first.path("id").asLong() + "/read", null, company);
         assertThat(read.data().path("isRead").asBoolean()).isTrue();
         // 남의 알림은 404

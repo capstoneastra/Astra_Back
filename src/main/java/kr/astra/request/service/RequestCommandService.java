@@ -146,7 +146,7 @@ public class RequestCommandService {
                 actor.userId(), now);
         resultRepository.saveAndFlush(result);
         workflow.notifyRequester(request, kr.astra.notification.entity.NotificationType.RESULT_REGISTERED,
-                "[" + request.getRequestNo() + "] 시험 결과가 " + (first ? "등록" : "수정") + "되었습니다.");
+                "시험 결과가 " + (first ? "등록" : "수정") + "되었습니다.");
         workflow.bumpVersion(request);
     }
 

@@ -121,6 +121,28 @@ class EquipmentApiTest {
     }
 
     @Test
+    void 이용료_문구는_금액원_단위_한_형식이고_시연_장비는_가동률이_있다() throws Exception {
+        // V17: "12,000원/시간 (부가세 별도)" 또는 "협의" 만 있음 (KRW·hour 같은 원문 형식 없음)
+        assertThat(jdbc.queryForList("""
+                SELECT external_id FROM equipment
+                WHERE fee_text IS NULL
+                   OR fee_text !~ '^([0-9]{1,3}(,[0-9]{3})*원/(시간|일|시료|건) [(]부가세 (별도|포함)[)]|협의)$'
+                """, String.class)).isEmpty();
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM equipment
+                WHERE (fee_text = '협의') <> (fee_amount IS NULL AND fee_unit = 'NEGOTIABLE' AND fee_vat_included IS NULL)
+                """, Long.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM equipment WHERE is_mock AND utilization_rate IS NULL",
+                Long.class)).isZero();
+
+        JsonNode usage = api.get("/api/v1/equipment/32", token).data().path("usage");
+        assertThat(usage.path("feeText").asString()).isEqualTo("12,000원/시간 (부가세 별도)");
+        assertThat(usage.path("feeAmount").asInt()).isEqualTo(12000);
+        assertThat(usage.path("feeUnit").asString()).isEqualTo("HOUR");
+        assertThat(usage.path("vatIncluded").asBoolean(true)).isFalse();
+    }
+
+    @Test
     void 장비_목록_항목은_api_spec_예시와_같은_형식이다() throws Exception {
         Res res = api.get("/api/v1/equipment?testType=VIBRATION", token);
         assertThat(res.status()).isEqualTo(200);
@@ -131,7 +153,8 @@ class EquipmentApiTest {
         JsonNode e = find(res.data().path("content"), "ASTRA-CAND-0048");
         assertThat(e.propertyNames()).containsExactlyInAnyOrder("id", "externalId", "name", "model", "institution",
                 "region", "equipmentType", "testTypes", "availability", "utilizationRate", "feeText",
-                "verificationStatus", "isMock", "infoUpdatedAt", "availabilityNeedsConfirmation");
+                "verificationStatus", "isMock", "infoUpdatedAt", "availabilityNeedsConfirmation",
+                "usage", "keySpecs", "simulation");
         assertThat(e.path("id").asLong()).isEqualTo(48);
         assertThat(e.path("name").asString()).isEqualTo("진동시험기");
         assertThat(e.path("model").asString()).isEqualTo("EDS5000LS4-445");
@@ -141,8 +164,22 @@ class EquipmentApiTest {
         assertThat(e.path("equipmentType").asString()).isEqualTo("TEST");
         assertThat(e.path("testTypes").toString()).isEqualTo("[\"VIBRATION\"]");
         assertThat(e.path("availability").asString()).isEqualTo("UNKNOWN");
-        assertThat(e.path("utilizationRate").isNull()).isTrue();
-        assertThat(e.path("feeText").isNull()).isTrue();
+        // V17: 시연 장비 가동률 채움, 금액 없는 장비는 '협의'
+        assertThat(e.path("utilizationRate").asDouble()).isBetween(25.0, 84.0);
+        assertThat(e.path("feeText").asString()).isEqualTo("협의");
+        assertThat(e.path("usage").path("feeText").asString()).isEqualTo("협의");
+        assertThat(e.path("usage").path("feeUnit").asString()).isEqualTo("NEGOTIABLE");
+        assertThat(e.path("usage").path("feeAmount").isNull()).isTrue();
+        assertThat(e.path("usage").path("vatIncluded").isNull()).isTrue();
+        assertThat(e.path("usage").has("accessScope")).isTrue();
+        // 주요 사양: 상세 specs 순서에서 키가 다른 앞 2개, 프리셋 id 는 상세와 같음
+        JsonNode detail = api.get("/api/v1/equipment/48", token).data();
+        assertThat(e.path("keySpecs").size()).isEqualTo(2);
+        assertThat(e.path("keySpecs").get(0)).isEqualTo(detail.path("specs").get(0));
+        assertThat(e.path("keySpecs").get(1).path("key").asString())
+                .isNotEqualTo(e.path("keySpecs").get(0).path("key").asString());
+        assertThat(e.path("simulation")).isEqualTo(detail.path("simulation"));
+        assertThat(e.path("simulation").path("presetIds").size()).isPositive();
         assertThat(e.path("verificationStatus").asString()).isEqualTo("LISTING_CONFIRMED");
         assertThat(e.path("isMock").asBoolean()).isTrue();
         assertThat(e.path("infoUpdatedAt").isNull()).isFalse();

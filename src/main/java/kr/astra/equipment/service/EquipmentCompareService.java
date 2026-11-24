@@ -167,7 +167,7 @@ public class EquipmentCompareService {
             return new Comparison.Usage(id, e.getAccessScope(), e.getFeeText(), e.getFeeAmount(), e.getFeeUnit(),
                     e.getDurationText(), e.getUtilizationRate(), e.getAvailability(), e.getVerificationStatus(),
                     e.getInfoUpdatedAt(), estimate, e.getLeadTimeDays(), e.getOperationMode(),
-                    e.availabilityNeedsConfirmation(java.time.OffsetDateTime.now()));
+                    e.availabilityNeedsConfirmation(java.time.OffsetDateTime.now()), e.getFeeVatIncluded());
         }).toList();
         return new Comparison(equipment, rows, usage, code, usedMock);
     }

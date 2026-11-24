@@ -122,6 +122,10 @@ public class User extends BaseTimeEntity {
         this.status = status;
     }
 
+    public void changePassword(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
+
     public void updateProfile(String name, String phone) {
         if (name != null) {
             this.name = name;

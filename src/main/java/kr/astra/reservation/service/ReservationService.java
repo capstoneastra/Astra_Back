@@ -74,7 +74,7 @@ public class ReservationService {
                 request.getEquipmentId(), input.startAt(), input.endAt(), ReservationStatus.PROPOSED,
                 actor.userId(), note(input.note())));
         workflow.notifyCounterpart(request, actor, NotificationType.RESERVATION_PROPOSED,
-                "[" + request.getRequestNo() + "] 시험 일정이 제안되었습니다: " + period(reservation));
+                "시험 일정이 제안되었습니다: " + period(reservation));
         return result(reservation, request);
     }
 
@@ -95,7 +95,7 @@ public class ReservationService {
                 input.startAt(), input.endAt(), ReservationStatus.COUNTER_PROPOSED, actor.userId(),
                 note(input.note())));
         workflow.notifyCounterpart(request, actor, NotificationType.RESERVATION_PROPOSED,
-                "[" + request.getRequestNo() + "] 대안 일정이 제안되었습니다: " + period(counter));
+                "대안 일정이 제안되었습니다: " + period(counter));
         return result(counter, request);
     }
 
