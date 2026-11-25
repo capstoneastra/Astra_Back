@@ -93,6 +93,11 @@ public class RequestDashboardQueryImpl implements RequestDashboardQuery {
         return reservationService.upcomingForInstitution(institutionId, limit);
     }
 
+    @Override
+    public List<UpcomingReservationItem> findUpcomingReservationsForRequester(Long requesterId, int limit) {
+        return reservationService.upcomingForRequester(requesterId, limit);
+    }
+
     private static int rank(RequestStatus status) {
         return switch (status) {
             case SUPPLEMENT_REQUESTED -> 0;

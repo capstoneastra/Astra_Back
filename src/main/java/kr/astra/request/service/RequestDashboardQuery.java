@@ -39,6 +39,11 @@ public interface RequestDashboardQuery {
     /** 기관이 검토를 시작해야 할 의뢰 (SUBMITTED·RESUBMITTED, 제출 오래된 순) */
     List<RequestActionItem> findPendingReview(Long institutionId, int limit);
 
-    /** 기관의 다가오는 확정 예약 (start_at 이 지금 이후, 빠른 순) */
+    /** 기관의 다가오는 확정 예약 (end_at 이 지금 이후 = 아직 끝나지 않은 것, 시작 빠른 순) */
     List<UpcomingReservationItem> findUpcomingReservations(Long institutionId, int limit);
+
+    /** 기업 회원 본인이 낸 의뢰의 다가오는 확정 예약 (아직 끝나지 않은 것, 시작 빠른 순) */
+    default List<UpcomingReservationItem> findUpcomingReservationsForRequester(Long requesterId, int limit) {
+        return List.of();
+    }
 }

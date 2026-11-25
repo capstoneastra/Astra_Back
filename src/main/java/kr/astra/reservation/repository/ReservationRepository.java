@@ -50,18 +50,34 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
     List<Reservation> findBusy(@Param("equipmentId") Long equipmentId, @Param("status") ReservationStatus status,
                                @Param("from") OffsetDateTime from, @Param("to") OffsetDateTime to);
 
-    /** 대시보드: 기관의 다가오는 확정 예약 (시작 빠른 순). 의뢰번호를 같이 가져와 행마다 의뢰를 다시 읽지 않음 */
+    /**
+     * 대시보드: 기관의 다가오는 확정 예약 (아직 끝나지 않은 것, 시작 빠른 순).
+     * 의뢰번호를 같이 가져와 행마다 의뢰를 다시 읽지 않음
+     */
     @Query("""
             SELECT new kr.astra.reservation.repository.ReservationRepository$Upcoming(
                    r.id, q.id, q.requestNo, r.equipmentId, r.startAt, r.endAt)
             FROM Reservation r, TestRequest q
             WHERE r.requestId = q.id AND q.institutionId = :institutionId
-              AND r.status = :status AND r.startAt >= :now
+              AND r.status = :status AND r.endAt > :now
             ORDER BY r.startAt
             """)
     List<Upcoming> findUpcomingForInstitution(@Param("institutionId") Long institutionId,
                                               @Param("status") ReservationStatus status,
                                               @Param("now") OffsetDateTime now, Pageable pageable);
+
+    /** 대시보드: 기업 회원 본인이 낸 의뢰의 다가오는 확정 예약 (아직 끝나지 않은 것, 시작 빠른 순) */
+    @Query("""
+            SELECT new kr.astra.reservation.repository.ReservationRepository$Upcoming(
+                   r.id, q.id, q.requestNo, r.equipmentId, r.startAt, r.endAt)
+            FROM Reservation r, TestRequest q
+            WHERE r.requestId = q.id AND q.requesterId = :requesterId
+              AND r.status = :status AND r.endAt > :now
+            ORDER BY r.startAt
+            """)
+    List<Upcoming> findUpcomingForRequester(@Param("requesterId") Long requesterId,
+                                            @Param("status") ReservationStatus status,
+                                            @Param("now") OffsetDateTime now, Pageable pageable);
 
     /** 의뢰를 잠그기 전에 의뢰 id 만 조회 (엔티티를 미리 읽어 두지 않으려고) */
     @Query("SELECT r.requestId FROM Reservation r WHERE r.id = :id")

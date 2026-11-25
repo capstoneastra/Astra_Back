@@ -154,7 +154,7 @@ class EquipmentApiTest {
         assertThat(e.propertyNames()).containsExactlyInAnyOrder("id", "externalId", "name", "model", "institution",
                 "region", "equipmentType", "testTypes", "availability", "utilizationRate", "feeText",
                 "verificationStatus", "isMock", "infoUpdatedAt", "availabilityNeedsConfirmation",
-                "usage", "keySpecs", "simulation");
+                "usage", "keySpecs", "simulation", "specs");
         assertThat(e.path("id").asLong()).isEqualTo(48);
         assertThat(e.path("name").asString()).isEqualTo("진동시험기");
         assertThat(e.path("model").asString()).isEqualTo("EDS5000LS4-445");
@@ -178,6 +178,8 @@ class EquipmentApiTest {
         assertThat(e.path("keySpecs").get(0)).isEqualTo(detail.path("specs").get(0));
         assertThat(e.path("keySpecs").get(1).path("key").asString())
                 .isNotEqualTo(e.path("keySpecs").get(0).path("key").asString());
+        // 사양 전체: 상세 specs 와 같은 값·순서 (프론트 목록이 specs 를 읽음)
+        assertThat(e.path("specs")).isEqualTo(detail.path("specs"));
         assertThat(e.path("simulation")).isEqualTo(detail.path("simulation"));
         assertThat(e.path("simulation").path("presetIds").size()).isPositive();
         assertThat(e.path("verificationStatus").asString()).isEqualTo("LISTING_CONFIRMED");

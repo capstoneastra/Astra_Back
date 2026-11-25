@@ -65,9 +65,13 @@ public final class DashboardResponses {
     public record DataAvailable(boolean requests, Boolean chats) {
     }
 
-    /** 의뢰자 화면(view=REQUESTER): 내가 보낸 의뢰 상태별 수, 처리할 의뢰, 최근 상담, 장비 요약 */
+    /**
+     * 의뢰자 화면(view=REQUESTER): 내가 보낸 의뢰 상태별 수, 처리할 의뢰, 다가오는 확정 일정(캘린더), 최근 상담, 장비 요약
+     */
     public record CompanySummary(UserRole role, DashboardView view, Map<RequestStatus, Long> requestCounts,
-                                 List<RequestActionItem> actionRequired, List<ChatSessionSummary> recentChats,
+                                 List<RequestActionItem> actionRequired,
+                                 List<UpcomingReservationItem> upcomingReservations,
+                                 List<ChatSessionSummary> recentChats,
                                  EquipmentOverview equipmentStats, DataAvailable dataAvailable) implements Summary {
     }
 

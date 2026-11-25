@@ -200,11 +200,21 @@ public class ReservationService {
                 .stream().map(r -> new BusySlot(r.getStartAt(), r.getEndAt())).toList();
     }
 
-    /** 대시보드: 기관의 다가오는 확정 예약 */
+    /** 대시보드: 기관의 다가오는 확정 예약 (아직 끝나지 않은 것) */
     @Transactional(readOnly = true)
     public List<UpcomingReservationItem> upcomingForInstitution(Long institutionId, int limit) {
-        List<ReservationRepository.Upcoming> rows = reservationRepository.findUpcomingForInstitution(institutionId,
-                ReservationStatus.CONFIRMED, OffsetDateTime.now(), PageRequest.of(0, limit));
+        return toUpcoming(reservationRepository.findUpcomingForInstitution(institutionId,
+                ReservationStatus.CONFIRMED, OffsetDateTime.now(), PageRequest.of(0, limit)));
+    }
+
+    /** 대시보드: 기업 회원 본인 의뢰의 다가오는 확정 예약 (아직 끝나지 않은 것) */
+    @Transactional(readOnly = true)
+    public List<UpcomingReservationItem> upcomingForRequester(Long requesterId, int limit) {
+        return toUpcoming(reservationRepository.findUpcomingForRequester(requesterId,
+                ReservationStatus.CONFIRMED, OffsetDateTime.now(), PageRequest.of(0, limit)));
+    }
+
+    private List<UpcomingReservationItem> toUpcoming(List<ReservationRepository.Upcoming> rows) {
         RequestViews.Names names = views.equipmentNames(rows.stream().map(ReservationRepository.Upcoming::equipmentId)
                 .toList());
         return rows.stream().map(r -> new UpcomingReservationItem(r.reservationId(), r.requestId(), r.requestNo(),

@@ -4,6 +4,8 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +14,8 @@ import kr.astra.equipment.dto.EquipmentDetailResponse;
 import kr.astra.equipment.entity.Equipment;
 import kr.astra.equipment.repository.EquipmentRepository;
 import kr.astra.equipment.service.EquipmentService;
+import kr.astra.global.exception.BusinessException;
+import kr.astra.global.exception.ErrorCode;
 import kr.astra.global.security.CurrentUser;
 import kr.astra.request.dto.RequestInputs;
 import kr.astra.request.dto.RequestResponses.Detail;
@@ -38,13 +42,15 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * 시연용 예약 (프론트 2주 일정표). 서버가 뜰 때와 매일 0시 10분에, lab1 계정 조직의 장비 앞 3대에
- * "오늘부터 14일 안" 예약 4건(CONFIRMED 2, PROPOSED 2)이 있도록 맞춥니다.
+ * 시연용 예약 (대시보드 캘린더·일정표). 서버가 뜰 때와 매일 0시 10분에, lab1 계정 조직의 장비 앞 3대에
+ * "오늘부터 +1~+21일" 예약 9건(CONFIRMED 7, PROPOSED 2)이 있도록 맞춥니다.
  * <ul>
  *   <li>처음에는 실제 서비스 흐름(company 의뢰 작성 → 제출 → lab1 검토·통과 → 일정 제안 → 확정)으로 만들고,
  *       예약에 external_system='ASTRA_DEMO', external_ref='slot-N' 을 붙여 둡니다.</li>
- *   <li>다음부터는 그 예약이 14일 창 밖(지난 날짜)이면 날짜만 오늘 기준으로 옮깁니다. 의뢰가 이미 완료·취소돼
- *       옮길 수 없으면 새로 만듭니다.</li>
+ *   <li>하루짜리와 2~3일짜리를 섞고, 같은 날 다른 장비 2건(slot-3·slot-6)도 둡니다.
+ *       slot-5 는 결과까지 등록해 두어 시연에서 "시험 완료"를 바로 누를 수 있습니다.</li>
+ *   <li>다음부터는 매번 날짜를 오늘 기준으로 다시 맞춥니다 (늦은 일정부터 옮겨 시연 예약끼리 겹치지 않게).
+ *       의뢰가 이미 완료·취소돼 옮길 수 없으면 새로 만듭니다.</li>
  *   <li>시연 계정(company·lab1 @astra.kr)이나 장비가 없으면 아무것도 하지 않음. 끄기: ASTRA_DEMO_RESERVATIONS=false</li>
  * </ul>
  * 한 칸이 실패해도(겹치는 실제 예약, 점검 기간 등) 경고 로그만 남기고 다음 칸으로 넘어갑니다.
@@ -57,19 +63,34 @@ public class DemoReservationSeeder {
     static final String DEMO_SYSTEM = "ASTRA_DEMO";
     static final String COMPANY_EMAIL = "company@astra.kr";
     static final String MANAGER_EMAIL = "lab1@astra.kr";
-    static final int WINDOW_DAYS = 14;
+    static final int WINDOW_DAYS = 22;
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
-    /** equipmentIndex: lab1 조직 장비(id 순) 중 몇 번째인지. 장비가 적으면 나머지로 돌려 씀 */
+    /**
+     * equipmentIndex: lab1 조직 장비(id 순) 중 몇 번째인지. 장비가 적으면 나머지로 돌려 씀.
+     * hours 가 24를 넘으면 여러 날에 걸친 일정 (예: 9시 시작 57시간 = 사흘째 18시 종료).
+     * withResult: 확정 후 시험 결과까지 등록 ("시험 완료" 시연용)
+     */
     record Slot(String ref, int equipmentIndex, int dayOffset, int startHour, int hours, boolean confirmed,
-                String title, String purpose, String sampleName) {
+                boolean withResult, String title, String purpose, String sampleName) {
     }
 
+    /** 확정 예약끼리는 같은 장비에서 겹치지 않게 배치 (DB 제약) */
     static final List<Slot> SLOTS = List.of(
-            new Slot("slot-1", 0, 2, 9, 8, true, "위성 전장품 진동시험", "발사 환경 진동 내구성 확인", "위성 탑재 전장품"),
-            new Slot("slot-2", 1, 4, 10, 5, false, "드론 프레임 내구 시험", "비행 하중 반복 내구성 확인", "드론 탄소 프레임"),
-            new Slot("slot-3", 0, 7, 9, 9, true, "탑재체 구조물 진동시험", "탑재체 구조 건전성 확인", "탑재체 구조 시편"),
-            new Slot("slot-4", 2, 10, 13, 4, false, "소형 위성 부품 환경시험", "궤도 환경 적합성 확인", "큐브위성 부품"));
+            new Slot("slot-1", 0, 2, 9, 8, true, false, "위성 전장품 진동시험", "발사 환경 진동 내구성 확인", "위성 탑재 전장품"),
+            new Slot("slot-2", 1, 4, 10, 5, false, false, "드론 프레임 내구 시험", "비행 하중 반복 내구성 확인", "드론 탄소 프레임"),
+            new Slot("slot-3", 0, 7, 9, 9, true, false, "탑재체 구조물 진동시험", "탑재체 구조 건전성 확인", "탑재체 구조 시편"),
+            new Slot("slot-4", 2, 10, 13, 4, false, false, "소형 위성 부품 환경시험", "궤도 환경 적합성 확인", "큐브위성 부품"),
+            new Slot("slot-5", 1, 1, 10, 6, true, true, "항공 전장 커넥터 진동시험", "비행 진동 환경 접촉 안정성 확인",
+                    "항공용 커넥터 모듈"),
+            new Slot("slot-6", 2, 7, 13, 4, true, false, "무인기 배터리팩 환경시험", "저온·고온 동작 안정성 확인",
+                    "무인기 배터리팩"),
+            new Slot("slot-7", 1, 12, 9, 57, true, false, "발사체 부품 장시간 내구시험", "반복 하중 누적 피로 확인",
+                    "발사체 브래킷"),
+            new Slot("slot-8", 2, 15, 9, 33, true, false, "위성 태양전지판 환경시험", "온도 사이클 내구성 확인",
+                    "태양전지판 시편"),
+            new Slot("slot-9", 0, 19, 9, 57, true, false, "드론 비행제어기 연속 진동시험", "장시간 진동 환경 동작 확인",
+                    "비행제어기 보드"));
 
     private final UserRepository userRepository;
     private final EquipmentRepository equipmentRepository;
@@ -126,38 +147,83 @@ public class DemoReservationSeeder {
         CurrentUser provider = actor(manager.get());
         LocalDate today = LocalDate.now(KST);
         int ready = 0;
-        for (Slot slot : SLOTS) {
+        // 1) 이미 있는 예약을 오늘 기준으로 옮김. 늦은 일정부터 옮겨야 아직 안 옮긴 다른 시연 예약과 겹치지 않음
+        List<Slot> toCreate = new ArrayList<>();
+        List<Slot> latestFirst = SLOTS.stream()
+                .sorted(Comparator.comparing((Slot s) -> startOf(s, today)).reversed()).toList();
+        for (Slot slot : latestFirst) {
             try {
-                Boolean ok = transactionTemplate.execute(status -> prepare(slot, today, equipmentIds, requester, provider));
-                if (Boolean.TRUE.equals(ok)) {
+                Boolean moved = transactionTemplate.execute(status -> moveIfExists(slot, today));
+                if (Boolean.TRUE.equals(moved)) {
                     ready++;
+                } else {
+                    toCreate.add(slot);
                 }
             } catch (RuntimeException e) {
-                log.warn("시연 예약 {} 을(를) 준비하지 못했습니다: {}", slot.ref(), e.toString());
+                log.warn("시연 예약 {} 을(를) 옮기지 못했습니다: {}", slot.ref(), e.toString());
+            }
+        }
+        // 2) 없거나 다시 쓸 수 없는 칸은 실제 흐름으로 새로 만듦 (이른 일정부터)
+        toCreate.sort(Comparator.comparing((Slot s) -> startOf(s, today)));
+        for (Slot slot : toCreate) {
+            if (createWithRetry(slot, today, equipmentIds.get(slot.equipmentIndex() % equipmentIds.size()),
+                    requester, provider)) {
+                ready++;
             }
         }
         return ready;
     }
 
-    private boolean prepare(Slot slot, LocalDate today, List<Long> equipmentIds, CurrentUser requester,
-                            CurrentUser provider) {
-        ZonedDateTime start = today.plusDays(slot.dayOffset()).atTime(slot.startHour(), 0).atZone(KST);
-        OffsetDateTime startAt = start.toOffsetDateTime();
-        OffsetDateTime endAt = start.plusHours(slot.hours()).toOffsetDateTime();
+    /**
+     * 그 시간에 이미 확정 예약이 있으면 (예: 시험 완료된 이전 시연 의뢰의 예약) 하루씩 미뤄 최대 3번 더 시도.
+     * 다음 실행 때 원래 날짜로 다시 맞춰 봅니다.
+     */
+    private boolean createWithRetry(Slot slot, LocalDate today, Long equipmentId, CurrentUser requester,
+                                    CurrentUser provider) {
+        for (int extraDays = 0; extraDays <= 3; extraDays++) {
+            LocalDate day = today.plusDays(extraDays);
+            try {
+                transactionTemplate.executeWithoutResult(status -> create(slot, equipmentId, startOf(slot, day),
+                        endOf(slot, day), requester, provider));
+                return true;
+            } catch (BusinessException e) {
+                if (e.getErrorCode() != ErrorCode.RESERVATION_OVERLAP) {
+                    log.warn("시연 예약 {} 을(를) 만들지 못했습니다: {}", slot.ref(), e.toString());
+                    return false;
+                }
+            } catch (RuntimeException e) {
+                log.warn("시연 예약 {} 을(를) 만들지 못했습니다: {}", slot.ref(), e.toString());
+                return false;
+            }
+        }
+        log.warn("시연 예약 {} 을(를) 만들지 못했습니다: 이후 며칠이 모두 확정 예약과 겹침", slot.ref());
+        return false;
+    }
 
+    private static OffsetDateTime startOf(Slot slot, LocalDate today) {
+        return today.plusDays(slot.dayOffset()).atTime(slot.startHour(), 0).atZone(KST).toOffsetDateTime();
+    }
+
+    private static OffsetDateTime endOf(Slot slot, LocalDate today) {
+        ZonedDateTime start = today.plusDays(slot.dayOffset()).atTime(slot.startHour(), 0).atZone(KST);
+        return start.plusHours(slot.hours()).toOffsetDateTime();
+    }
+
+    /** @return 다시 쓸 수 있는 예약이 있어 날짜를 맞췄으면 true, 새로 만들어야 하면 false */
+    private boolean moveIfExists(Slot slot, LocalDate today) {
         Optional<Reservation> existing = reservationRepository
                 .findFirstByExternalSystemAndExternalRefOrderByIdDesc(DEMO_SYSTEM, slot.ref());
-        if (existing.isPresent() && stillUsable(existing.get())) {
-            Reservation r = existing.get();
-            if (inWindow(r.getStartAt(), today)) {
-                return true;
-            }
-            r.moveDemo(startAt, endAt);
-            reservationRepository.saveAndFlush(r); // 확정 예약끼리 겹치면 DB 제약이 거부 → 이 칸만 실패
+        if (existing.isEmpty() || !stillUsable(existing.get())) {
+            return false;
+        }
+        Reservation r = existing.get();
+        OffsetDateTime startAt = startOf(slot, today);
+        OffsetDateTime endAt = endOf(slot, today);
+        if (r.getStartAt().isEqual(startAt) && r.getEndAt().isEqual(endAt)) {
             return true;
         }
-        create(slot, equipmentIds.get(slot.equipmentIndex() % equipmentIds.size()), startAt, endAt, requester,
-                provider);
+        r.moveDemo(startAt, endAt);
+        reservationRepository.saveAndFlush(r); // 실제 확정 예약과 겹치면 DB 제약이 거부 → 이 칸만 실패
         return true;
     }
 
@@ -169,12 +235,6 @@ public class DemoReservationSeeder {
             return requestStatus == RequestStatus.CONFIRMED;
         }
         return r.isOpen() && requestStatus == RequestStatus.SCHEDULING;
-    }
-
-    private static boolean inWindow(OffsetDateTime startAt, LocalDate today) {
-        OffsetDateTime from = OffsetDateTime.now();
-        OffsetDateTime to = today.plusDays(WINDOW_DAYS).atStartOfDay(KST).toOffsetDateTime();
-        return !startAt.isBefore(from) && startAt.isBefore(to);
     }
 
     /** 실제 화면과 같은 순서로 의뢰를 진행해 일정까지 만듦 (알림·상태 이력도 그대로 남음) */
@@ -207,6 +267,11 @@ public class DemoReservationSeeder {
                 new ReservationInputs.Propose(startAt, endAt, "시연 일정", null)).reservation().id();
         if (slot.confirmed()) {
             reservationService.confirm(provider, reservationId, null);
+            if (slot.withResult()) {
+                commandService.registerResult(provider, requestId, new RequestInputs.Result(
+                        "가진 조건 5~2,000Hz, 3축 각 30분 진동 후 외관·접촉저항 이상 없음. 시험 후 기능 점검 정상.",
+                        "ASTRA-DEMO-" + requestId, null));
+            }
         }
         Reservation reservation = reservationRepository.findById(reservationId).orElseThrow();
         reservation.markDemo(DEMO_SYSTEM, slot.ref());

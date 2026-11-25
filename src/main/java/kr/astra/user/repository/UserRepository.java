@@ -32,6 +32,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("UPDATE User u SET u.lastLoginAt = :now WHERE u.id = :id")
     int updateLastLoginAt(@Param("id") Long id, @Param("now") OffsetDateTime now);
 
+    /** 계정 찾기: 이름이 같고 연락처의 숫자만 비교해 같은 회원의 이메일 (하이픈·공백 무시) */
+    @Query(value = """
+            SELECT email FROM users
+            WHERE name = :name AND regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g') = :phoneDigits
+            ORDER BY email
+            """, nativeQuery = true)
+    List<String> findEmailsByNameAndPhoneDigits(@Param("name") String name, @Param("phoneDigits") String phoneDigits);
+
     List<User> findAllByOrganizationIdAndStatus(Long organizationId, UserStatus status);
 
     boolean existsByOrganizationIdAndStatusIn(Long organizationId, List<UserStatus> statuses);

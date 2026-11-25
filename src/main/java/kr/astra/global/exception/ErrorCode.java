@@ -13,6 +13,7 @@ public enum ErrorCode {
     VERIFICATION_CODE_INVALID(HttpStatus.BAD_REQUEST, "인증 코드가 올바르지 않습니다."),
     VERIFICATION_CODE_EXPIRED(HttpStatus.BAD_REQUEST, "인증 코드가 만료되었습니다. 코드를 다시 받아 주세요."),
     INVALID_PASSWORD(HttpStatus.BAD_REQUEST, "현재 비밀번호가 올바르지 않습니다."),
+    RESET_TOKEN_INVALID(HttpStatus.BAD_REQUEST, "재설정 시간이 지났거나 이미 사용한 요청입니다. 처음부터 다시 진행해 주세요."),
 
     // 401
     AUTH_REQUIRED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),

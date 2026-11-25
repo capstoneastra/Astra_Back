@@ -261,6 +261,31 @@ public class UserService {
         userRepository.flush();
     }
 
+    /** 계정 찾기: 이름이 같고 연락처 숫자가 같은 회원의 이메일 (상태 무관, 이메일 순) */
+    public List<String> findEmailsByNameAndPhone(String name, String phoneDigits) {
+        if (name == null || name.isBlank() || phoneDigits == null || phoneDigits.isEmpty()) {
+            return List.of();
+        }
+        return userRepository.findEmailsByNameAndPhoneDigits(name.strip(), phoneDigits);
+    }
+
+    /** 비밀번호 재설정: 회원 id (상태 무관). 없으면 빈 값 */
+    public Optional<Long> findIdByEmail(String email) {
+        return userRepository.findByEmail(normalizeEmail(email)).map(User::getId);
+    }
+
+    /** 비밀번호 재설정으로 새 비밀번호 저장 (현재 비밀번호 확인 없음: 재설정 토큰으로 본인 확인을 마친 뒤 호출) */
+    @Transactional
+    public void resetPassword(Long userId, String newPassword) {
+        if (!PasswordPolicy.withinBcryptLimit(newPassword)) {
+            throw BusinessException.invalidField("newPassword", PasswordPolicy.TOO_LONG_MESSAGE);
+        }
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESET_TOKEN_INVALID));
+        user.changePassword(passwordEncoder.encode(newPassword));
+        userRepository.flush();
+    }
+
     private User findUser(Long userId) {
         // 토큰은 유효한데 사용자가 없는 경우(삭제 등)는 다시 로그인하게 함
         return userRepository.findById(userId).orElseThrow(() -> new BusinessException(ErrorCode.AUTH_REQUIRED));

@@ -84,6 +84,22 @@ CREATE TABLE email_verifications (
 );
 CREATE INDEX idx_email_verifications_email ON email_verifications(email, created_at DESC);
 
+-- 계정 찾기 - 비밀번호 재설정 (V19). 가입하지 않은 이메일도 행은 만들고(user_id NULL) 메일만 안 보냄
+CREATE TABLE password_resets (
+    id                BIGSERIAL PRIMARY KEY,
+    email             VARCHAR(200) NOT NULL,
+    user_id           BIGINT REFERENCES users(id) ON DELETE CASCADE,
+    code_hash         VARCHAR(200) NOT NULL,             -- 6자리 코드의 SHA-256 (10분)
+    code_expires_at   TIMESTAMPTZ  NOT NULL,
+    attempt_count     INT          NOT NULL DEFAULT 0,
+    verified_at       TIMESTAMPTZ,
+    token_hash        VARCHAR(200) UNIQUE,               -- 재설정 토큰의 SHA-256 (15분, 한 번만)
+    token_expires_at  TIMESTAMPTZ,
+    used_at           TIMESTAMPTZ,
+    created_at        TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_password_resets_email ON password_resets(email, created_at DESC);
+
 -- ---------------------------------------------------------------------
 -- 2. 장비 / 시험유형  (기능 1·2·3·4·12)
 -- ---------------------------------------------------------------------
