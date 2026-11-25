@@ -69,28 +69,24 @@ public class DemoReservationSeeder {
     /**
      * equipmentIndex: lab1 조직 장비(id 순) 중 몇 번째인지. 장비가 적으면 나머지로 돌려 씀.
      * hours 가 24를 넘으면 여러 날에 걸친 일정 (예: 9시 시작 57시간 = 사흘째 18시 종료).
-     * withResult: 확정 후 시험 결과까지 등록 ("시험 완료" 시연용)
+     * withResult: 확정 후 시험 결과까지 등록 ("시험 완료" 시연용).
+     * variant: 제목 고르기 (같은 장비의 일정끼리 0·1·2 로 달리 함). 문구는 장비 시험유형에 맞춰 {@link DemoRequestThemes}
      */
     record Slot(String ref, int equipmentIndex, int dayOffset, int startHour, int hours, boolean confirmed,
-                boolean withResult, String title, String purpose, String sampleName) {
+                boolean withResult, int variant) {
     }
 
     /** 확정 예약끼리는 같은 장비에서 겹치지 않게 배치 (DB 제약) */
     static final List<Slot> SLOTS = List.of(
-            new Slot("slot-1", 0, 2, 9, 8, true, false, "위성 전장품 진동시험", "발사 환경 진동 내구성 확인", "위성 탑재 전장품"),
-            new Slot("slot-2", 1, 4, 10, 5, false, false, "드론 프레임 내구 시험", "비행 하중 반복 내구성 확인", "드론 탄소 프레임"),
-            new Slot("slot-3", 0, 7, 9, 9, true, false, "탑재체 구조물 진동시험", "탑재체 구조 건전성 확인", "탑재체 구조 시편"),
-            new Slot("slot-4", 2, 10, 13, 4, false, false, "소형 위성 부품 환경시험", "궤도 환경 적합성 확인", "큐브위성 부품"),
-            new Slot("slot-5", 1, 1, 10, 6, true, true, "항공 전장 커넥터 진동시험", "비행 진동 환경 접촉 안정성 확인",
-                    "항공용 커넥터 모듈"),
-            new Slot("slot-6", 2, 7, 13, 4, true, false, "무인기 배터리팩 환경시험", "저온·고온 동작 안정성 확인",
-                    "무인기 배터리팩"),
-            new Slot("slot-7", 1, 12, 9, 57, true, false, "발사체 부품 장시간 내구시험", "반복 하중 누적 피로 확인",
-                    "발사체 브래킷"),
-            new Slot("slot-8", 2, 15, 9, 33, true, false, "위성 태양전지판 환경시험", "온도 사이클 내구성 확인",
-                    "태양전지판 시편"),
-            new Slot("slot-9", 0, 19, 9, 57, true, false, "드론 비행제어기 연속 진동시험", "장시간 진동 환경 동작 확인",
-                    "비행제어기 보드"));
+            new Slot("slot-1", 0, 2, 9, 8, true, false, 0),
+            new Slot("slot-2", 1, 4, 10, 5, false, false, 0),
+            new Slot("slot-3", 0, 7, 9, 9, true, false, 1),
+            new Slot("slot-4", 2, 10, 13, 4, false, false, 0),
+            new Slot("slot-5", 1, 1, 10, 6, true, true, 1),
+            new Slot("slot-6", 2, 7, 13, 4, true, false, 1),
+            new Slot("slot-7", 1, 12, 9, 57, true, false, 2),
+            new Slot("slot-8", 2, 15, 9, 33, true, false, 2),
+            new Slot("slot-9", 0, 19, 9, 57, true, false, 2));
 
     private final UserRepository userRepository;
     private final EquipmentRepository equipmentRepository;
@@ -102,6 +98,7 @@ public class DemoReservationSeeder {
     private final ReviewService reviewService;
     private final ReservationService reservationService;
     private final TransactionTemplate transactionTemplate;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     @Value("${astra.demo.reservations.enabled:false}")
     private boolean enabled;
@@ -217,6 +214,7 @@ public class DemoReservationSeeder {
             return false;
         }
         Reservation r = existing.get();
+        syncText(r.getRequestId(), themeOf(slot, equipmentService.getDetail(r.getEquipmentId())));
         OffsetDateTime startAt = startOf(slot, today);
         OffsetDateTime endAt = endOf(slot, today);
         if (r.getStartAt().isEqual(startAt) && r.getEndAt().isEqual(endAt)) {
@@ -225,6 +223,32 @@ public class DemoReservationSeeder {
         r.moveDemo(startAt, endAt);
         reservationRepository.saveAndFlush(r); // 실제 확정 예약과 겹치면 DB 제약이 거부 → 이 칸만 실패
         return true;
+    }
+
+    private static DemoRequestThemes.Theme themeOf(Slot slot, EquipmentDetailResponse equipment) {
+        String testType = equipment.testTypes().isEmpty() ? null : equipment.testTypes().get(0);
+        return DemoRequestThemes.of(testType, equipment.name(), slot.variant());
+    }
+
+    /**
+     * 이미 만든 시연 의뢰의 제목·목적·시료명·결과 문구를 장비에 맞는 문구로 맞춤
+     * (예전 버전이 장비와 상관없이 "진동시험" 제목을 붙였던 것 정리). 같으면 아무것도 바꾸지 않음
+     */
+    private void syncText(Long requestId, DemoRequestThemes.Theme theme) {
+        int changed = jdbc.update("UPDATE test_requests SET title = ? WHERE id = ? AND title IS DISTINCT FROM ?",
+                theme.title(), requestId, theme.title());
+        jdbc.update("""
+                UPDATE test_request_revisions
+                SET content = jsonb_set(jsonb_set(content, '{test,purpose}', to_jsonb(?::text), true),
+                                        '{sample,name}', to_jsonb(?::text), true)
+                WHERE request_id = ? AND content -> 'test' IS NOT NULL AND content -> 'sample' IS NOT NULL
+                  AND (content #>> '{test,purpose}' IS DISTINCT FROM ? OR content #>> '{sample,name}' IS DISTINCT FROM ?)
+                """, theme.purpose(), theme.sampleName(), requestId, theme.purpose(), theme.sampleName());
+        jdbc.update("UPDATE test_results SET summary = ? WHERE request_id = ? AND summary IS DISTINCT FROM ?",
+                theme.resultSummary(), requestId, theme.resultSummary());
+        if (changed > 0) {
+            log.info("시연 의뢰 {} 제목을 장비에 맞게 바꿈: {}", requestId, theme.title());
+        }
     }
 
     /** 예약이 아직 열려 있거나 확정 상태이고, 의뢰도 그에 맞는 상태(일정 조율 중·확정)일 때만 날짜를 옮겨 다시 씀 */
@@ -240,25 +264,26 @@ public class DemoReservationSeeder {
     /** 실제 화면과 같은 순서로 의뢰를 진행해 일정까지 만듦 (알림·상태 이력도 그대로 남음) */
     private void create(Slot slot, Long equipmentId, OffsetDateTime startAt, OffsetDateTime endAt,
                         CurrentUser requester, CurrentUser provider) {
+        EquipmentDetailResponse equipment = equipmentService.getDetail(equipmentId);
+        DemoRequestThemes.Theme theme = themeOf(slot, equipment);
         Long requestId = commandService.create(requester, new RequestInputs.Create(equipmentId, null, null,
-                slot.title()));
+                theme.title()));
         Detail detail = queryService.detail(requester, requestId);
         Map<String, Object> content = new LinkedHashMap<>(detail.workingRevision() != null
                 ? detail.workingRevision().content() : detail.revision().content());
-        EquipmentDetailResponse equipment = equipmentService.getDetail(equipmentId);
         Map<String, Object> test = new LinkedHashMap<>();
         if (!equipment.testTypes().isEmpty()) {
             test.put("testTypeCode", equipment.testTypes().get(0));
         }
-        test.put("purpose", slot.purpose());
+        test.put("purpose", theme.purpose());
         content.put("test", test);
-        content.put("sample", new LinkedHashMap<>(Map.of("name", slot.sampleName(), "quantity", 1)));
+        content.put("sample", new LinkedHashMap<>(Map.of("name", theme.sampleName(), "quantity", 1)));
         content.put("accounting", new LinkedHashMap<>(Map.of("name", "김회계", "phone", "02-000-0000",
                 "email", "account@example.com")));
         content.put("schedule", new LinkedHashMap<>(Map.of(
                 "desiredStartDate", startAt.atZoneSameInstant(KST).toLocalDate().toString(),
                 "desiredEndDate", endAt.atZoneSameInstant(KST).toLocalDate().toString())));
-        commandService.saveDraft(requester, requestId, new RequestInputs.SaveDraft(null, slot.title(), content,
+        commandService.saveDraft(requester, requestId, new RequestInputs.SaveDraft(null, theme.title(), content,
                 "시연 일정 데이터"));
         commandService.submit(requester, requestId, null);
         reviewService.startReview(provider, requestId, null);
@@ -269,8 +294,7 @@ public class DemoReservationSeeder {
             reservationService.confirm(provider, reservationId, null);
             if (slot.withResult()) {
                 commandService.registerResult(provider, requestId, new RequestInputs.Result(
-                        "가진 조건 5~2,000Hz, 3축 각 30분 진동 후 외관·접촉저항 이상 없음. 시험 후 기능 점검 정상.",
-                        "ASTRA-DEMO-" + requestId, null));
+                        theme.resultSummary(), "ASTRA-DEMO-" + requestId, null));
             }
         }
         Reservation reservation = reservationRepository.findById(reservationId).orElseThrow();

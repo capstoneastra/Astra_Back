@@ -72,6 +72,29 @@ class DemoReservationSeederTest {
         assertThat(seeder.refresh()).isEqualTo(9);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM test_requests", Long.class)).isEqualTo(requests);
 
+        // 제목은 장비 시험유형에 맞음 (진동시험 제목은 진동시험 장비에만)
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM reservations r JOIN test_requests q ON q.id = r.request_id
+                WHERE r.external_system = 'ASTRA_DEMO' AND q.title LIKE '%진동%'
+                  AND NOT EXISTS (SELECT 1 FROM equipment_test_types t
+                                  WHERE t.equipment_id = r.equipment_id AND t.test_type_code = 'VIBRATION')""",
+                Long.class)).isZero();
+        // 예전 버전이 남긴 맞지 않는 제목·목적은 다음 실행 때 장비에 맞게 바뀜
+        jdbc.update("""
+                UPDATE test_requests SET title = '옛 제목' WHERE id IN (
+                  SELECT request_id FROM reservations WHERE external_system = 'ASTRA_DEMO')""");
+        jdbc.update("""
+                UPDATE test_request_revisions SET content = jsonb_set(content, '{test,purpose}', '"옛 목적"')
+                WHERE request_id IN (SELECT request_id FROM reservations WHERE external_system = 'ASTRA_DEMO')""");
+        assertThat(seeder.refresh()).isEqualTo(9);
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM test_requests q JOIN reservations r ON r.request_id = q.id
+                WHERE r.external_system = 'ASTRA_DEMO' AND q.title = '옛 제목'""", Long.class)).isZero();
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM test_request_revisions v JOIN reservations r ON r.request_id = v.request_id
+                WHERE r.external_system = 'ASTRA_DEMO' AND v.content #>> '{test,purpose}' = '옛 목적'""", Long.class))
+                .isZero();
+
         // 날짜가 지나면 오늘 기준으로 옮김 (시연 예약끼리 겹치지 않고 전부 옮겨짐)
         jdbc.update("""
                 UPDATE reservations SET start_at = start_at - interval '30 days', end_at = end_at - interval '30 days'
