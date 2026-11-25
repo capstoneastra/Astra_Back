@@ -56,6 +56,8 @@ public class DashboardService {
 
     /** 목록 칸(처리할 의뢰·검토 대기·예약·최근 상담) 최대 개수 */
     static final int LIST_LIMIT = 5;
+    /** 다가오는 확정 일정: 프론트 캘린더가 몇 주치를 그리므로 목록보다 넉넉히 */
+    static final int UPCOMING_LIMIT = 30;
     /** 이 기간이 지나면 "정보 갱신 필요" (기관 장비 관리와 같은 기준) */
     static final int UPDATE_INTERVAL_DAYS = Equipment.UPDATE_INTERVAL_DAYS;
 
@@ -100,6 +102,8 @@ public class DashboardService {
         return new CompanySummary(u.role(), DashboardView.REQUESTER,
                 counts(requests == null ? null : () -> requests.countByRequester(u.userId())),
                 requests == null ? List.<RequestActionItem>of() : requests.findActionRequired(u.userId(), LIST_LIMIT),
+                requests == null ? List.<UpcomingReservationItem>of()
+                        : requests.findUpcomingReservationsForRequester(u.userId(), UPCOMING_LIMIT),
                 chats == null ? List.<ChatSessionSummary>of() : chats.findRecent(u.userId(), LIST_LIMIT),
                 overview(), new DataAvailable(requests != null, chats != null));
     }
@@ -116,7 +120,7 @@ public class DashboardService {
                 counts(requests == null ? null : () -> requests.countByInstitution(institutionId)),
                 requests == null ? List.<RequestActionItem>of() : requests.findPendingReview(institutionId, LIST_LIMIT),
                 requests == null ? List.<UpcomingReservationItem>of()
-                        : requests.findUpcomingReservations(institutionId, LIST_LIMIT),
+                        : requests.findUpcomingReservations(institutionId, UPCOMING_LIMIT),
                 new NeedsUpdate(needs.total(), needs.notConfirmed(), needs.outdated()),
                 overview(), new DataAvailable(requests != null, null));
     }

@@ -5,6 +5,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
+import kr.astra.auth.dto.AccountRecoveryDtos.FindEmailRequest;
+import kr.astra.auth.dto.AccountRecoveryDtos.FindEmailResponse;
+import kr.astra.auth.dto.AccountRecoveryDtos.PasswordResetCompleteRequest;
+import kr.astra.auth.dto.AccountRecoveryDtos.PasswordResetConfirmRequest;
+import kr.astra.auth.dto.AccountRecoveryDtos.PasswordResetConfirmResponse;
+import kr.astra.auth.dto.AccountRecoveryDtos.PasswordResetRequest;
 import kr.astra.auth.dto.EmailVerificationConfirmRequest;
 import kr.astra.auth.dto.EmailVerificationConfirmResponse;
 import kr.astra.auth.dto.EmailVerificationRequest;
@@ -14,6 +20,7 @@ import kr.astra.auth.dto.RefreshTokenRequest;
 import kr.astra.auth.dto.SignupRequest;
 import kr.astra.auth.dto.SignupResponse;
 import kr.astra.auth.dto.TokenResponse;
+import kr.astra.auth.service.AccountRecoveryService;
 import kr.astra.auth.service.AuthRateLimiter;
 import kr.astra.auth.service.AuthService;
 import kr.astra.auth.service.EmailVerificationService;
@@ -40,6 +47,7 @@ public class AuthController {
     private final AuthService authService;
     private final EmailVerificationService emailVerificationService;
     private final AuthRateLimiter rateLimiter;
+    private final AccountRecoveryService accountRecoveryService;
 
     @Operation(summary = "이메일 인증 코드 발송", description = "6자리 코드를 메일로 보냄(10분 유효). "
             + "이미 가입된 이메일은 409 EMAIL_ALREADY_EXISTS, 60초 안에 다시 요청하면 429 TOO_MANY_REQUESTS. "
@@ -80,6 +88,46 @@ public class AuthController {
     @PostMapping("/refresh")
     public ApiResponse<TokenResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
         return ApiResponse.ok(authService.refresh(request.refreshToken()));
+    }
+
+    // ------------------------------------------------------------ 계정 찾기 (api-spec §1-2)
+
+    @Operation(summary = "이메일(아이디) 찾기", description = "가입할 때 넣은 이름과 연락처(숫자만 비교)가 둘 다 맞는 "
+            + "계정의 이메일을 가려서 돌려줌 (예: co*****@astra.kr). 없으면 빈 배열 (항상 200)")
+    @PostMapping("/find-email")
+    public ApiResponse<FindEmailResponse> findEmail(@Valid @RequestBody FindEmailRequest request,
+                                                    HttpServletRequest http) {
+        rateLimiter.checkFindEmail(http.getRemoteAddr());
+        return ApiResponse.ok(accountRecoveryService.findEmails(request.name(), request.phone()));
+    }
+
+    @Operation(summary = "비밀번호 재설정 코드 발송", description = "6자리 코드를 메일로 보냄(10분 유효). "
+            + "가입하지 않은 이메일도 같은 200 (메일만 안 보냄). 같은 이메일 60초 안 재요청은 429 TOO_MANY_REQUESTS")
+    @PostMapping("/password-resets")
+    public ApiResponse<EmailVerificationSentResponse> sendPasswordResetCode(
+            @Valid @RequestBody PasswordResetRequest request, HttpServletRequest http) {
+        rateLimiter.checkPasswordResetSend(http.getRemoteAddr());
+        return ApiResponse.ok(accountRecoveryService.sendCode(request.email()));
+    }
+
+    @Operation(summary = "비밀번호 재설정 코드 확인", description = "맞으면 resetToken(15분, 한 번만) 발급. "
+            + "틀리면 400 VERIFICATION_CODE_INVALID(details.remainingAttempts), "
+            + "만료·5회 틀림이면 400 VERIFICATION_CODE_EXPIRED → 코드 다시 받기")
+    @PostMapping("/password-resets/confirm")
+    public ApiResponse<PasswordResetConfirmResponse> confirmPasswordResetCode(
+            @Valid @RequestBody PasswordResetConfirmRequest request, HttpServletRequest http) {
+        rateLimiter.checkPasswordResetVerify(http.getRemoteAddr());
+        return ApiResponse.ok(accountRecoveryService.confirm(request.email(), request.code()));
+    }
+
+    @Operation(summary = "새 비밀번호 저장", description = "resetToken 으로 비밀번호 변경 (규칙은 회원가입과 같음: 8~72자). "
+            + "만료·이미 사용한 토큰은 400 RESET_TOKEN_INVALID. 성공하면 그 회원의 refresh 토큰이 모두 폐기됨")
+    @PostMapping("/password-resets/complete")
+    public ApiResponse<Void> completePasswordReset(@Valid @RequestBody PasswordResetCompleteRequest request,
+                                                   HttpServletRequest http) {
+        rateLimiter.checkPasswordResetVerify(http.getRemoteAddr());
+        accountRecoveryService.complete(request.resetToken(), request.newPassword());
+        return ApiResponse.ok();
     }
 
     @Operation(summary = "가입용 기관 목록", description = "승인된 기관의 id·이름·지역 (로그인 불필요)")

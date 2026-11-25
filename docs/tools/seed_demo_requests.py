@@ -85,8 +85,7 @@ def main():
         """그 계정 소속 조직의 장비 하나 (DB 마다 장비 번호가 다를 수 있어 번호를 고정하지 않음)"""
         d = step(f"{who} 소속 장비 찾기", *api.call("GET", "/institutions/me/equipment?size=1", token=token), 200)
         if not d["content"]:
-            print(f"
-중단: {who} 소속 장비가 없습니다."); sys.exit(1)
+            print(f"\n중단: {who} 소속 장비가 없습니다."); sys.exit(1)
         return d["content"][0]["id"]
 
     def create(token, equipment_id, title):
