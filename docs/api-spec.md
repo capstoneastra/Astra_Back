@@ -263,6 +263,7 @@
   // 2026-11-26 추가: 사양 전체. 상세(GET /equipment/{id})의 specs 와 같은 값·순서·형식 (사양이 없으면 [])
   "specs": [ { "key": "frequency", ... }, { "key": "max_payload", ... }, ... ] }
 // infoUpdatedAt: 초기 적재 데이터는 DB 를 만든(마이그레이션) 시각. 기관이 수정·확인하면 그 시각으로 바뀜
+// 정렬(?sort=)값이 같으면 가용 상태 순(AVAILABLE → BUSY → MAINTENANCE → UNAVAILABLE → UNKNOWN), 그다음 id (2026-11-26)
 // 목록 항목 형식은 비교(POST /equipment/compare)의 equipment[] 에도 그대로 쓰임
 
 // 이용료 형식 (V17, 모든 장비): feeText = "금액원/단위 (부가세 별도|포함)" 또는 "협의"
@@ -785,7 +786,7 @@ structured output의 시험유형 enum은 test_types, 조건 키 enum은 선택 
 > 구현 전에는 0·빈 목록이고 `dataAvailable` 이 `false`이므로, 프론트는 그 칸을 "준비 중"으로 표시합니다. 목록 칸은 최대 5개
 > (`upcomingReservations` 만 캘린더용으로 최대 30개, 2026-11-26).
 >
-> `upcomingReservations` = 확정(CONFIRMED) 예약 중 **아직 끝나지 않은 것**(`endAt` 이 지금 이후, 진행 중 포함. 2026-11-26 전에는 시작 전만). REQUESTER·PROVIDER 둘 다 있음.
+> `upcomingReservations` = 확정(CONFIRMED) 예약 중 **아직 끝나지 않은 것**(`endAt` 이 지금 이후, 진행 중 포함. 2026-11-26 전에는 시작 전만). 의뢰가 시험 완료(COMPLETED)되면 빠짐. REQUESTER·PROVIDER 둘 다 있음.
 > 시연 서버는 lab1 조직 장비에 company 의뢰로 확정 일정 7건(+1~+21일, 2~3일짜리·같은 날 2건 포함)과 제안 2건을 매일 오늘 기준으로 맞춥니다. 그중 1건은 결과까지 등록돼 "시험 완료"를 바로 누를 수 있습니다.
 
 > 응답 형식은 `role`이 아니라 `view`로 구분합니다. 기업 회원도 `?view=PROVIDER`로 자기 조직이 받은 의뢰를, 기관·대학 회원도 `?view=REQUESTER`로 자기가 보낸 의뢰를 볼 수 있습니다.

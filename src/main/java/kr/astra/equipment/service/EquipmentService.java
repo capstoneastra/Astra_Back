@@ -214,6 +214,11 @@ public class EquipmentService {
             }
             return column + (order.isAscending() ? " ASC" : " DESC");
         }).collect(Collectors.joining(", "));
-        return clause + ", e.id ASC";
+        // 정렬값이 같으면(초기 적재 장비는 갱신 시각이 모두 같음) 이용 가능한 장비를 먼저
+        return clause + ", " + AVAILABILITY_RANK + ", e.id ASC";
     }
+
+    /** 이용 가능 → 사용 중 → 점검 → 이용 불가 → 미확인 */
+    private static final String AVAILABILITY_RANK = "CASE e.availability WHEN 'AVAILABLE' THEN 0 WHEN 'BUSY' THEN 1"
+            + " WHEN 'MAINTENANCE' THEN 2 WHEN 'UNAVAILABLE' THEN 3 ELSE 4 END ASC";
 }

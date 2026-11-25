@@ -51,7 +51,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
                                @Param("from") OffsetDateTime from, @Param("to") OffsetDateTime to);
 
     /**
-     * 대시보드: 기관의 다가오는 확정 예약 (아직 끝나지 않은 것, 시작 빠른 순).
+     * 대시보드: 기관의 다가오는 확정 예약 (아직 끝나지 않은 것, 의뢰도 시험 확정 상태. 완료된 의뢰는 빠짐. 시작 빠른 순).
      * 의뢰번호를 같이 가져와 행마다 의뢰를 다시 읽지 않음
      */
     @Query("""
@@ -60,6 +60,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
             FROM Reservation r, TestRequest q
             WHERE r.requestId = q.id AND q.institutionId = :institutionId
               AND r.status = :status AND r.endAt > :now
+              AND q.status = kr.astra.request.entity.RequestStatus.CONFIRMED
             ORDER BY r.startAt
             """)
     List<Upcoming> findUpcomingForInstitution(@Param("institutionId") Long institutionId,
@@ -73,6 +74,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
             FROM Reservation r, TestRequest q
             WHERE r.requestId = q.id AND q.requesterId = :requesterId
               AND r.status = :status AND r.endAt > :now
+              AND q.status = kr.astra.request.entity.RequestStatus.CONFIRMED
             ORDER BY r.startAt
             """)
     List<Upcoming> findUpcomingForRequester(@Param("requesterId") Long requesterId,

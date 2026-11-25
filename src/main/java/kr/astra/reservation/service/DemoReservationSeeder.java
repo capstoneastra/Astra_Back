@@ -249,6 +249,13 @@ public class DemoReservationSeeder {
         if (changed > 0) {
             log.info("시연 의뢰 {} 제목을 장비에 맞게 바꿈: {}", requestId, theme.title());
         }
+        markNotificationsRead(requestId);
+    }
+
+    /** 시연 데이터를 만들며 생긴 알림(제출·검토·일정 제안·확정 등)은 읽음 처리 → 헤더 알림 숫자가 쌓이지 않게 */
+    private void markNotificationsRead(Long requestId) {
+        jdbc.update("UPDATE notifications SET read_at = now() WHERE related_request_id = ? AND read_at IS NULL",
+                requestId);
     }
 
     /** 예약이 아직 열려 있거나 확정 상태이고, 의뢰도 그에 맞는 상태(일정 조율 중·확정)일 때만 날짜를 옮겨 다시 씀 */
@@ -300,6 +307,7 @@ public class DemoReservationSeeder {
         Reservation reservation = reservationRepository.findById(reservationId).orElseThrow();
         reservation.markDemo(DEMO_SYSTEM, slot.ref());
         reservationRepository.saveAndFlush(reservation);
+        markNotificationsRead(requestId);
         log.info("시연 예약 {} 생성: 의뢰 {}, 장비 {}, {} ~ {}", slot.ref(), requestId, equipmentId, startAt, endAt);
     }
 

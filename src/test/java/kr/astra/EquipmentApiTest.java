@@ -69,6 +69,24 @@ class EquipmentApiTest {
     }
 
     @Test
+    void 정렬값이_같으면_이용_가능한_장비가_먼저_나온다() throws Exception {
+        java.util.List<String> order = java.util.List.of("AVAILABLE", "BUSY", "MAINTENANCE", "UNAVAILABLE", "UNKNOWN");
+        JsonNode content = api.get("/api/v1/equipment?includeMock=true&sort=infoUpdatedAt,desc&size=100", token)
+                .data().path("content");
+        assertThat(content.size()).isPositive();
+        for (int i = 1; i < content.size(); i++) {
+            JsonNode prev = content.get(i - 1);
+            JsonNode cur = content.get(i);
+            if (prev.path("infoUpdatedAt").asString().equals(cur.path("infoUpdatedAt").asString())) {
+                assertThat(order.indexOf(cur.path("availability").asString()))
+                        .isGreaterThanOrEqualTo(order.indexOf(prev.path("availability").asString()));
+            }
+        }
+        // 첫 화면이 '미확인' 장비로 시작하지 않음
+        assertThat(content.get(0).path("availability").asString()).isEqualTo("AVAILABLE");
+    }
+
+    @Test
     void 공인필터는_시험유형과_유효기간을_같이_확인한다() throws Exception {
         assertThat(api.get("/api/v1/equipment?accreditedOnly=true",token).data().path("totalElements").asLong()).isZero();
         try {
