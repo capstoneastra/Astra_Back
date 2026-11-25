@@ -35,6 +35,9 @@ class DemoReservationSeederTest {
     @Autowired
     JdbcTemplate jdbc;
 
+    @Autowired
+    kr.astra.reservation.service.ReservationService reservationService;
+
     @Test
     void 오늘부터_21일_안에_예약을_만들고_다시_돌려도_늘지_않으며_지난_예약은_옮긴다() {
         assertThat(seeder.refresh()).isEqualTo(9);
@@ -121,11 +124,22 @@ class DemoReservationSeederTest {
                 WHERE u.email = 'company@astra.kr' AND r.status = 'CONFIRMED' AND r.end_at > now()""", Long.class))
                 .isEqualTo(7);
 
-        // 시험 완료된 칸은 다음 실행 때 새 의뢰로 다시 만듦
+        // 시연 데이터가 만든 알림은 모두 읽음 (헤더 알림 숫자가 쌓이지 않게)
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM notifications n JOIN reservations r ON r.request_id = n.related_request_id
+                WHERE r.external_system = 'ASTRA_DEMO' AND n.read_at IS NULL""", Long.class)).isZero();
+
+        // 대시보드 다가오는 일정: 기업·기관 모두 7건
+        Long companyId = jdbc.queryForObject("SELECT id FROM users WHERE email = 'company@astra.kr'", Long.class);
+        assertThat(reservationService.upcomingForRequester(companyId, 30)).hasSize(7);
+        assertThat(reservationService.upcomingForInstitution(managerOrg, 30)).hasSize(7);
+
+        // 시험 완료된 칸은 다가오는 일정에서 빠지고, 다음 실행 때 새 의뢰로 다시 만듦
         jdbc.update("""
                 UPDATE test_requests SET status = 'COMPLETED' WHERE id = (
                   SELECT r.request_id FROM reservations r JOIN test_results t ON t.request_id = r.request_id
                   WHERE r.external_system = 'ASTRA_DEMO' ORDER BY r.id DESC LIMIT 1)""");
+        assertThat(reservationService.upcomingForRequester(companyId, 30)).hasSize(6);
         assertThat(seeder.refresh()).isEqualTo(9);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM test_requests", Long.class)).isEqualTo(requests + 1);
     }
