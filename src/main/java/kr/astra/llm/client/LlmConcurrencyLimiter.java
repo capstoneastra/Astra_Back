@@ -24,13 +24,15 @@ public final class LlmConcurrencyLimiter {
 
     public <T> T call(Supplier<T> action) {
         boolean acquired;
-        try { acquired = permits.tryAcquire(wait.toMillis(), TimeUnit.MILLISECONDS); }
+        // 상담처럼 전체 마감이 있으면 그 안에서만 기다림
+        long waitMillis = LlmDeadline.remaining(wait).toMillis();
+        try { acquired = permits.tryAcquire(waitMillis, TimeUnit.MILLISECONDS); }
         catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new BusinessException(ErrorCode.AI_UPSTREAM_ERROR);
         }
         if (!acquired) {
-            log.warn("LLM 동시 호출 한도 초과로 요청을 거절합니다 (대기 {}ms)", wait.toMillis());
+            log.warn("LLM 동시 호출 한도 초과로 요청을 거절합니다 (대기 {}ms)", waitMillis);
             throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS, "AI 요청이 몰려 있습니다. 잠시 후 다시 시도해 주세요.", null);
         }
         try { return action.get(); }

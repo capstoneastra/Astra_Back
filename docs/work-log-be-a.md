@@ -26,6 +26,7 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 | 14 | 프론트 화면 정리 요청 6건: 데모 문구, 이용료 형식 통일, 관리자 시험유형별 수요·공급, 비밀번호 변경, 데모 예약, 장비 목록 필드, 2026-11-24 | ✅ | `666e9da` |
 | 15 | 시연 계정 이메일·비밀번호 짧게 (`@astra.kr`, `1234`), 2026-11-25 | ✅ | `37dc9e4` (PR #22) |
 | 16 | 새 프론트 연동: 계정 찾기 API 4개, 기업 대시보드 확정 일정, 시연 확정 예약 7건, 장비 목록 `specs`, 2026-11-26 | ✅ | 커밋 전 |
+| 17 | AI 상담: Gemini 붐빌 때 다음 모델·Claude 로 넘기기, 메시지당 25초 마감 (BE-C 코드), 2026-11-27 | ✅ | 커밋 전 |
 
 **지금 남은 것** (2026-11-20 기준)
 - FE 공지(11번): 기관·대학 가입에 `researcherNo` 필수, 의뢰서 `actualUser`·`accounting` 제출 필수, 추가 정보 요청(`kind`), 예상 이용료·결과 등록 화면, 매칭 결과 `accessScope` 배지, 완료 전 결과 등록
@@ -46,6 +47,27 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 - `application.yml` 의 Gemini 기본 모델 `gemini-3.8-flash` 가 503 과부하 상태. 시연 서버 `.env` 에 `GEMINI_MODEL` 을 명시해 둘 것
 
 11-09 에 남았던 것 중 끝난 것: `feature/be-a` PR(→ PR #11), 공인시험·운용 인력·보안 정보 필드(→ V6, BE-C 주현욱 2026-11-14), BE-B 의뢰·예약·알림 구현(→ PR #13)
+
+---
+
+## 2026-11-27 · 17번: AI 상담이 Gemini 과부하 때 90초 넘게 멈추는 문제
+
+**문제**: "안녕"만 보내도 응답이 90초 넘게 안 옴. 로그상 `gemini-3.5-flash` 503(high demand) → 같은 모델 1회 재시도 → 30초 뒤 TimeoutException → 조건 추출 실패 → 답변 호출도 45초 뒤 TimeoutException. 프론트는 15초에 끊김
+
+**바꾼 것** (BE-C 코드, 윤준수가 수정)
+- `GeminiLlmClient`: 503·429·504·시간 초과면 같은 모델을 다시 부르지 않고 `GEMINI_MODELS` 의 다음 모델로 바로 넘김. 모두 막히면 `ANTHROPIC_API_KEY` 가 있을 때 Claude(`astra.ai.model`)로 마지막 시도. 다른 오류(500, 형식 오류)는 넘기지 않음
+  - 스트리밍은 글자를 한 번이라도 보낸 뒤에는 넘기지 않음 (답이 섞이지 않게)
+  - 모델 하나당 대기 45초 → 12초 (`AI_MODEL_TIMEOUT_SECONDS`)
+  - 마지막까지 실패하면 429 도 `AI_UPSTREAM_ERROR`(502) 로 돌려줌 (프론트 "AI가 지금 붐벼요" 안내를 하나로)
+  - 로그 한 줄: `AI 응답 완료 provider=gemini model=... attempt=2/3 elapsedMs=...`
+- `LlmDeadline`(새 파일): 한 작업의 AI 전체 마감. `ChatService.send` 가 메시지 하나에 25초(`AI_CHAT_TIMEOUT_SECONDS`), 그중 조건 추출에 10초(`AI_CHAT_EXTRACTION_SECONDS`)를 걸고, 클라이언트는 남은 시간까지만 기다림. 남은 시간이 1초 미만이면 새 모델을 부르지 않고 바로 502
+  - 조건 추출이 10초 안에 안 끝나면 지금처럼 이전 조건으로 답변을 이어감 → 답변에 최소 15초가 남음
+  - `LlmConcurrencyLimiter` 대기, `AnthropicLlmClient` 요청 시간도 이 마감을 따름 (마감이 없으면 기존 45초 그대로)
+- 설정: `.env` 에 `GEMINI_MODELS=gemini-3.5-flash,gemini-3.5-flash-lite` 처럼 순서를 적음. 비우면 `GEMINI_MODEL` 하나만
+
+**확인**: `GeminiLlmClientTest`(503·429·시간 초과 넘기기, 스트리밍, Claude 대체, 전체 마감), `ChatServiceTest`(추출 10초·전체 25초 마감) 등 llm·chat 테스트 86개 통과. 전체 테스트 중 `AuthFlowTest`·`RequestHardeningTest` 3개 실패는 로컬 `.env` 의 `ASTRA_RULES_STRICT=false` 때문 (이번 변경 전 코드에서도 똑같이 실패). 실제 Gemini 호출로는 확인 안 함
+
+**남은 것**: 자동 추진(파이프라인)·AI 초안 등 상담 외 호출은 전체 마감 없이 모델당 12초 × 모델 수만 기다림. 긴 답변이 25초를 넘으면 스트리밍 중에도 끊김
 
 ---
 

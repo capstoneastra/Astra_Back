@@ -49,6 +49,23 @@ class ChatServiceTest {
         verify(persistence).complete(eq(user),eq(turn),any(),argThat(m ->
                 m.get("suggestedEquipmentIds") instanceof List<?> ids && ids.size()==5 && ids.subList(0,3).equals(List.of(2L,4L,6L))));
     }
+    @Test void aiCallsRunUnderMessageDeadlineAndExtractionGetsTheShorterShare() {
+        // 상담 한 건 전체 25초, 그중 조건 추출 10초 안에서만 AI 를 기다림 (클라이언트가 LlmDeadline 을 따름)
+        var huge=java.time.Duration.ofHours(1);
+        List<java.time.Duration> seen=new ArrayList<>();
+        when(extraction.extract(anyString(),isNull())).thenAnswer(i -> {
+            seen.add(kr.astra.llm.client.LlmDeadline.remaining(huge));
+            return new ConditionExtractionService.Extraction("VIBRATION",List.of(),Map.of());
+        });
+        when(llm.complete(any())).thenAnswer(i -> {
+            seen.add(kr.astra.llm.client.LlmDeadline.remaining(huge));
+            return new LlmClient.Reply("답변","model","request",1,2);
+        });
+        service.send(user,5L,"질량 15kg",null);
+        assertThat(seen.get(0)).isLessThanOrEqualTo(java.time.Duration.ofSeconds(10)).isGreaterThan(java.time.Duration.ofSeconds(9));
+        assertThat(seen.get(1)).isLessThanOrEqualTo(java.time.Duration.ofSeconds(25)).isGreaterThan(java.time.Duration.ofSeconds(20));
+        assertThat(kr.astra.llm.client.LlmDeadline.remaining(huge)).isEqualTo(huge); // 끝나면 마감 해제
+    }
     @Test void equipmentLookupFailureStillAnswers() {
         when(equipment.findCandidates(anyString(),any())).thenThrow(new RuntimeException("db down"));
         when(llm.complete(any())).thenReturn(new LlmClient.Reply("답변","model","request",1,2));
