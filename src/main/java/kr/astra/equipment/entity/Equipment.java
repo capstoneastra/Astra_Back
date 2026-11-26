@@ -226,6 +226,12 @@ public class Equipment extends BaseTimeEntity {
                 && (f.feeAmount() != null || f.feeUnit() != null || f.feeVatIncluded() != null)) {
             feeText = FeeUnit.format(feeAmount, feeUnit, feeVatIncluded);
         }
+        // 이용료 정보를 하나도 안 보낸 장비는 시드 장비와 같은 '협의' 형식으로 (V17 규칙: 금액 없음 = 협의·NEGOTIABLE)
+        if ((feeText == null || feeText.isBlank()) && feeAmount == null) {
+            feeText = FeeUnit.NEGOTIABLE.label();
+            feeUnit = FeeUnit.NEGOTIABLE;
+            feeVatIncluded = null;
+        }
         if (f.durationText() != null) durationText = f.durationText();
         if (f.utilizationRate() != null) utilizationRate = f.utilizationRate();
         if (f.availability() != null) availability = f.availability();
