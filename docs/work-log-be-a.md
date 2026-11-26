@@ -26,7 +26,8 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 | 14 | 프론트 화면 정리 요청 6건: 데모 문구, 이용료 형식 통일, 관리자 시험유형별 수요·공급, 비밀번호 변경, 데모 예약, 장비 목록 필드, 2026-11-24 | ✅ | `666e9da` |
 | 15 | 시연 계정 이메일·비밀번호 짧게 (`@astra.kr`, `1234`), 2026-11-25 | ✅ | `37dc9e4` (PR #22) |
 | 16 | 새 프론트 연동: 계정 찾기 API 4개, 기업 대시보드 확정 일정, 시연 확정 예약 7건, 장비 목록 `specs`, 2026-11-26 | ✅ | 커밋 전 |
-| 17 | AI 상담: Gemini 붐빌 때 다음 모델·Claude 로 넘기기, 메시지당 25초 마감 (BE-C 코드), 2026-11-27 | ✅ | 커밋 전 |
+| 17 | AI 상담: Gemini 붐빌 때 다음 모델·Claude 로 넘기기, 메시지당 25초 마감 (BE-C 코드), 2026-11-27 | ✅ | `9ae5d14` |
+| 18 | 시험유형 없던 장비 50대 정리(V22), 매칭 판정 한글 이름·이유(V21), DB 점검 SQL, 2026-11-27 | ✅ | 커밋 전 |
 
 **지금 남은 것** (2026-11-20 기준)
 - FE 공지(11번): 기관·대학 가입에 `researcherNo` 필수, 의뢰서 `actualUser`·`accounting` 제출 필수, 추가 정보 요청(`kind`), 예상 이용료·결과 등록 화면, 매칭 결과 `accessScope` 배지, 완료 전 결과 등록
@@ -47,6 +48,32 @@ API 형식은 [`api-spec.md`](api-spec.md), 담당·일정은 [`team-guide.md`](
 - `application.yml` 의 Gemini 기본 모델 `gemini-3.8-flash` 가 503 과부하 상태. 시연 서버 `.env` 에 `GEMINI_MODEL` 을 명시해 둘 것
 
 11-09 에 남았던 것 중 끝난 것: `feature/be-a` PR(→ PR #11), 공인시험·운용 인력·보안 정보 필드(→ V6, BE-C 주현욱 2026-11-14), BE-B 의뢰·예약·알림 구현(→ PR #13)
+
+---
+
+## 2026-11-27 · 18번: 시험유형 정리, 매칭 "sample_mass: UNKNOWN" 표시, DB 점검
+
+**문제 1**: 가공기·로봇 등 50대가 "제작·가공 장비"로만 보이고 시험유형 검색·매칭에 안 나옴. V2·V8 시드에서 시험유형 연결이 없던 장비 (가공 39, 소프트웨어 4, 지원 장비 7)
+
+**V22**: 장비 수를 지키려고 지우지 않고 시험유형 5개를 새로 만들어 46대 연결
+- `MACHINING` 가공·시제품 제작 22대 (머시닝센터·가공기·툴프리세터·로봇), `ADDITIVE_MANUFACTURING` 적층제조 9대, `FORMING_HEAT_TREATMENT` 성형·열처리 8대, `NDT_ULTRASONIC` 비파괴검사(초음파) 4대, `MASS_PROPERTIES` 질량특성 측정 2대, 시편 준비기 1대는 기존 `MATERIAL_ANALYSIS`
+- 조건 규칙 17개 (장비에 이미 있는 사양 키로: 작업영역·작업 반경·가압력·온도·주파수·최대 시료 질량)
+- CAD/CAM 소프트웨어 4종은 `is_active=FALSE` (활성 장비 339 → 335). 행은 남김
+- 원래 장비(`ASTRA-CAND`)의 사양은 처음부터 "예시 500mm" 같은 MOCK 값이라 화면에 '예시'로 계속 나옴
+
+**문제 2**: 매칭 결과에 `sample_mass: UNKNOWN, fixture_mass: UNKNOWN, frequency: UNKNOWN` 처럼 영문이 그대로 보임. 진동시험 장비의 사양은 다 있음 → 의뢰 조건이 미확정(UNCONFIRMED)·값 없음(MISSING)일 때 비교하지 않아 UNKNOWN (매칭은 조건 확정 전에도 실행됨)
+
+**V21 + 코드**
+- `MatchResponse.Check` 에 `label`(시료 질량)·`resultText`(충족/미충족/확인 필요) 추가. 프론트는 `conditionKey`·`result` 대신 이 두 값을 표시
+- 추천 사유 문구도 `시료 질량: 확인 필요` 형식. 확인 필요 이유를 4가지로 나눔 (조건 값 없음 / 조건 미확정 / 장비 사양 없음 / 단위 비교 불가)
+- 비교 방식 문구 한글화 (`MAX_LIMIT: 규칙 단위 kg…` → `요청 값이 장비 최대치 이하인지 비교 (kg 기준)`), AI 설명 프롬프트도 label·resultText 를 쓰게 함
+- V21: `match_condition_checks.label` 칸 추가, 이미 저장된 판정·사유 문구도 한글로 바꿈
+
+**DB 점검**: `docs/tools/db_audit.sql` (SELECT 만). 장비·시험유형·조직·회원·의뢰·조건·매칭의 빈 값과 연결 누락 개수를 한 표로 보여 줌. 시연 서버 EC2 Instance Connect 접속이 실패(SSH 연결 설정 실패)해서 아직 서버에서는 못 돌림
+
+**확인**: 전체 테스트 중 실패 3개뿐 (`AuthFlowTest`·`RequestHardeningTest`, 로컬 `.env` 의 `ASTRA_RULES_STRICT=false` 때문, 이번 변경 전에도 실패). 시험유형 수(15→20)·연결 수(320→366)·규칙 수(47→64)·진주 활성 장비 수(36→32) 등 테스트 기대값 갱신
+
+**남은 것**: 시연 서버에 배포 후 `db_audit.sql` 실행, FE 에 `label`·`resultText` 표시 요청, 미확정 조건을 확정하지 않고 매칭하는 흐름은 그대로 (확인 필요로 표시됨)
 
 ---
 

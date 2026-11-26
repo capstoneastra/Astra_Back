@@ -55,10 +55,10 @@ class DatabaseSchemaTest {
         assertThat(count("equipment WHERE external_id LIKE 'ASTRA-DEMO-%'")).isEqualTo(268);
         assertThat(count("equipment WHERE external_id LIKE 'ASTRA-DEMO-%' AND NOT is_mock")).isZero();
         assertThat(count("equipment_specs")).isEqualTo(838);
-        assertThat(count("test_types")).isEqualTo(15);
-        assertThat(count("test_condition_rules")).isEqualTo(47); // 15개 유형에 선택 공인 요구 조건 추가
+        assertThat(count("test_types")).isEqualTo(20); // V22 에서 가공·적층·성형열처리·초음파·질량특성 5개 추가
+        assertThat(count("test_condition_rules")).isEqualTo(64); // 15개 유형에 선택 공인 요구 조건 추가, V22 규칙 17개
         assertThat(count("spec_definitions")).isEqualTo(29);
-        assertThat(count("equipment_test_types")).isEqualTo(320);
+        assertThat(count("equipment_test_types")).isEqualTo(366); // V22 에서 시험유형 없던 장비 46대 연결
         assertThat(count("simulation_models")).isEqualTo(20);
         assertThat(count("simulation_presets")).isEqualTo(71);
     }
@@ -91,7 +91,7 @@ class DatabaseSchemaTest {
         assertThat(count("equipment e WHERE is_active AND equipment_type IN ('TEST','MEASUREMENT') "
                 + "AND NOT EXISTS (SELECT 1 FROM equipment_test_types t WHERE t.equipment_id=e.id)")).isZero();
         assertThat(count("equipment e WHERE is_active AND NOT EXISTS "
-                + "(SELECT 1 FROM equipment_test_types t WHERE t.equipment_id=e.id)")).isEqualTo(50);
+                + "(SELECT 1 FROM equipment_test_types t WHERE t.equipment_id=e.id)")).isZero(); // V22: 시험유형 없던 50대 중 46대 연결, 소프트웨어 4대는 비활성
     }
 
     @Test
