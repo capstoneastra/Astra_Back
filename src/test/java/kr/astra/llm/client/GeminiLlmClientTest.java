@@ -29,6 +29,9 @@ class GeminiLlmClientTest {
     final Deque<Integer> statuses = new ConcurrentLinkedDeque<>();
     final java.util.concurrent.atomic.AtomicInteger requests = new java.util.concurrent.atomic.AtomicInteger();
     int stallAfterHeaders;
+    /** 이 이름이 들어간 모델 경로만 응답 헤더를 늦게 보냄 (시간 초과 대역) */
+    volatile String slowModel;
+    final List<String> paths = new CopyOnWriteArrayList<>();
     final AtomicReference<String> request = new AtomicReference<>();
     final AtomicReference<String> key = new AtomicReference<>();
     final AtomicReference<String> path = new AtomicReference<>();
@@ -44,6 +47,10 @@ class GeminiLlmClientTest {
             int code = next == null ? status : next;
             key.set(exchange.getRequestHeaders().getFirst("x-goog-api-key"));
             path.set(exchange.getRequestURI().toString());
+            paths.add(exchange.getRequestURI().getPath());
+            if (slowModel != null && exchange.getRequestURI().getPath().contains(slowModel)) {
+                try { Thread.sleep(3000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            }
             anthropicHeader.set(exchange.getRequestHeaders().getFirst("anthropic-beta"));
             exchange.getResponseHeaders().set("Content-Type", contentType);
             exchange.sendResponseHeaders(code, 0);
@@ -57,6 +64,7 @@ class GeminiLlmClientTest {
                 out.write(body.getBytes(StandardCharsets.UTF_8));
             } catch (java.io.IOException ignored) { /* client timeout/cancellation */ }
         });
+        server.setExecutor(Executors.newCachedThreadPool()); // 느린 모델이 다음 모델 응답을 막지 않게
         server.start();
         client = client("local-test-key", Duration.ofSeconds(3));
         body = response("STOP", "정상 응답");
@@ -65,6 +73,12 @@ class GeminiLlmClientTest {
     GeminiLlmClient client(String apiKey, Duration timeout) {
         return new GeminiLlmClient(HttpClient.newHttpClient(), apiKey, "gemini-test-model",
                 URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/v1beta/"), timeout, json);
+    }
+
+    GeminiLlmClient failover(Duration timeout, LlmClient fallback, String... models) {
+        return new GeminiLlmClient(HttpClient.newHttpClient(), "local-test-key", List.of(models),
+                URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/v1beta/"), timeout, json,
+                new LlmConcurrencyLimiter(8, Duration.ofSeconds(1)), fallback);
     }
 
     @AfterEach void close() { client.close(); server.stop(0); }
@@ -118,11 +132,12 @@ class GeminiLlmClientTest {
                 e -> assertThat(e.getMessage()).doesNotContain(body, "local-test-key"));
     }
 
-    @Test void rateLimitIsTooManyRequestsWithoutLeakingProviderBodyOrKey() {
+    @Test void rateLimitOnLastModelIsUpstreamErrorWithoutLeakingProviderBodyOrKey() {
+        // 프론트가 AI_UPSTREAM_ERROR 하나로 "AI가 지금 붐벼요"를 안내하므로 한도 초과도 502 로 돌려줌
         status = 429; body = "{\"error\":{\"code\":429,\"message\":\"Quota exceeded for local-test-key\"}}";
         assertThatThrownBy(() -> client.complete(input())).isInstanceOfSatisfying(BusinessException.class, e -> {
-            assertThat(e.getErrorCode()).isEqualTo(ErrorCode.TOO_MANY_REQUESTS);
-            assertThat(e.getMessage()).contains("잠시 후 다시 시도").doesNotContain("Quota", "local-test-key");
+            assertThat(e.getErrorCode()).isEqualTo(ErrorCode.AI_UPSTREAM_ERROR);
+            assertThat(e.getMessage()).doesNotContain("Quota", "local-test-key");
         });
         assertThat(requests.get()).isEqualTo(1);
     }
@@ -137,13 +152,69 @@ class GeminiLlmClientTest {
         assertThat(requests.get()).isZero();
     }
 
-    @Test void overloaded503IsRetriedOnceForNonStreamingCalls() {
-        statuses.add(503);
-        assertThat(client.complete(input()).text()).isEqualTo("정상 응답");
-        assertThat(requests.get()).isEqualTo(2);
-        statuses.add(503); statuses.add(503); requests.set(0);
+    @Test void overloadedOrRateLimitedModelIsNotRetriedButNextModelAnswers() {
+        client.close(); client = failover(Duration.ofSeconds(3), null, "model-a", "model-b");
+        for (int code : List.of(503, 429)) {
+            statuses.add(code); paths.clear();
+            assertThat(client.complete(input()).text()).isEqualTo("정상 응답");
+            assertThat(paths).containsExactly("/v1beta/models/model-a:generateContent", "/v1beta/models/model-b:generateContent");
+        }
+        // 모두 붐비면 같은 모델을 다시 부르지 않고 502
+        statuses.add(503); statuses.add(503); paths.clear();
         assertFailure(() -> client.complete(input()));
-        assertThat(requests.get()).isEqualTo(2);
+        assertThat(paths).hasSize(2);
+    }
+
+    @Test void timedOutModelMovesToNextModel() {
+        client.close(); client = failover(Duration.ofMillis(1200), null, "slow-model", "model-b");
+        slowModel = "slow-model";
+        assertTimeoutPreemptively(Duration.ofSeconds(3), () -> assertThat(client.complete(input()).text()).isEqualTo("정상 응답"));
+        assertThat(paths).containsExactly("/v1beta/models/slow-model:generateContent", "/v1beta/models/model-b:generateContent");
+    }
+
+    @Test void streamingSwitchesOnlyBeforeAnyTextWasSent() {
+        client.close(); client = failover(Duration.ofSeconds(3), null, "model-a", "model-b");
+        contentType = "text/event-stream"; body = event(response("STOP", "ok"));
+        statuses.add(503);
+        List<String> chunks = new ArrayList<>();
+        assertThat(client.stream(input(), chunks::add).text()).isEqualTo("ok");
+        assertThat(chunks).containsExactly("ok");
+        assertThat(paths).hasSize(2);
+    }
+
+    @Test void claudeIsTriedLastOnlyWhenEveryGeminiModelIsBusy() {
+        var claudeCalls = new java.util.concurrent.atomic.AtomicInteger();
+        LlmClient claude = new LlmClient() {
+            public Reply complete(Request r) { claudeCalls.incrementAndGet(); return new Reply("클로드 응답", "claude-test", "c-1", 1, 1); }
+            public Reply stream(Request r, java.util.function.Consumer<String> t) { return complete(r); }
+        };
+        client.close(); client = failover(Duration.ofSeconds(3), claude, "model-a", "model-b");
+        assertThat(client.complete(input()).text()).isEqualTo("정상 응답");
+        assertThat(claudeCalls.get()).isZero();
+        statuses.add(503); statuses.add(429);
+        assertThat(client.complete(input()).text()).isEqualTo("클로드 응답");
+        assertThat(claudeCalls.get()).isEqualTo(1);
+        // 다른 오류(500)는 공급자를 바꿔도 같은 요청이라 넘기지 않음
+        statuses.add(500); paths.clear();
+        assertFailure(() -> client.complete(input()));
+        assertThat(paths).hasSize(1);
+        assertThat(claudeCalls.get()).isEqualTo(1);
+    }
+
+    @Test void overallDeadlineStopsWaitingAndSkipsRemainingModels() {
+        client.close(); client = failover(Duration.ofSeconds(10), null, "slow-model", "model-b");
+        slowModel = "slow-model";
+        long started = System.nanoTime();
+        assertFailure(() -> LlmDeadline.within(Duration.ofMillis(1500), () -> client.complete(input())));
+        assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofMillis(2500));
+        // 남은 시간이 1초 미만이라 두 번째 모델은 부르지 않음
+        assertThat(paths).containsExactly("/v1beta/models/slow-model:generateContent");
+    }
+
+    @Test void modelOrderComesFromGeminiModelsOrFallsBackToSingleModel() {
+        assertThat(GeminiLlmClient.modelList(" a , b,,a ", "x")).containsExactly("a", "b");
+        assertThat(GeminiLlmClient.modelList("", "x")).containsExactly("x");
+        assertThat(GeminiLlmClient.modelList(null, "x")).containsExactly("x");
     }
 
     @Test void streamingAndOtherErrorsAreNeverRetried() {

@@ -21,6 +21,7 @@ public class AnthropicLlmClient implements LlmClient {
     private final AnthropicClient client;
     private final String model;
     private final LlmConcurrencyLimiter limiter;
+    private static final Duration TIMEOUT = Duration.ofSeconds(45);
 
     @org.springframework.beans.factory.annotation.Autowired
     public AnthropicLlmClient(@Value("${astra.ai.anthropic-api-key:}") String key,
@@ -29,7 +30,7 @@ public class AnthropicLlmClient implements LlmClient {
             @Value("${astra.ai.concurrency-wait-seconds:20}") long concurrencyWaitSeconds) {
         this.model = model;
         client = key == null || key.isBlank() ? null : AnthropicOkHttpClient.builder()
-                .apiKey(key).timeout(Duration.ofSeconds(45)).maxRetries(0).build();
+                .apiKey(key).timeout(TIMEOUT).maxRetries(0).build();
         limiter = new LlmConcurrencyLimiter(maxConcurrentCalls, Duration.ofSeconds(concurrencyWaitSeconds));
     }
 
@@ -44,7 +45,7 @@ public class AnthropicLlmClient implements LlmClient {
 
     private Reply doComplete(Request request) {
         try {
-            Message message = requiredClient().messages().create(params(request));
+            Message message = requiredClient().messages().create(params(request), options());
             if (!message.stopReason().filter(StopReason.END_TURN::equals).isPresent()) throw failure();
             String text = message.content().stream().flatMap(b -> b.text().stream())
                     .map(TextBlock::text).collect(java.util.stream.Collectors.joining());
@@ -65,7 +66,7 @@ public class AnthropicLlmClient implements LlmClient {
         AtomicReference<String> actualModel = new AtomicReference<>(model);
         AtomicLong input = new AtomicLong();
         AtomicLong output = new AtomicLong();
-        try (var stream = requiredClient().messages().createStreaming(params(request))) {
+        try (var stream = requiredClient().messages().createStreaming(params(request), options())) {
             stream.stream().forEach(event -> {
                 if (Thread.currentThread().isInterrupted()) throw failure();
                 event.messageStart().ifPresent(s -> {
@@ -100,6 +101,13 @@ public class AnthropicLlmClient implements LlmClient {
                 .system(request.system()).addUserMessage(request.input()).outputConfig(output.build())
                 .putAdditionalHeader("anthropic-beta", "server-side-fallback-2026-07-01")
                 .putAdditionalBodyProperty("fallbacks", JsonValue.from("default")).build();
+    }
+    /** 기본 45초, 상담처럼 전체 마감(LlmDeadline)이 있으면 남은 시간까지만 기다림 */
+    private com.anthropic.core.RequestOptions options() {
+        if (!LlmDeadline.active()) return com.anthropic.core.RequestOptions.none();
+        Duration budget = LlmDeadline.remaining(TIMEOUT);
+        if (budget.toMillis() < 1000) throw failure();
+        return com.anthropic.core.RequestOptions.builder().timeout(budget).build();
     }
     private AnthropicClient requiredClient() {
         if (client == null) throw new BusinessException(ErrorCode.AI_UPSTREAM_ERROR, "LLM API 키가 설정되지 않았습니다.", null);

@@ -24,10 +24,21 @@ public class ChatService {
     private final kr.astra.equipment.service.EquipmentQueryService equipment;
     /** 상담 답변에 소개할 DB 장비 수 */
     private static final int SUGGEST_LIMIT = 5;
+    /** 메시지 하나(조건 추출 + 답변)에 AI 를 기다리는 최대 시간. 넘으면 AI_UPSTREAM_ERROR(502) */
+    @org.springframework.beans.factory.annotation.Value("${astra.ai.chat-timeout-seconds:25}")
+    private long chatTimeoutSeconds = 25;
+    /** 그중 조건 추출에 쓸 수 있는 시간. 넘으면 이전 조건으로 답변을 이어감 */
+    @org.springframework.beans.factory.annotation.Value("${astra.ai.chat-extraction-seconds:10}")
+    private long extractionTimeoutSeconds = 10;
     private record Extracted(String testTypeCode, Object conditions, Map<String,Object> metadata) {}
 
     public ChatResponse.Exchange send(CurrentUser user, Long id, String content, Consumer<String> onText) {
         var turn = persistence.begin(user,id,content);
+        return kr.astra.llm.client.LlmDeadline.within(java.time.Duration.ofSeconds(chatTimeoutSeconds),
+                () -> answer(user,turn,onText));
+    }
+
+    private ChatResponse.Exchange answer(CurrentUser user, ChatPersistence.Turn turn, Consumer<String> onText) {
         try {
             var transcript = turn.transcript();
             var extracted = extract(transcript);
@@ -96,7 +107,8 @@ public class ChatService {
     /** 조건 추출은 상담의 보조 정보라, AI 실패 시 직전 턴의 조건으로 상담을 이어갑니다 (전체 턴 실패 방지). */
     private Extracted extract(ChatPersistence.Transcript transcript) {
         try {
-            var e = extraction.extract(transcript.userText(),transcript.knownTestType());
+            var e = kr.astra.llm.client.LlmDeadline.within(java.time.Duration.ofSeconds(extractionTimeoutSeconds),
+                    () -> extraction.extract(transcript.userText(),transcript.knownTestType()));
             return new Extracted(e.testTypeCode(),e.conditions(),e.metadata());
         } catch (BusinessException e) {
             if (!AiFallback.recoverable(e) || Thread.currentThread().isInterrupted()) throw e;
