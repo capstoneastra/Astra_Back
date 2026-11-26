@@ -12,9 +12,10 @@ public class MatchConditionCheck {
     @Column(length = 200) private String equipmentText;
     @Enumerated(EnumType.STRING) @Column(name = "result", nullable = false, length = 20) private CheckResult verdict;
     @Column(length = 300) private String note;
+    @Column(length = 100) private String label;
     public MatchConditionCheck(MatchResult result, MatchResponse.Check c) {
         this.result = result; conditionKey = c.conditionKey(); requiredText = c.requiredText();
-        equipmentText = c.equipmentText(); verdict = c.result(); note = c.note();
+        equipmentText = c.equipmentText(); verdict = c.result(); note = c.note(); label = c.label();
     }
-    public MatchResponse.Check response() { return new MatchResponse.Check(conditionKey, requiredText, equipmentText, verdict, note); }
+    public MatchResponse.Check response() { return new MatchResponse.Check(conditionKey, requiredText, equipmentText, verdict, note, label); }
 }

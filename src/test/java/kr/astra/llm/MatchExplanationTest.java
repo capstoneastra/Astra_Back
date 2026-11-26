@@ -14,7 +14,7 @@ class MatchExplanationTest {
     final LlmClient llm=mock(LlmClient.class);
     final MatchExplanationService service=new MatchExplanationService(llm,new PromptLoader(),new StructuredJson(JsonMapper.builder().build()));
     final List<MatchExplanationService.Input> inputs=List.of(new MatchExplanationService.Input(48L,MatchVerdict.UNSUITABLE,
-            List.of(new MatchResponse.Check("mass","20 kg","10 kg",CheckResult.NOT_MET,"MAX_LIMIT"))));
+            List.of(new MatchResponse.Check("mass","20 kg","10 kg",CheckResult.NOT_MET,"MAX_LIMIT","질량"))));
     void reply(String verdict,String met,String notMet) {
         when(llm.complete(any())).thenReturn(new LlmClient.Reply("{\"results\":[{\"equipmentId\":48,\"verdict\":\"" + verdict
                 + "\",\"metKeys\":" + met + ",\"notMetKeys\":" + notMet

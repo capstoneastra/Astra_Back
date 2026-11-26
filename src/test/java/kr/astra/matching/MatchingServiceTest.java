@@ -72,7 +72,7 @@ class MatchingServiceTest {
         var result=service.run(user,7L,null,5);
         assertThat(result.results()).singleElement().satisfies(r -> {
             assertThat(r.verdict()).isEqualTo(MatchVerdict.SUITABLE);
-            assertThat(r.reason()).contains("mass: MET").contains(MatchingService.DISCLAIMER).doesNotContain("null");
+            assertThat(r.reason()).contains("질량: 충족").contains(MatchingService.DISCLAIMER).doesNotContain("null");
         });
         verify(runs).saveAndFlush(any());
     }

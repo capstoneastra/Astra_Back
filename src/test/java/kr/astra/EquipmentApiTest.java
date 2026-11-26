@@ -235,8 +235,8 @@ class EquipmentApiTest {
     @Test
     void 지역_기관_유형_외부이용_MOCK_필터() throws Exception {
         Res regions = api.get("/api/v1/equipment?region=" + enc("진주") + "&region=" + enc("경남") + "&size=100", token);
-        // 진주 5 + V5 로 채운 진주뿌리기술지원센터 31 + 경남 1
-        assertThat(regions.data().path("totalElements").asLong()).isEqualTo(37);
+        // 진주 5 + V5 로 채운 진주뿌리기술지원센터 31 + 경남 1, V22 에서 소프트웨어 4종 비활성
+        assertThat(regions.data().path("totalElements").asLong()).isEqualTo(33);
         regions.data().path("content").forEach(n -> assertThat(n.path("region").asString()).isIn("진주", "경남"));
 
         Res inst = api.get("/api/v1/equipment?institutionId=2&equipmentType=TEST", token);
@@ -311,9 +311,9 @@ class EquipmentApiTest {
     // ------------------------------------------------------------ 시험유형
 
     @Test
-    void 시험유형_목록은_15개를_표시순서로_장비_수와_함께_준다() throws Exception {
+    void 시험유형_목록은_20개를_표시순서로_장비_수와_함께_준다() throws Exception {
         JsonNode list = api.get("/api/v1/test-types", token).data();
-        assertThat(list.size()).isEqualTo(15);
+        assertThat(list.size()).isEqualTo(20);
         assertThat(list.get(0).path("code").asString()).isEqualTo("ACOUSTIC_NOISE");
         JsonNode vibration = findBy(list, "code", "VIBRATION");
         assertThat(vibration.path("nameKo").asString()).isEqualTo("진동시험");
@@ -376,7 +376,7 @@ class EquipmentApiTest {
         assertThat(findBy(list, "name", "가온대학교 첨단소재분석센터").path("orgType").asString()).isEqualTo("UNIVERSITY");
         JsonNode jinju = findBy(list, "name", "한빛뿌리기술지원센터");
         assertThat(jinju.path("region").asString()).isEqualTo("진주");
-        assertThat(jinju.path("equipmentCount").asLong()).isEqualTo(31);
+        assertThat(jinju.path("equipmentCount").asLong()).isEqualTo(27); // V22 소프트웨어 4종 비활성
     }
 
     @Test

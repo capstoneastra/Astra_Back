@@ -62,7 +62,7 @@ public class MatchingService {
         for (Candidate c : candidates) {
             var e = c.evaluation;
             String description = descriptions.get(c.equipment.id());
-            String reason = e.checks().stream().map(check -> check.conditionKey() + ": " + check.result())
+            String reason = e.checks().stream().map(check -> check.label() + ": " + check.resultText())
                     .collect(java.util.stream.Collectors.joining(", ")) + ". "
                     + (description == null ? "" : description.replace(DISCLAIMER, "").strip() + " ") + DISCLAIMER;
             if (c.equipment.availabilityNeedsConfirmation()) reason += " 가용 상태는 기관 확인이 필요합니다.";

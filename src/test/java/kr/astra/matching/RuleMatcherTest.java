@@ -90,4 +90,16 @@ class RuleMatcherTest {
         assertThat(result.verdict()).isEqualTo(MatchVerdict.PARTIAL);
         assertThat(matcher.evaluate(List.of(),List.of(),List.of()).verdict()).isEqualTo(MatchVerdict.UNKNOWN);
     }
+    @Test void unknownCheckShowsKoreanLabelAndWhy() {
+        // 화면에 sample_mass: UNKNOWN 대신 한글 이름·판정 문구와 이유가 나가야 함
+        var rule=rule(ConditionComparator.MAX_LIMIT,"kg");
+        var check=matcher.evaluate(List.of(rule),List.of(condition("15",null,null,"kg",ConditionStatus.UNCONFIRMED)),List.of())
+                .checks().getFirst();
+        assertThat(check.label()).isEqualTo("요구");
+        assertThat(check.resultText()).isEqualTo("확인 필요");
+        assertThat(check.note()).contains("확정되지 않아");
+        assertThat(matcher.evaluate(List.of(rule),List.of(),List.of()).checks().getFirst().note()).contains("값이 없어");
+        assertThat(matcher.evaluate(List.of(rule),List.of(condition("15",null,null,"kg",ConditionStatus.CONFIRMED)),List.of())
+                .checks().getFirst().note()).contains("사양 정보가 없어");
+    }
 }

@@ -52,7 +52,7 @@ class DashboardSearchApiTest {
         assertThat(d.path("total").asLong()).isEqualTo(activeEquipment());
         // 지역 가나다순. V5 로 진주 = 5 + 31, V8 시연 장비가 사천·창원·고흥에 추가
         assertThat(d.path("byRegion").toString()).startsWith("{\"경남\":1,\"고흥\":40,\"광주\":1,\"대전\":32,");
-        assertThat(d.path("byRegion").path("진주").asLong()).isEqualTo(36);
+        assertThat(d.path("byRegion").path("진주").asLong()).isEqualTo(32); // V22 에서 진주 소프트웨어 4종 비활성
         assertThat(d.path("byRegion").path("사천").asLong()).isEqualTo(154);
         assertThat(d.path("byRegion").path("창원").asLong()).isEqualTo(74);
         long byType = 0;
@@ -60,7 +60,7 @@ class DashboardSearchApiTest {
             byType += n.asLong();
         }
         assertThat(byType).isEqualTo(activeEquipment());
-        assertThat(d.path("byTestType").size()).isEqualTo(15);
+        assertThat(d.path("byTestType").size()).isEqualTo(20);
         assertThat(d.path("byTestType").get(0).path("code").asString()).isEqualTo("ACOUSTIC_NOISE");
         JsonNode first = d.path("institutions").get(0);
         // 장비 수 많은 순, 같으면 가나다순: 늘해랑대학교·온새미로 55대
@@ -82,7 +82,7 @@ class DashboardSearchApiTest {
         assertThat(d.path("actionRequired").size()).isZero();
         assertThat(d.path("recentChats").size()).isZero();
         assertThat(d.path("equipmentStats").path("total").asLong()).isEqualTo(activeEquipment());
-        assertThat(d.path("equipmentStats").path("byRegion").path("진주").asLong()).isEqualTo(36);
+        assertThat(d.path("equipmentStats").path("byRegion").path("진주").asLong()).isEqualTo(32); // V22 에서 진주 소프트웨어 4종 비활성
         assertThat(d.path("dataAvailable").path("requests").asBoolean()).isTrue(); // BE-B RequestDashboardQuery 연결됨
         assertThat(d.path("dataAvailable").path("chats").asBoolean()).isTrue();
     }
@@ -152,7 +152,7 @@ class DashboardSearchApiTest {
         assertThat(d.path("institutionVerification").size()).isEqualTo(equipmentOwners());
         // 시험유형별 수요(작성 중 뺀 의뢰)·공급(활성 장비): 15개 전부
         JsonNode byTestType = d.path("byTestType");
-        assertThat(byTestType.size()).isEqualTo(15);
+        assertThat(byTestType.size()).isEqualTo(20);
         JsonNode vibration = null;
         for (JsonNode t : byTestType) {
             if (t.path("code").asString().equals("VIBRATION")) {
